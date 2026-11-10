@@ -3,7 +3,7 @@
  * Nạp cấu hình, kết nối CSDL, phiên đăng nhập và các hàm dùng chung.
  * Mọi trang (index.php) và mọi API (api/*.php) đều require file này đầu tiên.
  */
-require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../database/config.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_name('BMT24HSESSID');
