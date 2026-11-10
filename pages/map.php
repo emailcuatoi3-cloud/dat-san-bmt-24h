@@ -18,7 +18,7 @@ render_page(['title' => 'Bản đồ sân - ' . SITE_NAME, 'script' => 'pages/ma
   </div>
 </div>
 <?php });
-    ?>
+    ?> 
 <div class="w-full px-4 md:px-8 py-6 md:py-8">
   <div class="mx-auto w-full max-w-[1280px]">
     <article class="overflow-hidden rounded-lg border border-background-200 bg-background-100" id="map-main"></article>
