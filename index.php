@@ -22,7 +22,7 @@ $path = current_path();
 $params = [];
 
 $routes = [
-    '#^/$#' => 'home',
+    '#^/$#' => 'home', 
     '#^/tim-san$#' => 'courts',
     '#^/san/([^/]+)$#' => 'court-detail',
     '#^/ban-do$#' => 'map',
