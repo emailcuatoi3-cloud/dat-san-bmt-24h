@@ -1,0 +1,16 @@
+# Chuyển mọi URL "đẹp" (/tim-san, /san/ten-san, ...) về index.php
+Options -Indexes
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  # Không cho tải trực tiếp file cấu hình / SQL / thư mục includes
+  RewriteRule ^(config\.php|database\.sql|includes/|pages/) - [F,L]
+  # File hoặc thư mục có thật thì trả về luôn (css, js, ảnh, api/*.php)
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+  RewriteRule ^ index.php [QSA,L]
+</IfModule>
+
+AddDefaultCharset UTF-8
