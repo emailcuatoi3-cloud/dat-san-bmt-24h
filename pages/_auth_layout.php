@@ -1,7 +1,13 @@
 <?php
 /** Khung chung cho các trang đăng nhập / đăng ký / quên mật khẩu. */
-function auth_layout(string $title, string $subtitle, callable $children, string $footerHtml = ''): void
+function auth_layout(string $title, string $subtitle, callable $children, string $footerHtml = '', ?array $side = null): void
 {
+    // Nội dung cột ảnh bên trái (mặc định dành cho khách đặt sân)
+    $side = $side ?? [
+        'Sân đã sẵn sàng, chỉ chờ đội của bạn',
+        'Quản lý lịch đặt sân, theo dõi khung giờ trống và nhận xác nhận từ chủ sân ngay trên một nền tảng duy nhất.',
+        ['Theo dõi toàn bộ lịch sử đặt sân', 'Nhận thông báo khi chủ sân xác nhận', 'Hoàn cọc 100% khi hủy trước 4 giờ'],
+    ];
     ?>
 <div class="flex min-h-screen flex-col bg-background-50 lg:grid lg:grid-cols-[1.05fr_1fr]">
   <div class="relative hidden overflow-hidden bg-background-100 lg:block">
@@ -13,10 +19,10 @@ function auth_layout(string $title, string $subtitle, callable $children, string
         <span class="leading-tight"><span class="block font-heading text-[15px] font-extrabold tracking-tight text-white">ĐẶT SÂN BMT</span><span class="block text-[11px] font-semibold tracking-[0.18em] text-accent-500">24H</span></span>
       </a>
       <div class="max-w-md">
-        <h2 class="auth-photo-heading font-heading text-3xl font-extrabold leading-tight xl:text-4xl">Sân đã sẵn sàng, chỉ chờ đội của bạn</h2>
-        <p class="auth-photo-text mt-4 text-sm leading-relaxed">Quản lý lịch đặt sân, theo dõi khung giờ trống và nhận xác nhận từ chủ sân ngay trên một nền tảng duy nhất.</p>
+        <h2 class="auth-photo-heading font-heading text-3xl font-extrabold leading-tight xl:text-4xl"><?= e($side[0]) ?></h2>
+        <p class="auth-photo-text mt-4 text-sm leading-relaxed"><?= e($side[1]) ?></p>
         <ul class="mt-6 space-y-3">
-          <?php foreach (['Theo dõi toàn bộ lịch sử đặt sân', 'Nhận thông báo khi chủ sân xác nhận', 'Hoàn cọc 100% khi hủy trước 4 giờ'] as $item): ?>
+          <?php foreach ($side[2] as $item): ?>
             <li class="auth-photo-text flex items-center gap-2.5 text-sm"><span class="auth-photo-mark flex h-5 w-5 shrink-0 items-center justify-center rounded-full"><i class="ri-check-line text-xs" aria-hidden="true"></i></span><?= e($item) ?></li>
           <?php endforeach; ?>
         </ul>
@@ -77,4 +83,20 @@ function auth_alert(string $attr, string $icon, string $tone): void
     $txt = $tone === 'error' ? 'text-accent-900' : 'text-primary-800';
     $ic = $tone === 'error' ? 'text-accent-700' : 'text-primary-600';
     echo '<div ' . $attr . ' class="mt-4 hidden items-start gap-2.5 rounded-md border ' . $cls . ' px-3.5 py-3"><i class="' . $icon . ' mt-0.5 ' . $ic . '" aria-hidden="true"></i><p class="text-xs leading-relaxed ' . $txt . '"></p></div>';
+}
+
+/** Môn thể thao, số sân, ghi chú — dùng ở form đăng ký chủ sân và form gửi yêu cầu của khách đã đăng nhập */
+function owner_request_extra_fields(string $prefix): void
+{
+    $cls = 'w-full rounded-md border border-background-300 bg-white px-3 py-2.5 text-sm text-foreground-950 placeholder:text-foreground-400 focus:border-primary-400 focus:outline-none';
+    ?>
+<div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+  <div><label for="<?= $prefix ?>-sports" class="mb-1.5 block text-sm font-medium text-foreground-800">Môn thể thao</label>
+    <select id="<?= $prefix ?>-sports" name="sports" class="<?= $cls ?>"><?php foreach (OWNER_REQUEST_SPORTS as $k => $v): ?><option value="<?= $k ?>"><?= $v ?></option><?php endforeach; ?></select></div>
+  <div><label for="<?= $prefix ?>-count" class="mb-1.5 block text-sm font-medium text-foreground-800">Số sân hiện có</label>
+    <input id="<?= $prefix ?>-count" name="courtCount" type="number" min="1" max="50" value="1" class="<?= $cls ?>"></div>
+</div>
+<div class="mt-4"><label for="<?= $prefix ?>-note" class="mb-1.5 block text-sm font-medium text-foreground-800">Giới thiệu ngắn <span class="font-normal text-foreground-500">(không bắt buộc)</span></label>
+  <textarea id="<?= $prefix ?>-note" name="note" rows="3" maxlength="1000" placeholder="Loại sân, giờ mở cửa, tiện ích... giúp quản trị viên duyệt nhanh hơn" class="<?= $cls ?>"></textarea></div>
+<?php
 }

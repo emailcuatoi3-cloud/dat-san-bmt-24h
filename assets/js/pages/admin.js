@@ -73,6 +73,7 @@ async function renderOverview() {
     ${statCard('ri-money-dollar-circle-line', 'Doanh thu tháng này', money(t.monthRevenue), 'Đơn đã xác nhận & hoàn thành', 'neutral')}
   </div>
   ${t.openReports || t.pendingReviews ? `<a href="?tab=moderation" class="mt-4 flex items-center gap-2 rounded-lg border border-accent-300 bg-accent-50 px-4 py-3 text-sm text-accent-800"><i class="ri-alarm-warning-line"></i>Có <b>${t.openReports}</b> báo cáo vi phạm chưa xử lý và <b>${t.pendingReviews}</b> đánh giá chờ duyệt.<span class="ml-auto font-semibold">Xử lý ngay →</span></a>` : ''}
+  ${t.pendingOwnerRequests ? `<a href="?tab=accounts" class="mt-3 flex items-center gap-2 rounded-lg border border-accent-300 bg-accent-50 px-4 py-3 text-sm text-accent-800"><i class="ri-store-2-line"></i>Có <b>${t.pendingOwnerRequests}</b> yêu cầu đăng ký chủ sân đang chờ duyệt.<span class="ml-auto font-semibold">Xem ngay →</span></a>` : ''}
   <div class="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[1.5fr_1fr]">
     <section class="${CARD}">${sectionTitle('Doanh thu 7 ngày gần nhất')}
       <div class="p-4"><div class="flex h-48 items-end gap-3">${d.days.map((x) => `<div class="flex h-full flex-1 flex-col items-center justify-end gap-1" title="${money(x.revenue)} · ${x.count} đơn"><span class="text-[10px] font-semibold text-foreground-600">${x.revenue ? Math.round(x.revenue / 1000) + 'k' : ''}</span><div class="w-full rounded-t ${x.date === TODAY ? 'bg-accent-500' : 'bg-primary-500'}" style="height:${Math.max(x.revenue ? 3 : 0, (x.revenue / max) * 85)}%"></div></div>`).join('')}</div>
@@ -111,8 +112,31 @@ function roleForm(d, role = null) {
   });
 }
 
+/** Khối "Yêu cầu đăng ký chủ sân" ở đầu mục Tài khoản */
+function ownerRequestsBlock(reqs, showAll) {
+  const RS = { pending: ['Chờ duyệt', 'bg-accent-100 text-accent-800'], approved: ['Đã duyệt', 'bg-primary-50 text-primary-700'], rejected: ['Từ chối', 'bg-background-200 text-foreground-700'] };
+  const pending = reqs.filter((r) => r.status === 'pending');
+  const list = showAll ? reqs : pending;
+  return `<section class="${CARD} mb-5 ${pending.length ? 'border-accent-300' : ''}">
+    ${sectionTitle(`<i class="ri-store-2-line text-accent-600"></i> Yêu cầu đăng ký chủ sân ${pending.length ? `<span class="ml-1 rounded-full bg-accent-500 px-2 py-0.5 text-[11px] text-white">${pending.length} chờ duyệt</span>` : ''}`,
+    reqs.length > pending.length ? `<button type="button" data-or-all class="text-xs font-semibold text-primary-700">${showAll ? 'Chỉ xem chờ duyệt' : `Xem cả đã xử lý (${reqs.length - pending.length})`}</button>` : '')}
+    ${list.length ? `<div class="divide-y divide-background-200">${list.map((r) => `<div class="flex flex-col gap-3 px-4 py-4 md:flex-row md:items-start md:justify-between">
+      <div class="min-w-0">
+        <p class="flex flex-wrap items-center gap-2 font-semibold text-foreground-950">${esc(r.businessName)} <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold ${RS[r.status][1]}">${RS[r.status][0]}</span></p>
+        <p class="mt-1 text-xs text-foreground-600"><i class="ri-user-line"></i> ${esc(r.contactName)} · <a href="tel:${esc(r.phone)}" class="text-primary-700">${esc(r.phone)}</a> · ${esc(r.email)}</p>
+        <p class="mt-0.5 text-xs text-foreground-600"><i class="ri-map-pin-line"></i> ${esc(r.address)} · ${esc(r.sportsLabel)} · ${r.courtCount} sân</p>
+        ${r.note ? `<p class="mt-2 rounded bg-background-100 px-2.5 py-1.5 text-xs text-foreground-700">${esc(r.note)}</p>` : ''}
+        ${r.adminNote || r.reviewedBy ? `<p class="mt-1.5 text-[11px] text-foreground-500">${r.reviewedBy ? `Xử lý bởi ${esc(r.reviewedBy)} · ${formatDateTime(r.reviewedAt)}` : ''}${r.adminNote ? ` — ${esc(r.adminNote)}` : ''}</p>` : ''}
+        <p class="mt-1 text-[11px] text-foreground-400">Gửi lúc ${formatDateTime(r.createdAt)}</p>
+      </div>
+      ${r.status === 'pending' ? `<div class="flex shrink-0 gap-1.5"><button type="button" data-or-reject="${r.id}" class="${BTN_SM}"><i class="ri-close-line"></i>Từ chối</button><button type="button" data-or-approve="${r.id}" class="${BTN_SM_PRI}"><i class="ri-check-line"></i>Duyệt làm chủ sân</button></div>` : ''}
+    </div>`).join('')}</div>` : '<p class="px-4 py-5 text-sm text-foreground-500">Không có yêu cầu nào đang chờ duyệt.</p>'}
+  </section>`;
+}
+
 async function renderAccounts() {
   const d = await get('accounts', 'accounts');
+  const reqs = await get('ownerReq', 'owner_requests');
   const f = filter('accounts', { role: 'all', status: 'all', q: '' });
   const q = f.q.toLowerCase();
   const list = d.users.filter((u) => f.role === 'all' || u.role === f.role).filter((u) => f.status === 'all' || u.status === f.status).filter((u) => !q || `${u.fullName} ${u.email} ${u.phone} ${u.businessName}`.toLowerCase().includes(q));
@@ -122,6 +146,7 @@ async function renderAccounts() {
   actions().querySelector('#ac-csv').onclick = () => downloadCsv([['Họ tên', 'Email', 'Điện thoại', 'Vai trò', 'Trạng thái', 'Ngày tạo'], ...list.map((u) => [u.fullName, u.email, u.phone, ROLE[u.role], u.status === 'active' ? 'Hoạt động' : 'Tạm khóa', (u.createdAt || '').slice(0, 10)])], `tai-khoan-${TODAY}.csv`);
 
   main().innerHTML = `
+  ${ownerRequestsBlock(reqs, f.orAll)}
   <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
     ${statCard('ri-user-line', 'Khách hàng', d.users.filter((u) => u.role === 'customer').length)}
     ${statCard('ri-store-2-line', 'Chủ sân', d.users.filter((u) => u.role === 'owner').length, '', 'secondary')}
@@ -149,6 +174,16 @@ async function renderAccounts() {
   const root = main();
   const user = (id) => d.users.find((u) => u.id === Number(id));
   on(root, 'click', '[data-role-f]', (e, el) => { f.role = el.dataset.roleF; render(); });
+  on(root, 'click', '[data-or-all]', () => { f.orAll = !f.orAll; render(); });
+  const reviewReq = (id, decision, note) => { delete C.ownerReq; return run(api('admin', 'owner_request_review', { id, decision, note }), decision === 'approve' ? 'Đã duyệt — tài khoản đã được mở kênh chủ sân.' : 'Đã từ chối yêu cầu.', 'accounts'); };
+  on(root, 'click', '[data-or-approve]', async (e, el) => {
+    const r = reqs.find((x) => x.id === el.dataset.orApprove);
+    if (await confirmBox({ title: 'Duyệt làm chủ sân?', message: `Tài khoản <b>${esc(r.email)}</b> sẽ trở thành chủ sân của "<b>${esc(r.businessName)}</b>" và vào được kênh chủ sân.`, confirmText: 'Duyệt' })) reviewReq(r.id, 'approve', '');
+  });
+  on(root, 'click', '[data-or-reject]', async (e, el) => {
+    const note = await askNote('Từ chối đăng ký chủ sân', 'Lý do (người đăng ký sẽ thấy nội dung này)', { min: 5, confirm: 'Từ chối', danger: true });
+    if (note !== null) reviewReq(el.dataset.orReject, 'reject', note);
+  });
   on(root, 'click', '[data-status-f]', (e, el) => { f.status = el.dataset.statusF; render(); });
   root.querySelector('#ac-q').addEventListener('change', (e) => { f.q = e.target.value; render(); });
   root.addEventListener('change', async (e) => {
@@ -296,7 +331,7 @@ function categoryForm(c = null, kind = 'sport') {
     <div class="col-span-2"><label class="${LABEL}">Mô tả</label><input name="description" value="${esc(x.description)}" class="${INPUT}"></div>
     <div><label class="${LABEL}">Thứ tự</label><input type="number" name="sortOrder" value="${x.sortOrder}" class="${INPUT}"></div>
     <label class="mt-6 flex items-center gap-2 text-sm"><input type="checkbox" name="active" ${x.active ? 'checked' : ''} class="accent-primary-500">Hiển thị cho khách</label></form>`,
-  `<button type="button" data-close class="${BTN_OUT}">Hủy</button><button type="button" data-ok class="${BTN}">Lưu</button>`);
+    `<button type="button" data-close class="${BTN_OUT}">Hủy</button><button type="button" data-ok class="${BTN}">Lưu</button>`);
   m.el.querySelector('[data-ok]').addEventListener('click', async () => {
     const form = m.el.querySelector('form');
     if (await run(api('admin', 'category_save', { ...formData(form), id: c ? c.id : '', sortOrder: Number(form.sortOrder.value) || 0, active: form.active.checked }), 'Đã lưu danh mục.', 'categories')) m.close();
@@ -337,7 +372,7 @@ function contentForm(c = null, kind = 'news') {
     <div><label class="${LABEL}">Đường dẫn khi bấm</label><input name="linkUrl" value="${esc(x.linkUrl)}" class="${INPUT}" placeholder="/uu-dai"></div>
     <div><label class="${LABEL}">Thứ tự</label><input type="number" name="sortOrder" value="${x.sortOrder}" class="${INPUT}"></div>
     <label class="mt-6 flex items-center gap-2 text-sm"><input type="checkbox" name="pinned" ${x.pinned ? 'checked' : ''} class="accent-primary-500">Ghim lên đầu</label></form>`,
-  `<button type="button" data-close class="${BTN_OUT}">Hủy</button><button type="button" data-ok class="${BTN}">Lưu nội dung</button>`, 'max-w-2xl');
+    `<button type="button" data-close class="${BTN_OUT}">Hủy</button><button type="button" data-ok class="${BTN}">Lưu nội dung</button>`, 'max-w-2xl');
   m.el.querySelector('[data-ok]').addEventListener('click', async () => {
     const form = m.el.querySelector('form');
     if (await run(api('admin', 'content_save', { ...formData(form), id: c ? c.id : '', sortOrder: Number(form.sortOrder.value) || 0, pinned: form.pinned.checked }), 'Đã lưu nội dung.', 'contents')) m.close();
@@ -386,7 +421,7 @@ async function renderModeration() {
       <p class="mt-2 text-sm text-foreground-800">${esc(r.comment)}</p>
       ${r.moderationNote ? `<p class="mt-2 rounded bg-background-100 px-2.5 py-1.5 text-xs text-foreground-600"><i class="ri-sticky-note-line"></i> ${esc(r.moderationNote)}${r.moderatedBy ? ` — ${esc(r.moderatedBy)}` : ''}</p>` : ''}
       <div class="mt-3 flex gap-1.5">${r.moderationStatus !== 'approved' ? `<button type="button" data-approve="${r.id}" class="${BTN_SM_PRI}"><i class="ri-eye-line"></i>Cho hiển thị</button>` : ''}${r.moderationStatus !== 'hidden' ? `<button type="button" data-hide="${r.id}" class="${BTN_SM_DANGER}"><i class="ri-eye-off-line"></i>Ẩn đánh giá</button>` : ''}</div></article>`).join('') || emptyState('ri-star-smile-line', 'Không có đánh giá phù hợp')}</div>`
-  : `
+      : `
     <div class="mb-3 flex flex-wrap gap-2">${[['all', 'Tất cả'], ...Object.entries(RSTATUS).map(([k, [l]]) => [k, l])].map(([k, l]) => `<button type="button" data-ps="${k}" class="${chip(f.ps === k)}">${l}<span class="opacity-75">${d.reports.filter((r) => k === 'all' || r.status === k).length}</span></button>`).join('')}</div>
     <div class="space-y-3">${reports.map((r) => `<article class="${CARD} p-4"><div class="flex flex-wrap items-start justify-between gap-2"><div><p class="text-sm font-semibold"><i class="ri-flag-2-fill text-accent-600"></i> ${esc(r.reason)}</p><p class="text-xs text-foreground-500">${TTYPE[r.targetType]}: <b>${esc(r.targetLabel)}</b> · Người báo: ${esc(r.reporterName)}${r.reporterContact ? ` (${esc(r.reporterContact)})` : ''} · ${formatDateTime(r.createdAt)}</p></div><div class="flex items-center gap-2"><span class="text-xs ${SEV[r.severity][1]}">Mức ${SEV[r.severity][0]}</span><span class="rounded-full px-2.5 py-1 text-[11px] font-semibold ${RSTATUS[r.status][1]}">${RSTATUS[r.status][0]}</span></div></div>
       ${r.detail ? `<p class="mt-2 text-sm text-foreground-700">${esc(r.detail)}</p>` : ''}
@@ -479,6 +514,7 @@ api('admin', 'overview').then((d) => {
   const set = (k, n) => { const el = document.querySelector(`[data-badge="${k}"]`); if (el && n) { el.textContent = n; el.classList.remove('hidden'); } };
   set('bookings', d.statuses.pending);
   set('moderation', d.totals.openReports + d.totals.pendingReviews);
-}).catch(() => {});
+  set('accounts', d.totals.pendingOwnerRequests);
+}).catch(() => { });
 
 render();

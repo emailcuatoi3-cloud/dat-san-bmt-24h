@@ -374,3 +374,53 @@ function map_review(array $r): array
 }
 
 const REVIEW_SELECT = 'SELECT r.*, c.slug AS court_slug, c.name AS court_name FROM reviews r JOIN courts c ON c.id = r.court_id';
+
+
+/** Chủ sân/quản trị duyệt đơn online mà khách đã báo chuyển cọc → ghi nhận đã nhận cọc (hoặc đã thu đủ). */
+function approve_deposit(array $b, string $status): void
+{
+    if ($status !== 'confirmed' || $b['source'] !== 'online' || $b['payment_status'] !== 'deposit_claimed') return;
+    $full = $b['payment_method'] === 'vietqr-full' || (int) $b['deposit_amount'] >= (int) $b['total_price'];
+    q('UPDATE bookings SET payment_status = ? WHERE id = ?', [$full ? 'paid' : 'deposit_paid', $b['id']]);
+}
+
+// ===================== YÊU CẦU ĐĂNG KÝ CHỦ SÂN =====================
+const OWNER_REQUEST_SPORTS = ['football' => 'Bóng đá', 'badminton' => 'Cầu lông', 'both' => 'Bóng đá & cầu lông'];
+
+function map_owner_request(?array $r): ?array
+{
+    if (!$r) return null;
+    return [
+        'id' => $r['id'], 'userId' => (int) $r['user_id'], 'businessName' => $r['business_name'], 'contactName' => $r['contact_name'],
+        'phone' => $r['phone'], 'email' => $r['email'], 'address' => $r['address'], 'sports' => $r['sports'],
+        'sportsLabel' => OWNER_REQUEST_SPORTS[$r['sports']] ?? $r['sports'], 'courtCount' => (int) $r['court_count'], 'note' => (string) $r['note'],
+        'status' => $r['status'], 'adminNote' => $r['admin_note'], 'reviewedBy' => $r['reviewed_by'], 'reviewedAt' => iso($r['reviewed_at']),
+        'createdAt' => iso($r['created_at']), 'userRole' => $r['user_role'] ?? null, 'userStatus' => $r['user_status'] ?? null,
+    ];
+}
+
+/** Yêu cầu gần nhất của 1 tài khoản */
+function latest_owner_request(int $userId): ?array
+{
+    return map_owner_request(q_one('SELECT * FROM owner_requests WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [$userId]));
+}
+
+/** Kiểm tra dữ liệu và tạo yêu cầu (trạng thái chờ duyệt) */
+function create_owner_request(array $user, array $d): array
+{
+    $business = trim((string) ($d['businessName'] ?? ''));
+    $address = trim((string) ($d['address'] ?? ''));
+    $sports = isset(OWNER_REQUEST_SPORTS[$d['sports'] ?? '']) ? $d['sports'] : 'football';
+    $count = max(1, min(50, (int) ($d['courtCount'] ?? 1)));
+    $phone = preg_replace('/[^\d+]/', '', (string) ($d['phone'] ?? $user['phone']));
+    if (mb_strlen($business) < 3) fail('Vui lòng nhập tên sân hoặc cơ sở của bạn.');
+    if (mb_strlen($address) < 8) fail('Vui lòng nhập địa chỉ sân đầy đủ (số nhà, đường, phường).');
+    if (!preg_match('/^0\d{9,10}$/', $phone) && !preg_match('/^\+84\d{9,10}$/', $phone)) fail('Số điện thoại liên hệ chưa đúng (ví dụ 0912 345 678).');
+    if (q_val("SELECT id FROM owner_requests WHERE user_id = ? AND status = 'pending'", [$user['id']])) fail('Bạn đã có một yêu cầu đang chờ duyệt. Vui lòng chờ quản trị viên phản hồi.');
+    $id = uid('or-');
+    q('INSERT INTO owner_requests (id, user_id, business_name, contact_name, phone, email, address, sports, court_count, note) VALUES (?,?,?,?,?,?,?,?,?,?)', [
+        $id, $user['id'], mb_substr($business, 0, 160), mb_substr(trim((string) ($d['contactName'] ?? $user['full_name'])) ?: $user['full_name'], 0, 120),
+        $phone, $user['email'], mb_substr($address, 0, 255), $sports, $count, mb_substr(trim((string) ($d['note'] ?? '')), 0, 1000),
+    ]);
+    return map_owner_request(q_one('SELECT * FROM owner_requests WHERE id = ?', [$id]));
+}

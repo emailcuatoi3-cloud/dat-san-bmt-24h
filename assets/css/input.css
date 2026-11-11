@@ -1,4 +1,3 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -96,7 +95,11 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3, h4, h5 {
+h1,
+h2,
+h3,
+h4,
+h5 {
   font-family: var(--font-heading);
   letter-spacing: -0.015em;
 }
@@ -147,6 +150,7 @@ input[type='number']::-webkit-inner-spin-button {
     opacity: 0;
     transform: translateY(12px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -174,14 +178,12 @@ input[type='number']::-webkit-inner-spin-button {
 /* Dan chan anh tren the danh muc: lop toi CO DINH (khong doi theo che do sang/toi)
    Anh hien ro o phan tren, chi dam dan o day de chu trang luon doc duoc */
 .card-fade {
-  background-image: linear-gradient(
-    to top,
-    rgba(4, 19, 16, 0.95) 0%,
-    rgba(4, 19, 16, 0.9) 38%,
-    rgba(4, 19, 16, 0.62) 60%,
-    rgba(4, 19, 16, 0.2) 82%,
-    rgba(4, 19, 16, 0) 100%
-  );
+  background-image: linear-gradient(to top,
+      rgba(4, 19, 16, 0.95) 0%,
+      rgba(4, 19, 16, 0.9) 38%,
+      rgba(4, 19, 16, 0.62) 60%,
+      rgba(4, 19, 16, 0.2) 82%,
+      rgba(4, 19, 16, 0) 100%);
 }
 
 /* Lop phu toi co dinh tren anh: KHONG doi theo che do sang/toi,
@@ -354,15 +356,13 @@ html.light .bg-accent-400,
 /* Vong quay uu dai: dung dung bo 3 mau Jade Sport,
    giu do dam de chu trang luon doc duoc */
 .prize-wheel {
-  background: conic-gradient(
-    from -30deg,
-    #0b9664 0deg 60deg,
-    #12ae79 60deg 120deg,
-    #ff7a41 120deg 180deg,
-    #087a52 180deg 240deg,
-    #c9562a 240deg 300deg,
-    #0f8f68 300deg 360deg
-  );
+  background: conic-gradient(from -30deg,
+      #0b9664 0deg 60deg,
+      #12ae79 60deg 120deg,
+      #ff7a41 120deg 180deg,
+      #087a52 180deg 240deg,
+      #c9562a 240deg 300deg,
+      #0f8f68 300deg 360deg);
 }
 
 /* Chu trong o vong quay: nam ngang, co bong do de doc tren moi mau o */
@@ -373,4 +373,11 @@ html.light .bg-accent-400,
 
 .prize-wheel-spin {
   transition: transform 4.2s cubic-bezier(0.16, 0.84, 0.24, 1);
+}
+
+/* Trang chi tiết sân trên điện thoại: đẩy nút chat lên trên thanh "Đặt sân ngay" */
+@media (max-width: 1023px) {
+  body:has(#mobile-book-bar) [data-chat-toggle] {
+    bottom: 5.25rem;
+  }
 }

@@ -99,6 +99,13 @@ run_api([
         return public_profile(q_one('SELECT * FROM users WHERE id = ?', [$u['id']]));
     },
 
+    // Khách hàng đã có tài khoản gửi yêu cầu trở thành chủ sân
+    'owner_request' => function () {
+        $u = api_require_login();
+        if ($u['role'] !== 'customer') fail('Tài khoản của bạn không cần gửi yêu cầu này.');
+        return create_owner_request($u, input());
+    },
+
     'change_password' => function () {
         $u = api_require_login();
         $hash = q_val('SELECT password_hash FROM users WHERE id = ?', [$u['id']]);
