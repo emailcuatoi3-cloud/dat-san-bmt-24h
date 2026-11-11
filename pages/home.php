@@ -120,7 +120,7 @@ render_page([
 <section class="w-full px-4 md:px-8 py-10 md:py-14 <?= $f[5] ?>">
   <div class="mx-auto w-full max-w-[1280px]">
     <?php section_heading($f[2], $f[1], $f[3], 'left', '<a href="' . url($f[4]) . '" class="inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-background-300 bg-white px-4 py-2.5 text-sm font-semibold text-foreground-800 transition-colors hover:border-primary-400 hover:text-primary-700">Xem tất cả<i class="ri-arrow-right-line" aria-hidden="true"></i></a>'); ?>
-    <div data-featured="<?= $f[0] ?>" class="mt-7 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4"></div>
+    <div data-featured="<?= $f[0] ?>" class="-mx-4 mt-7 flex snap-x snap-mandatory scroll-px-4 gap-4 overflow-x-auto px-4 pb-2 [&>*]:w-[84%] [&>*]:shrink-0 [&>*]:snap-start sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-5 sm:overflow-visible sm:px-0 sm:pb-0 sm:[&>*]:w-auto lg:grid-cols-4"></div>
   </div>
 </section>
 <?php endforeach; ?>
@@ -232,7 +232,7 @@ render_page([
         <?php endforeach; ?>
       </ul>
       <div class="mt-7 flex flex-col gap-3 sm:flex-row">
-        <a href="<?= url('/dang-ky?vai-tro=owner') ?>" class="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-primary-600"><i class="ri-store-2-line text-base" aria-hidden="true"></i>Trở thành đối tác chủ sân</a>
+        <a href="<?= url('/dang-ky-chu-san') ?>" class="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-primary-600"><i class="ri-store-2-line text-base" aria-hidden="true"></i>Trở thành đối tác chủ sân</a>
         <a href="<?= url('/dang-nhap') ?>" class="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-background-300 bg-white px-5 py-3 text-sm font-semibold text-foreground-800 transition-colors hover:border-primary-300 hover:text-primary-700">Đã có tài khoản chủ sân</a>
       </div>
     </div>

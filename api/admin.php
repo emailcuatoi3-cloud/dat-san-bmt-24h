@@ -77,6 +77,7 @@ run_api([
                 'monthRevenue' => array_sum(array_column(array_filter($bookings, fn($b) => str_starts_with($b['date'], $month) && in_array($b['status'], ['confirmed', 'completed'], true)), 'totalPrice')),
                 'openReports' => (int) q_val("SELECT COUNT(*) FROM reports WHERE status IN ('open','reviewing')"),
                 'pendingReviews' => (int) q_val("SELECT COUNT(*) FROM reviews WHERE moderation_status = 'pending'"),
+                'pendingOwnerRequests' => (int) q_val("SELECT COUNT(*) FROM owner_requests WHERE status = 'pending'"),
             ],
             'recentAudit' => array_map(fn($a) => ['action' => $a['action'], 'actor' => $a['actor_name'], 'target' => $a['target_label'], 'level' => $a['level'], 'createdAt' => iso($a['created_at'])],
                 q_all('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 6')),
@@ -164,6 +165,30 @@ run_api([
         return true;
     },
 
+    // ---------------- Yêu cầu làm chủ sân ----------------
+    'owner_requests' => function () {
+        need('accounts');
+        return array_map('map_owner_request', q_all("SELECT r.*, u.role user_role, u.status user_status FROM owner_requests r JOIN users u ON u.id = r.user_id
+            ORDER BY FIELD(r.status, 'pending', 'approved', 'rejected'), r.created_at DESC"));
+    },
+
+    'owner_request_review' => function () {
+        need('accounts');
+        $r = q_one('SELECT r.*, u.email user_email, u.role user_role FROM owner_requests r JOIN users u ON u.id = r.user_id WHERE r.id = ?', [in_str('id')]) ?: fail('Không tìm thấy yêu cầu.');
+        if ($r['status'] !== 'pending') fail('Yêu cầu này đã được xử lý.');
+        $approve = in_str('decision') === 'approve';
+        $note = mb_substr(in_str('note'), 0, 255);
+        if (!$approve && mb_strlen($note) < 5) fail('Vui lòng ghi lý do từ chối (ít nhất 5 ký tự) để gửi cho người đăng ký.');
+        q('UPDATE owner_requests SET status = ?, admin_note = ?, reviewed_by = ?, reviewed_at = NOW() WHERE id = ?',
+            [$approve ? 'approved' : 'rejected', $note, admin_access()['actorName'], $r['id']]);
+        if ($approve && $r['user_role'] === 'customer') {
+            q("UPDATE users SET role = 'owner', business_name = ?, phone = IF(phone = '', ?, phone), address = IF(address = '', ?, address) WHERE id = ?",
+                [$r['business_name'], $r['phone'], $r['address'], $r['user_id']]);
+        }
+        audit('accounts', $approve ? 'Duyệt đăng ký chủ sân' : 'Từ chối đăng ký chủ sân', $r['business_name'] . ' · ' . $r['user_email'], $note, $approve ? 'success' : 'warning');
+        return true;
+    },
+
     // ---------------- Sân ----------------
     'courts' => function () {
         need('courts');
@@ -236,6 +261,7 @@ run_api([
         if (!in_array($status, ['confirmed', 'cancelled'], true)) fail('Trạng thái không hợp lệ.');
         $reason = $status === 'cancelled' ? (in_str('reason') ?: 'Quản trị viên từ chối đơn') : null;
         q('UPDATE bookings SET status = ?, reject_reason = ? WHERE id = ?', [$status, $reason, $b['id']]);
+        approve_deposit($b, $status);
         audit('bookings', $status === 'confirmed' ? 'Duyệt đơn đặt sân' : 'Từ chối đơn đặt sân', $b['code'] . ' · ' . $b['court_name'], (string) $reason, $status === 'confirmed' ? 'success' : 'warning');
         return map_booking(q_one(BOOKING_SELECT . ' WHERE b.id = ?', [$b['id']]));
     },
