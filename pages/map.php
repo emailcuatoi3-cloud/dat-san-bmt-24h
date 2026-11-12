@@ -34,7 +34,7 @@ render_page(['title' => 'Bản đồ sân - ' . SITE_NAME, 'script' => 'pages/ma
         <div class="rounded-md border border-background-200 bg-background-100 px-3.5 py-3"><p class="flex items-center gap-1.5 text-xs font-bold text-foreground-900"><i class="<?= $it[0] ?> text-primary-600" aria-hidden="true"></i><?= $it[1] ?></p><p class="mt-1 text-[11px] leading-relaxed text-foreground-600"><?= $it[2] ?></p></div>
       <?php endforeach; ?>
     </div>
-  </div>
+  </div> 
 </div>
 <?php
 });

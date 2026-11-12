@@ -298,4 +298,4 @@ render_page([
   </div>
 </section>
 <?php
-});
+}); 
