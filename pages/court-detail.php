@@ -221,7 +221,7 @@ render_page([
       <a href="<?= url('/tim-san?sport=' . $court['sport']) ?>" class="whitespace-nowrap text-sm font-semibold text-primary-600 hover:text-primary-700">Xem tất cả</a>
     </div>
     <div class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3" id="related"></div>
-  </div>
+  </div> 
 </div>
 <?php
 });

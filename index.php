@@ -40,7 +40,7 @@ $routes = [
     '#^/tai-khoan$#' => 'account',
     '#^/chu-san$#' => 'owner',
     '#^/quan-tri$#' => 'admin',
-];
+]; 
 
 // Các đường dẫn cũ chuyển hướng về cổng đăng nhập/đăng ký chung
 $aliases = ['/chu-san/dang-nhap' => '/dang-nhap', '/chu-san/dang-ky' => '/dang-ky-chu-san', '/quan-tri/dang-nhap' => '/dang-nhap'];
