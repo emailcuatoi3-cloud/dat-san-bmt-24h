@@ -1,4 +1,10 @@
 <?php
+/*
+ * Module: API Quản lý Tài khoản & Đơn hàng (Mã Minh Hoan - PK04409)
+ * - Phân quyền truy xuất đơn theo tài khoản đăng nhập hoặc mã vé trên thiết bị
+ * - Xử lý tra cứu đơn, hủy đơn (ràng buộc mốc 4 giờ), xuất hóa đơn, lưu sân yêu thích
+ * - Cập nhật thông tin hồ sơ cá nhân và đổi mật khẩu bảo mật
+ */
 /**
  * API tài khoản khách hàng: đơn của tôi, tra cứu đơn, hủy đơn, hóa đơn, sân yêu thích, hồ sơ, đổi mật khẩu.
  * Khách vãng lai vẫn xem được đơn qua danh sách mã vé lưu trên thiết bị (localStorage).
