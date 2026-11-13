@@ -1,3 +1,8 @@
+/*
+ * Module: Controller Chi tiết đơn & Vé điện tử (Mã Minh Hoan - PK04409)
+ * - Render tiến trình đơn đặt, đếm ngược thời gian tới giờ ra sân
+ * - Xử lý popup phóng to mã QR check-in, tải ảnh vé PNG, xuất file lịch .ics và chia sẻ link
+ */
 /** Chi tiết đơn: vé QR, tóm tắt, nhắc lịch (Google Calendar / .ics), link chia sẻ. */
 import { $, PAGE, esc, openModal, statusBadge, formatVnd } from '../core/ui.js';
 import { ticketData, ticketQrUrl, downloadTicket } from '../core/ticket.js';

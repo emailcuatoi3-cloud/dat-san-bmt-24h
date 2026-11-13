@@ -1,9 +1,10 @@
-/**
- * ĐẶT SÂN 3 BƯỚC
- *  1. Chọn sân + ngày + thời lượng + khung giờ (lưới giờ có giá từng ô)
- *  2. Thông tin người đặt + dịch vụ thêm + mã giảm giá + đồng ý chính sách
- *  3. Giữ sân 10 phút, quét VietQR, "Tôi đã chuyển khoản" → hệ thống tự đối soát → mở vé QR
+/*
+ * Module: Controller luồng Đặt sân 3 bước (Mã Minh Hoan - PK04409)
+ * - Quản lý state đặt sân, tải slot bận theo ngày và vẽ lưới giờ kèm giá động
+ * - Validate form thông tin, kiểm tra điều kiện voucher và tính tổng tiền real-time
+ * - Điều khiển đồng hồ giữ chỗ 10 phút, đối soát thanh toán VietQR và render vé QR
  */
+
 import { $, $$, PAGE, APP, api, esc, url, cx, formatVnd, copyText } from '../core/ui.js';
 import { ticketData, ticketQrUrl, downloadTicket, openShareSheet } from '../core/ticket.js';
 import { buildDaySlots, calcCourtPriceForRange, getPriceBands, lowestPrice, priceBandAt } from '../lib/courtPricing.js';
