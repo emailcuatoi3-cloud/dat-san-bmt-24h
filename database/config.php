@@ -2,6 +2,16 @@
 /**
  * CẤU HÌNH CHUNG — chỉ cần sửa file này khi triển khai.
  */
+// ---- Đọc file .env ở thư mục gốc dự án ----
+(function (string $file): void {
+    if (!is_file($file)) return;
+    foreach (file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        $line = trim($line);
+        if ($line === '' || $line[0] === '#' || !str_contains($line, '=')) continue;
+        [$key, $value] = array_map('trim', explode('=', $line, 2));
+        if (getenv($key) === false) putenv("$key=" . trim($value, "\"'"));
+    }
+})(__DIR__ . '/../.env');
 
 // ---- Kết nối MySQL / MariaDB ----
 define('DB_HOST', getenv('DB_HOST') ?: '127.0.0.1');
@@ -29,5 +39,12 @@ define('HOLD_MINUTES', 10);
 define('AUTO_CONFIRM_SECONDS', 5);
 /** Chỉ cho hủy khi còn cách giờ chơi từ số giờ này trở lên */
 define('CANCEL_CUTOFF_HOURS', 4);
+
+// ---- Key API (điền trong .env) ----
+define('GOOGLE_CLIENT_ID', getenv('GOOGLE_CLIENT_ID') ?: '');
+define('GOOGLE_CLIENT_SECRET', getenv('GOOGLE_CLIENT_SECRET') ?: '');
+define('FACEBOOK_APP_ID', getenv('FACEBOOK_APP_ID') ?: '');
+define('FACEBOOK_APP_SECRET', getenv('FACEBOOK_APP_SECRET') ?: '');
+define('CHATBOT_API_KEY', getenv('CHATBOT_API_KEY') ?: '');
 
 date_default_timezone_set('Asia/Ho_Chi_Minh');
