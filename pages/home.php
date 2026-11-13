@@ -11,7 +11,7 @@ $areas = court_areas();
 $faqs = q_all("SELECT title, body FROM contents WHERE kind = 'faq' AND status = 'published' ORDER BY pinned DESC, sort_order");
 $banner = q_one("SELECT title, summary, link_url FROM contents WHERE kind = 'banner' AND status = 'published' ORDER BY pinned DESC, sort_order LIMIT 1");
  
-render_page([
+render_page([ 
     'title' => 'Đặt Sân BMT 24H - Đặt sân bóng đá & cầu lông Buôn Ma Thuột',
     'transparentHeader' => true,
     'script' => 'pages/home.js',

@@ -9,7 +9,7 @@ foreach (blocked_slots_map($today) as $key => $slots) {
 render_page(['title' => 'Bản đồ sân - ' . SITE_NAME, 'script' => 'pages/map.js', 'data' => ['courts' => public_courts(), 'taken' => (object) $taken]], function () {
     page_hero([['Trang chủ', '/'], ['Bản đồ sân']], 'Bản đồ sân thể thao Buôn Ma Thuột',
         'Xem vị trí toàn bộ sân bóng đá và sân cầu lông trên bản đồ, chọn sân để xem đường đi và khung giờ còn trống tối nay.',
-        function () { ?>
+        function () { ?> 
 <div class="flex flex-wrap items-center gap-2">
   <div class="inline-flex items-center gap-1 rounded-full bg-background-50 p-1" id="map-sports"></div>
   <div class="flex min-w-0 flex-1 basis-full items-center gap-2 rounded-full border border-background-300 bg-background-50 px-3.5 py-2 focus-within:border-primary-400 sm:basis-auto sm:max-w-[280px]">

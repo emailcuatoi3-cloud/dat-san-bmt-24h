@@ -5,7 +5,7 @@ render_page([
     'script' => 'pages/courts.js',
     'data' => [
         'courts' => public_courts(),
-        'areas' => court_areas(),
+        'areas' => court_areas(), 
         'priceRanges' => PRICE_RANGES,
         'params' => [ 
             'sport' => $_GET['sport'] ?? 'all',
