@@ -84,12 +84,46 @@ function render_scripts(array $opt): void
 <?php endif;
 }
 
+function render_ghost_login_banner(): void
+{
+    $imp = impersonating_admin();
+    if (!$imp) return;
+    $target = current_user();
+    if (!$target) return;
+    $roleLabels = [
+        'customer' => 'Khách hàng',
+        'owner' => 'Chủ sân',
+        'admin' => 'Quản trị viên',
+    ];
+    $targetRole = $roleLabels[$target['role'] ?? ''] ?? $target['role'];
+    ?>
+    <aside class="sticky top-0 z-[160] flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-amber-600 via-rose-600 to-rose-700 px-4 py-2.5 text-xs text-white shadow-xl backdrop-blur">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="inline-flex items-center gap-1 rounded bg-black/35 px-2 py-0.5 text-[11px] font-extrabold uppercase tracking-wider text-amber-200 shadow-inner">
+          <i class="ri-spy-line text-sm animate-pulse" aria-hidden="true"></i> Ghost Login
+        </span>
+        <span class="leading-tight">
+          Bạn đang xem hệ thống với tư cách: <b class="underline decoration-amber-300"><?= e($target['full_name'] ?: $target['email']) ?></b>
+          <span class="rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"><?= e($targetRole) ?></span>
+          · Thực hiện bởi Quản trị viên: <b><?= e($imp['name']) ?></b>
+        </span>
+      </div>
+      <div class="flex items-center gap-2">
+        <a href="<?= url('/thoat-gia-lap') ?>" class="inline-flex items-center gap-1.5 rounded-md bg-white px-3 py-1 font-bold text-rose-700 shadow-md transition hover:bg-rose-50 hover:scale-[1.02] active:scale-95">
+          <i class="ri-logout-box-r-line" aria-hidden="true"></i> Thoát Giả lập & Trở về Quản trị
+        </a>
+      </div>
+    </aside>
+    <?php
+}
+
 function render_page(array $opt, callable $content): void
 {
     $layout = $opt['layout'] ?? 'site';
     render_head($opt);
     if ($layout === 'bare') {
         echo '<body class="' . e($opt['bodyClass'] ?? 'bg-background-50') . '">';
+        render_ghost_login_banner();
         $content();
         render_toast_root();
         render_scripts($opt);
@@ -100,6 +134,7 @@ function render_page(array $opt, callable $content): void
     ?>
 <body>
 <div class="relative min-h-screen bg-background-50">
+  <?php render_ghost_login_banner(); ?>
   <div class="site-backdrop pointer-events-none fixed inset-0 z-0" aria-hidden="true"></div>
   <div class="relative z-10 flex min-h-screen flex-col">
     <?php render_site_header($transparent); ?>

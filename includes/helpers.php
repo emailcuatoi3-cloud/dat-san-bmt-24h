@@ -159,9 +159,9 @@ function json_out($data, int $status = 200): void
     exit;
 }
 
-function json_error(string $message, int $status = 400): void
+function json_error(string $message, int $status = 400, array $extra = []): void
 {
-    json_out(['ok' => false, 'error' => $message], $status);
+    json_out(array_merge(['ok' => false, 'error' => $message], $extra), $status);
 }
 
 /**

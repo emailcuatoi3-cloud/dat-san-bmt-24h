@@ -60,6 +60,11 @@ run_api([
         return ['redirect' => url('/')];
     },
 
+    'stop_impersonate' => function () {
+        stop_impersonating();
+        return ['redirect' => url('/quan-tri?tab=accounts')];
+    },
+
     'me' => function () {
         return public_profile(current_user());
     },

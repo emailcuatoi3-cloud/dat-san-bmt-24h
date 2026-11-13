@@ -47,6 +47,69 @@ function logout_user(): void
     session_destroy();
 }
 
+/** Kiểm tra quản trị viên có đang giả lập (Ghost Login) tài khoản khác không. */
+function impersonating_admin(): ?array
+{
+    if (!empty($_SESSION['impersonator_admin_id'])) {
+        return [
+            'id' => (int) $_SESSION['impersonator_admin_id'],
+            'name' => $_SESSION['impersonator_admin_name'] ?? 'Quản trị viên',
+            'email' => $_SESSION['impersonator_admin_email'] ?? '',
+        ];
+    }
+    return null;
+}
+
+/** Bắt đầu phiên giả lập tài khoản. */
+function start_impersonating(int $targetUserId): bool
+{
+    $admin = current_user();
+    if (!$admin || $admin['role'] !== 'admin') return false;
+    $target = q_one('SELECT id, email, full_name, role, status FROM users WHERE id = ?', [$targetUserId]);
+    if (!$target) return false;
+    if ((int) $target['id'] === (int) $admin['id']) return false;
+
+    // Lưu phiên quản trị viên gốc
+    $_SESSION['impersonator_admin_id'] = (int) $admin['id'];
+    $_SESSION['impersonator_admin_name'] = $admin['full_name'] ?: $admin['email'];
+    $_SESSION['impersonator_admin_email'] = $admin['email'];
+
+    // Đăng nhập danh nghĩa người dùng đích
+    $_SESSION['user_id'] = (int) $target['id'];
+
+    audit('accounts', 'Ghost Login (Đăng nhập danh nghĩa)', $target['email'], 'Quản trị viên ' . ($admin['full_name'] ?: $admin['email']) . ' bắt đầu phiên giả lập tài khoản ID ' . $target['id'], 'warning');
+    return true;
+}
+
+/** Kết thúc phiên giả lập và trở về tài khoản quản trị viên. */
+function stop_impersonating(): bool
+{
+    if (empty($_SESSION['impersonator_admin_id'])) return false;
+    $targetId = $_SESSION['user_id'] ?? null;
+    $adminId = (int) $_SESSION['impersonator_admin_id'];
+
+    $target = $targetId ? q_one('SELECT email FROM users WHERE id = ?', [$targetId]) : null;
+    $targetEmail = $target['email'] ?? ('User ID ' . $targetId);
+
+    $_SESSION['user_id'] = $adminId;
+    unset($_SESSION['impersonator_admin_id'], $_SESSION['impersonator_admin_name'], $_SESSION['impersonator_admin_email']);
+
+    audit('accounts', 'Thoát Ghost Login', $targetEmail, 'Quản trị viên đã kết thúc phiên giả lập và trở lại tài khoản quản trị.', 'info');
+    return true;
+}
+
+/** Kiểm tra phiên Sudo (xác thực mật khẩu thao tác nhạy cảm). */
+function is_sudo_active(): bool
+{
+    return !empty($_SESSION['admin_sudo_until']) && $_SESSION['admin_sudo_until'] > time();
+}
+
+/** Kích hoạt phiên Sudo (mặc định 15 phút = 900 giây). */
+function activate_sudo(int $seconds = 900): void
+{
+    $_SESSION['admin_sudo_until'] = time() + $seconds;
+}
+
 /** Thông tin hồ sơ gọn để gửi cho JavaScript. */
 function public_profile(?array $u): ?array
 {
