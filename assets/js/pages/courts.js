@@ -71,11 +71,11 @@ function filterPanelHtml() {
       <p class="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-foreground-500">Loại sân</p>
       <div class="flex flex-col gap-1.5">
         ${sportChoices
-          .map((ch) => {
-            const checked = f.sport === ch.value;
-            const expandable = ch.value !== 'all';
-            const expanded = expandable && state.openSport === ch.value;
-            return `<div>
+      .map((ch) => {
+        const checked = f.sport === ch.value;
+        const expandable = ch.value !== 'all';
+        const expanded = expandable && state.openSport === ch.value;
+        return `<div>
               <div class="${cx('flex items-center rounded-md border transition-colors', checked ? 'border-primary-300 bg-primary-50 font-semibold text-primary-800' : 'border-background-200 bg-white text-foreground-700 hover:border-primary-200')}">
                 <button type="button" data-sport="${ch.value}" class="flex flex-1 cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-left text-sm">
                   <span class="flex items-center gap-2"><i class="${ch.icon} text-base ${checked ? 'text-primary-600' : 'text-foreground-400'}" aria-hidden="true"></i>${ch.label}</span>
@@ -83,22 +83,21 @@ function filterPanelHtml() {
                 </button>
                 ${expandable ? `<button type="button" data-expand="${ch.value}" aria-label="Mở rộng ${ch.label}" class="flex h-9 w-8 cursor-pointer items-center justify-center rounded-r-md text-foreground-400 transition-colors hover:text-primary-600"><i class="ri-arrow-down-s-line text-base transition-transform ${expanded ? 'rotate-180' : ''}" aria-hidden="true"></i></button>` : ''}
               </div>
-              ${
-                expanded
-                  ? `<div class="ml-3 mt-1.5 flex flex-col gap-1 border-l border-background-200 pl-3">
+              ${expanded
+            ? `<div class="ml-3 mt-1.5 flex flex-col gap-1 border-l border-background-200 pl-3">
                   <button type="button" data-field-type="all" data-for="${ch.value}" class="${cx('flex cursor-pointer items-center justify-between rounded-md px-2.5 py-2 text-left text-[13px] transition-colors', f.fieldType === 'all' ? 'bg-secondary-100 font-semibold text-secondary-900' : 'text-foreground-600 hover:bg-background-100 hover:text-foreground-900')}"><span>Tất cả ${ch.shortLabel}</span><span class="text-[11px] opacity-70">${sportCount(ch.value)}</span></button>
                   ${subTypesFor(ch.value)
-                    .map((type) => {
-                      const sub = f.fieldType === type;
-                      return `<button type="button" data-field-type="${esc(type)}" data-for="${ch.value}" class="${cx('flex cursor-pointer items-center justify-between rounded-md px-2.5 py-2 text-left text-[13px] transition-colors', sub ? 'bg-primary-100 font-semibold text-primary-800' : 'text-foreground-600 hover:bg-background-100 hover:text-foreground-900')}"><span class="flex items-center gap-2"><span class="h-1.5 w-1.5 rounded-full ${sub ? 'bg-primary-600' : 'bg-foreground-300'}"></span>${esc(type)}</span><span class="text-[11px] opacity-70">${subTypeCount(ch.value, type)}</span></button>`;
-                    })
-                    .join('')}
+              .map((type) => {
+                const sub = f.fieldType === type;
+                return `<button type="button" data-field-type="${esc(type)}" data-for="${ch.value}" class="${cx('flex cursor-pointer items-center justify-between rounded-md px-2.5 py-2 text-left text-[13px] transition-colors', sub ? 'bg-primary-100 font-semibold text-primary-800' : 'text-foreground-600 hover:bg-background-100 hover:text-foreground-900')}"><span class="flex items-center gap-2"><span class="h-1.5 w-1.5 rounded-full ${sub ? 'bg-primary-600' : 'bg-foreground-300'}"></span>${esc(type)}</span><span class="text-[11px] opacity-70">${subTypeCount(ch.value, type)}</span></button>`;
+              })
+              .join('')}
                 </div>`
-                  : ''
-              }
+            : ''
+          }
             </div>`;
-          })
-          .join('')}
+      })
+      .join('')}
       </div>
     </div>
     <div>
@@ -115,12 +114,12 @@ function filterPanelHtml() {
       <p class="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-foreground-500">Khoảng giá mỗi giờ</p>
       <div class="flex flex-col gap-1">
         ${priceRanges
-          .map((r) => {
-            const checked = f.priceId === r.id;
-            return `<button type="button" data-price="${r.id}" class="flex cursor-pointer items-center gap-2.5 rounded-md px-1 py-1.5 text-left text-sm text-foreground-700 hover:text-foreground-950">
+      .map((r) => {
+        const checked = f.priceId === r.id;
+        return `<button type="button" data-price="${r.id}" class="flex cursor-pointer items-center gap-2.5 rounded-md px-1 py-1.5 text-left text-sm text-foreground-700 hover:text-foreground-950">
               <span class="flex h-4 w-4 items-center justify-center rounded-full border ${checked ? 'border-primary-500 bg-primary-500' : 'border-background-400 bg-white'}">${checked ? '<span class="h-1.5 w-1.5 rounded-full bg-white"></span>' : ''}</span>${esc(r.label)}</button>`;
-          })
-          .join('')}
+      })
+      .join('')}
       </div>
     </div>
     <div>
@@ -146,9 +145,8 @@ function render() {
 
   $$('[data-filter-panel]').forEach((panel) => (panel.innerHTML = filterPanelHtml()));
 
-  $('#result-summary').innerHTML = `Tìm thấy <span class="font-semibold text-foreground-950">${list.length}</span> sân phù hợp${
-    f.fieldType !== 'all' ? `<span class="text-foreground-500"> · ${esc(f.fieldType)}</span>` : ''
-  }${f.area ? `<span class="text-foreground-500"> tại P. ${esc(f.area)}</span>` : ''}`;
+  $('#result-summary').innerHTML = `Tìm thấy <span class="font-semibold text-foreground-950">${list.length}</span> sân phù hợp${f.fieldType !== 'all' ? `<span class="text-foreground-500"> · ${esc(f.fieldType)}</span>` : ''
+    }${f.area ? `<span class="text-foreground-500"> tại P. ${esc(f.area)}</span>` : ''}`;
 
   const active = (f.sport !== 'all') + (f.fieldType !== 'all') + Boolean(f.area) + (f.priceId !== 'all') + f.activeOnly;
   $('#filter-count').innerHTML = active
@@ -170,13 +168,12 @@ function render() {
     totalPages > 1
       ? `<button type="button" data-page="${state.page - 1}" ${state.page === 1 ? 'disabled' : ''} class="${btnBase}" aria-label="Trang trước"><i class="ri-arrow-left-s-line" aria-hidden="true"></i></button>
         ${Array.from({ length: totalPages }, (_, i) => i + 1)
-          .map(
-            (n) =>
-              `<button type="button" data-page="${n}" class="h-9 w-9 rounded-md border text-sm font-semibold transition-colors ${
-                n === state.page ? 'border-primary-500 bg-primary-500 text-white' : 'border-background-300 bg-white text-foreground-700 hover:border-primary-400'
-              }">${n}</button>`,
-          )
-          .join('')}
+        .map(
+          (n) =>
+            `<button type="button" data-page="${n}" class="h-9 w-9 rounded-md border text-sm font-semibold transition-colors ${n === state.page ? 'border-primary-500 bg-primary-500 text-white' : 'border-background-300 bg-white text-foreground-700 hover:border-primary-400'
+            }">${n}</button>`,
+        )
+        .join('')}
         <button type="button" data-page="${state.page + 1}" ${state.page === totalPages ? 'disabled' : ''} class="${btnBase}" aria-label="Trang sau"><i class="ri-arrow-right-s-line" aria-hidden="true"></i></button>`
       : '';
 }
@@ -256,9 +253,8 @@ kwForm.addEventListener('submit', (event) => {
 });
 
 if (params.time || params.date) {
-  $('#slot-hint').innerHTML = `<div class="mb-4 flex items-center gap-2 rounded-md border border-secondary-200 bg-secondary-50 px-3.5 py-2.5 text-xs text-secondary-900"><i class="ri-calendar-check-line" aria-hidden="true"></i><span>Đang tìm sân trống${
-    params.time ? ` khung giờ <span class="font-semibold">${esc(params.time)}</span>` : ''
-  }${params.date ? ` ngày <span class="font-semibold">${esc(formatLongDate(params.date))}</span>` : ''}</span></div>`;
+  $('#slot-hint').innerHTML = `<div class="mb-4 flex items-center gap-2 rounded-md border border-secondary-200 bg-secondary-50 px-3.5 py-2.5 text-xs text-secondary-900"><i class="ri-calendar-check-line" aria-hidden="true"></i><span>Đang tìm sân trống${params.time ? ` khung giờ <span class="font-semibold">${esc(params.time)}</span>` : ''
+    }${params.date ? ` ngày <span class="font-semibold">${esc(formatLongDate(params.date))}</span>` : ''}</span></div>`;
 }
 
 bindFavoriteButtons($('#results'));

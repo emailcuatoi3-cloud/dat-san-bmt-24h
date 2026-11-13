@@ -5,7 +5,7 @@ $taken = occupied_slots($today);
 foreach (blocked_slots_map($today) as $key => $slots) {
     $cid = explode(':', $key)[0];
     $taken[$cid] = array_values(array_unique(array_merge($taken[$cid] ?? [], $slots)));
-}
+} 
 render_page(['title' => 'Bản đồ sân - ' . SITE_NAME, 'script' => 'pages/map.js', 'data' => ['courts' => public_courts(), 'taken' => (object) $taken]], function () {
     page_hero([['Trang chủ', '/'], ['Bản đồ sân']], 'Bản đồ sân thể thao Buôn Ma Thuột',
         'Xem vị trí toàn bộ sân bóng đá và sân cầu lông trên bản đồ, chọn sân để xem đường đi và khung giờ còn trống tối nay.',
