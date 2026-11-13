@@ -54,6 +54,8 @@ export async function api(file, action, body = undefined, method = undefined) {
   if (!json || json.ok === false) {
     const error = new Error((json && json.error) || 'Đã có lỗi xảy ra.');
     error.status = res.status;
+    error.requireSudo = Boolean(json && json.require_sudo);
+    error.payload = json;
     throw error;
   }
   return json.data;

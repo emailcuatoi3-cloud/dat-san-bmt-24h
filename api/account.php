@@ -85,6 +85,7 @@ run_api([
     },
 
     'update_profile' => function () {
+        if (impersonating_admin()) fail('Đang trong chế độ Ghost Login: Không thể sửa đổi thông tin của người dùng.');
         $u = api_require_login();
         $name = in_str('name');
         $phone = preg_replace('/[^\d+]/', '', in_str('phone'));
@@ -107,6 +108,7 @@ run_api([
     },
 
     'change_password' => function () {
+        if (impersonating_admin()) fail('Đang trong chế độ Ghost Login: Không thể thay đổi mật khẩu của người dùng.');
         $u = api_require_login();
         $hash = q_val('SELECT password_hash FROM users WHERE id = ?', [$u['id']]);
         if (!password_verify((string) (input()['current'] ?? ''), $hash)) fail('Mật khẩu hiện tại chưa đúng.');
