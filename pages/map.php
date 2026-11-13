@@ -12,13 +12,13 @@ render_page(['title' => 'Bản đồ sân - ' . SITE_NAME, 'script' => 'pages/ma
         function () { ?>
 <div class="flex flex-wrap items-center gap-2">
   <div class="inline-flex items-center gap-1 rounded-full bg-background-50 p-1" id="map-sports"></div>
-  <div class="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-background-300 bg-background-50 px-3.5 py-2 focus-within:border-primary-400 sm:max-w-[280px]">
+  <div class="flex min-w-0 flex-1 basis-full items-center gap-2 rounded-full border border-background-300 bg-background-50 px-3.5 py-2 focus-within:border-primary-400 sm:basis-auto sm:max-w-[280px]">
     <i class="ri-search-line text-sm text-primary-600" aria-hidden="true"></i>
     <input type="search" id="map-search" placeholder="Tìm theo tên sân, đường..." aria-label="Tìm sân trên bản đồ" class="w-full min-w-0 bg-transparent text-sm text-foreground-950 placeholder:text-foreground-500 focus:outline-none">
   </div>
 </div>
 <?php });
-    ?> 
+    ?>
 <div class="w-full px-4 md:px-8 py-6 md:py-8">
   <div class="mx-auto w-full max-w-[1280px]">
     <article class="overflow-hidden rounded-lg border border-background-200 bg-background-100" id="map-main"></article>
@@ -34,7 +34,7 @@ render_page(['title' => 'Bản đồ sân - ' . SITE_NAME, 'script' => 'pages/ma
         <div class="rounded-md border border-background-200 bg-background-100 px-3.5 py-3"><p class="flex items-center gap-1.5 text-xs font-bold text-foreground-900"><i class="<?= $it[0] ?> text-primary-600" aria-hidden="true"></i><?= $it[1] ?></p><p class="mt-1 text-[11px] leading-relaxed text-foreground-600"><?= $it[2] ?></p></div>
       <?php endforeach; ?>
     </div>
-  </div>
+  </div> 
 </div>
 <?php
 });

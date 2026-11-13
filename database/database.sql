@@ -13,7 +13,7 @@ CREATE DATABASE IF NOT EXISTS `datsan_bmt24h` CHARACTER SET utf8mb4 COLLATE utf8
 USE `datsan_bmt24h`;
 
 SET FOREIGN_KEY_CHECKS = 0;
-DROP TABLE IF EXISTS contact_messages, refunds, owner_services, audit_logs, reports, contents, categories,
+DROP TABLE IF EXISTS owner_requests, contact_messages, refunds, owner_services, audit_logs, reports, contents, categories,
   promotions, reviews, blocked_slots, bookings, courts, admin_role_assignments, admin_roles, users;
 SET FOREIGN_KEY_CHECKS = 1;
 
@@ -265,6 +265,27 @@ CREATE TABLE refunds (
   FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Yêu cầu đăng ký làm chủ sân (khách gửi, quản trị viên duyệt)
+CREATE TABLE owner_requests (
+  id VARCHAR(40) PRIMARY KEY,
+  user_id INT NOT NULL,
+  business_name VARCHAR(160) NOT NULL,
+  contact_name VARCHAR(120) NOT NULL DEFAULT '',
+  phone VARCHAR(30) NOT NULL DEFAULT '',
+  email VARCHAR(190) NOT NULL DEFAULT '',
+  address VARCHAR(255) NOT NULL DEFAULT '',
+  sports VARCHAR(40) NOT NULL DEFAULT 'football',
+  court_count INT NOT NULL DEFAULT 1,
+  note TEXT NULL,
+  status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+  admin_note VARCHAR(255) NOT NULL DEFAULT '',
+  reviewed_by VARCHAR(120) NOT NULL DEFAULT '',
+  reviewed_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY (user_id), KEY (status),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE contact_messages (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(120) NOT NULL,
@@ -399,3 +420,7 @@ INSERT INTO `owner_services` (`id`, `owner_id`, `name`, `category`, `unit`, `pri
   ('sv-racket', 2, 'Thuê vợt cầu lông', 'rental', 'cây', 25000, 8, 1, 5),
   ('sv-shuttle', 2, 'Hộp cầu lông (12 quả)', 'other', 'hộp', 65000, 15, 1, 6),
   ('sv-noodle', 2, 'Mì tôm trứng', 'food', 'tô', 25000, 3, 1, 7);
+
+-- Yêu cầu mẫu: khách hàng Minh Quân xin làm chủ sân (đang chờ duyệt)
+INSERT INTO owner_requests (id, user_id, business_name, contact_name, phone, email, address, sports, court_count, note, status, created_at) VALUES
+('or-seed-01', 3, 'Sân bóng Minh Quân', 'Nguyễn Minh Quân', '0912345678', 'khach@bmt24h.vn', '120 Nguyễn Văn Cừ, P. Tân Lập, TP. Buôn Ma Thuột', 'football', 2, 'Có 2 sân 5 người cỏ nhân tạo, muốn đưa lên hệ thống để nhận đơn buổi tối.', 'pending', NOW() - INTERVAL 1 DAY);

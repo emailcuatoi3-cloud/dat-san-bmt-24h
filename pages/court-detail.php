@@ -57,9 +57,9 @@ render_page([
         <img data-gallery-main src="<?= e($gallery[0]) ?>" alt="<?= e($court['name']) ?> - ảnh 1" title="<?= e($court['name']) ?> tại Buôn Ma Thuột" class="h-full w-full object-cover object-top">
         <span data-gallery-count class="absolute bottom-3 left-3 rounded-md bg-background-50/75 px-2.5 py-1 text-xs font-medium text-foreground-950">Ảnh 1 / <?= count($gallery) ?></span>
       </div>
-      <div class="grid grid-cols-3 gap-2 lg:h-full lg:grid-cols-2 lg:grid-rows-2">
+      <div class="grid grid-cols-4 gap-2 lg:h-full lg:grid-cols-2 lg:grid-rows-2">
         <?php foreach ($gallery as $i => $img): ?>
-          <button type="button" data-gallery-thumb="<?= $i ?>" aria-label="Xem ảnh <?= $i + 1 ?>" class="relative h-[80px] cursor-pointer overflow-hidden rounded-md border-2 transition-colors md:h-[100px] lg:h-full <?= $i === 0 ? 'border-primary-500' : 'border-transparent hover:border-primary-300' ?>">
+          <button type="button" data-gallery-thumb="<?= $i ?>" aria-label="Xem ảnh <?= $i + 1 ?>" class="relative h-[64px] cursor-pointer overflow-hidden rounded-md border-2 transition-colors sm:h-[80px] md:h-[100px] lg:h-full <?= $i === 0 ? 'border-primary-500' : 'border-transparent hover:border-primary-300' ?>">
             <img src="<?= e($img) ?>" alt="<?= e($court['name']) ?> - ảnh thu nhỏ <?= $i + 1 ?>" loading="lazy" class="h-full w-full object-cover object-top">
           </button>
         <?php endforeach; ?>
@@ -165,6 +165,14 @@ render_page([
       <section class="mt-5 rounded-lg border border-background-200 bg-white p-5" id="reviews"></section>
     </div>
 
+    <?php if ($court['status'] !== 'maintenance'): ?>
+    <!-- Thanh đặt sân cố định ở đáy màn hình (chỉ điện thoại / tablet) -->
+    <div id="mobile-book-bar" class="fixed inset-x-0 bottom-0 z-40 flex items-center justify-between gap-3 border-t border-background-200 bg-white/95 px-4 py-3 backdrop-blur lg:hidden">
+      <div class="min-w-0"><p class="text-[11px] text-foreground-500">Giá thuê từ</p><p class="font-heading text-lg font-extrabold leading-tight text-primary-600"><?= money($lowest) ?><span class="text-xs font-medium text-foreground-500">/giờ</span></p></div>
+      <a href="<?= url('/dat-san/' . $court['slug']) ?>" class="inline-flex shrink-0 items-center gap-2 rounded-md bg-primary-500 px-5 py-3 text-sm font-bold text-white hover:bg-primary-600"><i class="ri-calendar-check-line" aria-hidden="true"></i>Đặt sân ngay</a>
+    </div>
+    <div class="h-16 lg:hidden"></div>
+    <?php endif; ?>
     <aside class="min-w-0">
       <div class="lg:sticky lg:top-[88px]">
         <div class="rounded-lg border border-background-200 bg-white p-5">
@@ -213,7 +221,7 @@ render_page([
       <a href="<?= url('/tim-san?sport=' . $court['sport']) ?>" class="whitespace-nowrap text-sm font-semibold text-primary-600 hover:text-primary-700">Xem tất cả</a>
     </div>
     <div class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3" id="related"></div>
-  </div>
+  </div> 
 </div>
 <?php
 });

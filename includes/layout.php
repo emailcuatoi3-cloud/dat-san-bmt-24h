@@ -84,12 +84,46 @@ function render_scripts(array $opt): void
 <?php endif;
 }
 
+function render_ghost_login_banner(): void
+{
+    $imp = impersonating_admin();
+    if (!$imp) return;
+    $target = current_user();
+    if (!$target) return;
+    $roleLabels = [
+        'customer' => 'Khách hàng',
+        'owner' => 'Chủ sân',
+        'admin' => 'Quản trị viên',
+    ];
+    $targetRole = $roleLabels[$target['role'] ?? ''] ?? $target['role'];
+    ?>
+    <aside class="sticky top-0 z-[160] flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-amber-600 via-rose-600 to-rose-700 px-4 py-2.5 text-xs text-white shadow-xl backdrop-blur">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="inline-flex items-center gap-1 rounded bg-black/35 px-2 py-0.5 text-[11px] font-extrabold uppercase tracking-wider text-amber-200 shadow-inner">
+          <i class="ri-spy-line text-sm animate-pulse" aria-hidden="true"></i> Ghost Login
+        </span>
+        <span class="leading-tight">
+          Bạn đang xem hệ thống với tư cách: <b class="underline decoration-amber-300"><?= e($target['full_name'] ?: $target['email']) ?></b>
+          <span class="rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"><?= e($targetRole) ?></span>
+          · Thực hiện bởi Quản trị viên: <b><?= e($imp['name']) ?></b>
+        </span>
+      </div>
+      <div class="flex items-center gap-2">
+        <a href="<?= url('/thoat-gia-lap') ?>" class="inline-flex items-center gap-1.5 rounded-md bg-white px-3 py-1 font-bold text-rose-700 shadow-md transition hover:bg-rose-50 hover:scale-[1.02] active:scale-95">
+          <i class="ri-logout-box-r-line" aria-hidden="true"></i> Thoát Giả lập & Trở về Quản trị
+        </a>
+      </div>
+    </aside>
+    <?php
+}
+
 function render_page(array $opt, callable $content): void
 {
     $layout = $opt['layout'] ?? 'site';
     render_head($opt);
     if ($layout === 'bare') {
         echo '<body class="' . e($opt['bodyClass'] ?? 'bg-background-50') . '">';
+        render_ghost_login_banner();
         $content();
         render_toast_root();
         render_scripts($opt);
@@ -100,6 +134,7 @@ function render_page(array $opt, callable $content): void
     ?>
 <body>
 <div class="relative min-h-screen bg-background-50">
+  <?php render_ghost_login_banner(); ?>
   <div class="site-backdrop pointer-events-none fixed inset-0 z-0" aria-hidden="true"></div>
   <div class="relative z-10 flex min-h-screen flex-col">
     <?php render_site_header($transparent); ?>
@@ -206,9 +241,9 @@ function render_site_header(bool $tr): void
           <span class="hidden xl:inline">Kênh chủ sân</span><span class="xl:hidden">Kênh sân</span>
         </a>
       <?php else: ?>
-        <a href="<?= url('/dang-ky?vai-tro=owner') ?>" title="Dành cho chủ sân" <?= tcls($tr, 'border-white/40 text-white hover:border-white hover:bg-white/15', 'border-accent-300 bg-accent-50 text-accent-800 hover:border-accent-400 hover:bg-accent-100', $chip) ?>>
+        <a href="<?= url('/dang-ky-chu-san') ?>" title="Đăng ký tài khoản chủ sân" <?= tcls($tr, 'border-white/40 text-white hover:border-white hover:bg-white/15', 'border-accent-300 bg-accent-50 text-accent-800 hover:border-accent-400 hover:bg-accent-100', $chip) ?>>
           <span class="flex h-4 w-4 items-center justify-center"><i class="ri-store-2-line" aria-hidden="true"></i></span>
-          <span class="hidden xl:inline">Dành cho chủ sân</span><span class="xl:hidden">Chủ sân</span>
+          <span class="hidden 2xl:inline">Đăng ký chủ sân</span><span class="2xl:hidden">Đăng ký sân</span>
         </a>
       <?php endif; ?>
       <form action="<?= url('/tim-san') ?>" method="get" role="search" class="hidden 2xl:block">
@@ -293,8 +328,8 @@ function render_site_header(bool $tr): void
         </div>
       </form>
       <?php if (!$isOwner): ?>
-        <a href="<?= url('/dang-ky?vai-tro=owner') ?>" class="mt-1 flex items-center justify-between rounded-full border border-accent-300 bg-accent-50 px-3 py-2.5 text-sm font-semibold text-accent-800 hover:bg-accent-100">
-          <span class="flex items-center gap-2.5"><i class="ri-store-2-line text-base text-accent-600" aria-hidden="true"></i>Dành cho chủ sân</span><i class="ri-arrow-right-s-line text-accent-500" aria-hidden="true"></i>
+        <a href="<?= url('/dang-ky-chu-san') ?>" class="mt-1 flex items-center justify-between rounded-full border border-accent-300 bg-accent-50 px-3 py-2.5 text-sm font-semibold text-accent-800 hover:bg-accent-100">
+          <span class="flex items-center gap-2.5"><i class="ri-store-2-line text-base text-accent-600" aria-hidden="true"></i>Đăng ký chủ sân</span><i class="ri-arrow-right-s-line text-accent-500" aria-hidden="true"></i>
         </a>
       <?php endif; ?>
       <?php foreach ($nav as $item): ?>
@@ -369,13 +404,13 @@ function render_site_footer(): void
     $explore = [['Sân bóng đá', '/tim-san?sport=football'], ['Sân cầu lông', '/tim-san?sport=badminton'], ['Bản đồ sân', '/ban-do'],
         ['Ngẫu nhiên & chia đội', '/ngau-nhien'], ['Ưu đãi & mã giảm giá', '/uu-dai'], ['Đặt sân nhanh', '/dat-san']];
     $support = [['Giới thiệu về chúng tôi', '/gioi-thieu'], ['Liên hệ hỗ trợ', '/lien-he'], ['Tài khoản của tôi', '/tai-khoan'],
-        ['Kênh chủ sân', '/chu-san'], ['Đăng nhập', '/dang-nhap'], ['Tạo tài khoản mới', '/dang-ky'], ['Trở thành đối tác chủ sân', '/dang-ky?vai-tro=owner']];
+        ['Kênh chủ sân', '/chu-san'], ['Đăng nhập', '/dang-nhap'], ['Tạo tài khoản mới', '/dang-ky'], ['Trở thành đối tác chủ sân', '/dang-ky-chu-san']];
     $socials = [['ri-facebook-fill', 'Facebook'], ['ri-messenger-line', 'Messenger'], ['ri-youtube-fill', 'YouTube'], ['ri-tiktok-fill', 'TikTok']];
     ?>
 <footer class="mt-auto border-t border-background-200 bg-background-100 text-foreground-600">
   <div class="w-full px-4 md:px-8 py-12 md:py-16">
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10">
-      <div>
+    <div class="grid grid-cols-2 gap-x-6 gap-y-8 sm:gap-10 lg:grid-cols-4">
+      <div class="col-span-2 sm:col-span-1">
         <a href="<?= url('/') ?>" class="flex items-center gap-2.5 mb-4">
           <span class="w-10 h-10 flex items-center justify-center rounded-lg bg-primary-500 text-white"><i class="ri-football-line text-xl" aria-hidden="true"></i></span>
           <span class="leading-tight"><span class="block font-heading text-[15px] font-extrabold tracking-tight text-foreground-950">ĐẶT SÂN BMT</span><span class="block text-[11px] font-semibold tracking-[0.18em] text-primary-600">24H</span></span>
@@ -386,7 +421,7 @@ function render_site_footer(): void
             <a href="#" aria-label="<?= $s[1] ?>" class="w-9 h-9 flex items-center justify-center rounded-md bg-primary-500/15 text-foreground-700 transition-colors hover:bg-primary-500 hover:text-foreground-950"><i class="<?= $s[0] ?> text-base" aria-hidden="true"></i></a>
           <?php endforeach; ?>
         </div>
-        <a href="<?= url('/dang-ky?vai-tro=owner') ?>" class="mt-6 inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-primary-300 bg-white px-4 py-2.5 text-sm font-semibold text-primary-700 transition-colors hover:border-primary-500 hover:bg-primary-500 hover:text-white"><i class="ri-store-2-line text-base" aria-hidden="true"></i>Trở thành đối tác chủ sân</a>
+        <a href="<?= url('/dang-ky-chu-san') ?>" class="mt-6 inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-primary-300 bg-white px-4 py-2.5 text-sm font-semibold text-primary-700 transition-colors hover:border-primary-500 hover:bg-primary-500 hover:text-white"><i class="ri-store-2-line text-base" aria-hidden="true"></i>Trở thành đối tác chủ sân</a>
         <p class="mt-2 text-xs leading-relaxed text-foreground-500">Miễn phí đăng ký, nhận đơn đặt sân mỗi ngày.</p>
       </div>
       <div>
@@ -397,7 +432,7 @@ function render_site_footer(): void
         <h4 class="font-heading text-sm font-bold uppercase tracking-wide text-foreground-950 mb-4"><a href="<?= url('/gioi-thieu') ?>" class="hover:text-primary-600 transition-colors">Hỗ trợ</a></h4>
         <ul class="space-y-2.5"><?php foreach ($support as $l): ?><li><a href="<?= url($l[1]) ?>" class="text-sm text-foreground-600 transition-colors hover:text-primary-600"><?= e($l[0]) ?></a></li><?php endforeach; ?></ul>
       </div>
-      <div>
+      <div class="col-span-2 sm:col-span-1">
         <h4 class="font-heading text-sm font-bold uppercase tracking-wide text-foreground-950 mb-4"><a href="<?= url('/lien-he') ?>" class="hover:text-primary-600 transition-colors">Liên hệ</a></h4>
         <ul class="space-y-3 text-sm text-foreground-600">
           <li class="flex items-start gap-2.5"><i class="ri-map-pin-line text-primary-600 mt-0.5" aria-hidden="true"></i><span>TP. Buôn Ma Thuột, Đắk Lắk, Việt Nam</span></li>

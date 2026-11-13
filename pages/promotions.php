@@ -70,7 +70,7 @@ function () use ($active, $upcoming, $best) {
         <h2 class="font-heading text-base font-extrabold text-primary-900 md:text-lg">Bạn là chủ sân và muốn kéo khách vào khung giờ thấp điểm?</h2>
         <p class="mt-1.5 text-sm leading-relaxed text-primary-800/80">Tạo mã giảm giá theo phần trăm hoặc số tiền, giới hạn ngày và khung giờ áp dụng ngay trong kênh chủ sân.</p>
       </div>
-      <a href="<?= url('/dang-ky?vai-tro=owner') ?>" class="inline-flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap rounded-md bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-600"><i class="ri-store-2-line text-base" aria-hidden="true"></i>Đăng ký chủ sân</a>
+      <a href="<?= url('/dang-ky-chu-san') ?>" class="inline-flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap rounded-md bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-600"><i class="ri-store-2-line text-base" aria-hidden="true"></i>Đăng ký chủ sân</a>
     </section>
   </div>
 </div>

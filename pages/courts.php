@@ -25,7 +25,7 @@ render_page([
     <input type="search" name="keyword" placeholder="Nhập tên sân, đường hoặc khu vực..." aria-label="Tìm kiếm sân theo tên hoặc khu vực" class="w-full min-w-0 bg-transparent py-2 text-sm text-foreground-950 placeholder:text-foreground-500 focus:outline-none">
     <button type="submit" class="whitespace-nowrap rounded-full bg-primary-500 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-primary-600">Tìm</button>
   </div>
-</form>
+</form> 
 <?php });
     ?>
 <div class="w-full px-4 md:px-8 py-8 md:py-10">
