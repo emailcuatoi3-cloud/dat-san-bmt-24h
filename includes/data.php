@@ -6,8 +6,8 @@
 function sport_label(string $sport): string
 {
     return $sport === 'badminton' ? 'Sân cầu lông' : 'Sân bóng đá';
-}
-
+} 
+ 
 // ======================= SÂN =======================
 
 function map_court(array $r): array

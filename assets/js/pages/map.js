@@ -39,18 +39,18 @@ function render() {
   $('#map-count').textContent = `${list.length} sân`;
   $('#map-list').innerHTML = list.length
     ? list
-        .map((c) => {
-          const active = c.id === sel.id;
-          const f = freeTonight(c);
-          return `<button type="button" data-court="${c.id}" class="w-[240px] shrink-0 snap-start cursor-pointer overflow-hidden rounded-lg border text-left transition-colors sm:w-[260px] ${active ? 'border-primary-400 bg-primary-50' : 'border-background-200 bg-background-100 hover:border-primary-300'}">
+      .map((c) => {
+        const active = c.id === sel.id;
+        const f = freeTonight(c);
+        return `<button type="button" data-court="${c.id}" class="w-[240px] shrink-0 snap-start cursor-pointer overflow-hidden rounded-lg border text-left transition-colors sm:w-[260px] ${active ? 'border-primary-400 bg-primary-50' : 'border-background-200 bg-background-100 hover:border-primary-300'}">
             <span class="relative block h-[124px] w-full overflow-hidden bg-background-100"><img src="${esc(c.images[0])}" alt="${esc(c.name)}" loading="lazy" class="h-full w-full object-cover object-top">
               <span class="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold photo-chip"><i class="${c.sport === 'football' ? 'ri-football-line' : 'ri-ping-pong-line'}" aria-hidden="true"></i>${esc(c.sportLabel)}</span>
               ${active ? '<span class="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary-500 text-white"><i class="ri-check-line text-sm" aria-hidden="true"></i></span>' : ''}</span>
             <span class="block p-3"><span class="block truncate text-sm font-semibold text-foreground-950">${esc(c.name)}</span><span class="mt-1 block truncate text-[11px] text-foreground-600"><i class="ri-map-pin-line mr-1 text-foreground-400" aria-hidden="true"></i>${esc(c.address)}</span>
               <span class="mt-2 flex items-center justify-between gap-2"><span class="text-xs font-bold text-primary-700">${formatVnd(c.pricePerHour)}/giờ</span><span class="rounded-full bg-background-200 px-2 py-0.5 text-[10px] font-semibold text-foreground-800">P. ${esc(c.area)}</span></span>
               <span class="mt-1.5 block text-[11px] font-medium text-foreground-500">${f.length ? `Còn ${f.length} khung giờ tối nay` : 'Tối nay đã kín'}</span></span></button>`;
-        })
-        .join('')
+      })
+      .join('')
     : `<div class="w-full rounded-lg border border-dashed border-background-300 bg-background-50 px-4 py-10 text-center"><i class="ri-map-pin-line text-2xl text-foreground-400" aria-hidden="true"></i><p class="mt-2 text-sm font-semibold text-foreground-900">Không tìm thấy sân phù hợp</p><p class="mt-1 text-xs text-foreground-500">Bạn thử đổi môn thể thao hoặc xoá từ khoá tìm kiếm.</p></div>`;
 }
 
