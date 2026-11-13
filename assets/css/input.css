@@ -88,6 +88,14 @@ html {
   color-scheme: dark;
 }
 
+/* Danh sách xổ xuống của <select>: trình duyệt mặc định nền trắng → chữ sáng của chế độ tối bị chìm.
+   Đặt màu nền / chữ theo bảng màu hiện tại để đọc rõ ở cả chế độ sáng và tối. */
+select option,
+select optgroup {
+  background-color: oklch(var(--background-100));
+  color: oklch(var(--foreground-950));
+}
+
 body {
   font-family: var(--font-body);
   background-color: oklch(var(--background-50));
@@ -247,6 +255,7 @@ input[type='number']::-webkit-inner-spin-button {
    html.light duoc bat/tat bang nut chuyen che do o thanh menu
    ============================================================= */
 html.light {
+  color-scheme: light;
   /* Xanh ngoc Jade, van giu 500 = #0B9664 cho nut hanh dong */
   --primary-50: 0.968 0.024 162;
   --primary-100: 0.94 0.044 162;
