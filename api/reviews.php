@@ -6,7 +6,7 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 
 /** Cập nhật điểm trung bình + số lượt đánh giá của sân sau khi có đánh giá mới. */
 function refresh_court_rating(string $courtId): void
-{
+{ 
     $row = q_one("SELECT COUNT(*) n, AVG(rating) avg FROM reviews WHERE court_id = ? AND moderation_status <> 'hidden'", [$courtId]);
     if ($row && (int) $row['n'] > 0) {
         // Giữ số lượt đánh giá gốc (dữ liệu cũ) cộng thêm số lượt mới trên hệ thống

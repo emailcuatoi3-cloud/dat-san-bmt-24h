@@ -11,7 +11,7 @@ if (!$court) {
   <h1 class="mt-5 font-heading text-2xl font-bold text-foreground-950">Không tìm thấy sân này</h1>
   <p class="mt-2 max-w-md text-sm text-foreground-600">Sân có thể đã được gỡ khỏi hệ thống hoặc đường dẫn không chính xác. Bạn hãy quay lại trang tìm kiếm để chọn sân khác.</p>
   <a href="<?= url('/tim-san') ?>" class="mt-6 whitespace-nowrap rounded-md bg-primary-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-primary-600">Tìm sân khác</a>
-</div>
+</div> 
 <?php });
     return;
 }

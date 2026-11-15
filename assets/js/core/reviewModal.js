@@ -26,10 +26,9 @@ export function openReviewModal({ courtName = '', courtSlug = '', bookingCode = 
       <div class="rounded-md border border-primary-200 bg-primary-50 px-3.5 py-3">
         <p class="flex items-start gap-2 text-xs leading-relaxed text-primary-900"><i class="ri-shield-check-line mt-0.5 text-base" aria-hidden="true"></i><span>Đánh giá của bạn được đăng công khai ngay sau khi gửi và không cần mã đơn. Nếu bạn đã đặt sân qua website, hãy gửi đánh giá từ mục Tài khoản → Lịch sử để đánh giá được gắn nhãn “Đã chơi”.</span></p>
       </div>
-      ${
-        locked
-          ? `<div class="mt-4 flex items-center gap-2 rounded-md border border-background-300 bg-background-50 px-3 py-2.5"><i class="ri-ticket-2-line text-foreground-500" aria-hidden="true"></i><span class="font-mono text-sm font-semibold text-foreground-950">${esc(bookingCode)}</span><span class="ml-auto text-[11px] font-medium text-primary-700">Đơn đã hoàn thành</span></div>`
-          : `<div class="mt-4">
+      ${locked
+        ? `<div class="mt-4 flex items-center gap-2 rounded-md border border-background-300 bg-background-50 px-3 py-2.5"><i class="ri-ticket-2-line text-foreground-500" aria-hidden="true"></i><span class="font-mono text-sm font-semibold text-foreground-950">${esc(bookingCode)}</span><span class="ml-auto text-[11px] font-medium text-primary-700">Đơn đã hoàn thành</span></div>`
+        : `<div class="mt-4">
               <label for="review-name" class="mb-1.5 block text-sm font-semibold text-foreground-900">Tên hiển thị</label>
               <input id="review-name" type="text" maxlength="60" placeholder="Ví dụ: Minh Anh" class="w-full rounded-md border border-background-300 bg-white px-3 py-2.5 text-sm text-foreground-950 placeholder:text-foreground-400 focus:border-primary-400 focus:outline-none">
               <p class="mt-1 text-[11px] text-foreground-500">Không bắt buộc. Bỏ trống thì đánh giá sẽ hiển thị với tên “Khách ghé sân”.</p>
@@ -39,8 +38,8 @@ export function openReviewModal({ courtName = '', courtSlug = '', bookingCode = 
         <span class="block text-sm font-semibold text-foreground-900">Chất lượng sân <span class="text-accent-600">*</span></span>
         <div class="mt-2 flex flex-wrap items-center gap-1.5" data-stars>
           ${[1, 2, 3, 4, 5]
-            .map((s) => `<button type="button" data-star="${s}" aria-label="Chọn ${s} sao" class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-md transition-colors hover:bg-accent-50"><i class="ri-star-line text-2xl text-background-400" aria-hidden="true"></i></button>`)
-            .join('')}
+        .map((s) => `<button type="button" data-star="${s}" aria-label="Chọn ${s} sao" class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-md transition-colors hover:bg-accent-50"><i class="ri-star-line text-2xl text-background-400" aria-hidden="true"></i></button>`)
+        .join('')}
           <span data-star-label class="ml-1 text-sm font-semibold text-foreground-800">Chọn số sao</span>
         </div>
       </div>
@@ -80,9 +79,8 @@ export function openReviewModal({ courtName = '', courtSlug = '', bookingCode = 
   const paintTags = () => {
     q('[data-tags]').innerHTML = TAGS.map((tag) => {
       const on = state.tags.includes(tag);
-      return `<button type="button" data-tag="${esc(tag)}" class="cursor-pointer whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-        on ? 'border-primary-400 bg-primary-50 text-primary-800' : 'border-background-300 bg-white text-foreground-600 hover:border-primary-300 hover:text-primary-700'
-      }">${on ? '<i class="ri-check-line mr-1" aria-hidden="true"></i>' : ''}${esc(tag)}</button>`;
+      return `<button type="button" data-tag="${esc(tag)}" class="cursor-pointer whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${on ? 'border-primary-400 bg-primary-50 text-primary-800' : 'border-background-300 bg-white text-foreground-600 hover:border-primary-300 hover:text-primary-700'
+        }">${on ? '<i class="ri-check-line mr-1" aria-hidden="true"></i>' : ''}${esc(tag)}</button>`;
     }).join('');
   };
   paintTags();
