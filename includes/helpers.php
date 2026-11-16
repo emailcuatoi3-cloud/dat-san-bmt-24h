@@ -119,6 +119,44 @@ function slugify(string $text): string
     return trim($text, '-');
 }
 
+/** Lấy địa chỉ IP của người dùng truy cập. */
+function client_ip(): string
+{
+    $keys = ['HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR'];
+    foreach ($keys as $k) {
+        if (!empty($_SERVER[$k])) {
+            $ip = trim(explode(',', (string) $_SERVER[$k])[0]);
+            if (filter_var($ip, FILTER_VALIDATE_IP)) return $ip;
+        }
+    }
+    return '127.0.0.1';
+}
+
+/** Chuẩn hóa và kiểm tra số điện thoại hợp lệ theo các nhà mạng viễn thông Việt Nam. */
+function clean_vietnam_phone(string $phone): string
+{
+    $digits = preg_replace('/\D/', '', $phone);
+    if (str_starts_with($digits, '84') && strlen($digits) === 11) {
+        $digits = '0' . substr($digits, 2);
+    }
+    return $digits;
+}
+
+function is_valid_vietnam_phone(string $phone): bool
+{
+    $digits = clean_vietnam_phone($phone);
+    if (!preg_match('/^0\d{9}$/', $digits)) return false;
+
+    // Chặn số ảo lặp (0000000000, 0111111111, 0999999999...)
+    if (preg_match('/^0(\d)\1{8}$/', $digits)) return false;
+    // Chặn số thứ tự giả lập
+    if (in_array($digits, ['0123456789', '0987654321', '0123456780'], true)) return false;
+
+    // Các đầu số di động hợp lệ tại Việt Nam: Viettel, Mobifone, Vinaphone, Vietnamobile, Gmobile, Wintel, Itelecom
+    $validPrefixes = '/^(086|096|097|098|032|033|034|035|036|037|038|039|089|090|093|070|076|077|078|079|088|091|094|081|082|083|084|085|092|052|056|058|099|059|087|055)/';
+    return (bool) preg_match($validPrefixes, $digits);
+}
+
 // ---------------- API helpers ----------------
 
 /** Đọc body JSON của request (hoặc $_POST). */

@@ -9,8 +9,7 @@ function refresh_court_rating(string $courtId): void
 {
     $row = q_one("SELECT COUNT(*) n, AVG(rating) avg FROM reviews WHERE court_id = ? AND moderation_status <> 'hidden'", [$courtId]);
     if ($row && (int) $row['n'] > 0) {
-        // Giữ số lượt đánh giá gốc (dữ liệu cũ) cộng thêm số lượt mới trên hệ thống
-        q('UPDATE courts SET rating = ? WHERE id = ?', [round((float) $row['avg'], 1), $courtId]);
+        q('UPDATE courts SET rating = ?, review_count = ? WHERE id = ?', [round((float) $row['avg'], 1), (int) $row['n'], $courtId]);
     }
 }
 

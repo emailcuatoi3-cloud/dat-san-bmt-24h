@@ -39,6 +39,7 @@ const S = {
   depositMode: 'deposit',
   booking: null,
   busy: false,
+  step2LoadedAt: 0,
 };
 let holdTimer = 0;
 
@@ -301,6 +302,8 @@ function renderStep2() {
       <div class="min-w-0"><label for="b-phone" class="mb-1.5 block text-sm font-medium text-foreground-800">Số điện thoại <span class="text-accent-600">*</span></label><input id="b-phone" data-form="phone" type="tel" inputmode="numeric" maxlength="12" value="${esc(f.phone)}" placeholder="0912345678" class="${inputCls('phone')}">${fieldError('phone') || '<p class="mt-1 text-xs text-foreground-400">10 số, bắt đầu bằng 0. Chủ sân gọi xác nhận theo số này.</p>'}</div>
       <div class="min-w-0 sm:col-span-2"><label for="b-email" class="mb-1.5 block text-sm font-medium text-foreground-800">Email <span class="font-normal text-foreground-400">(không bắt buộc)</span></label><input id="b-email" data-form="email" type="email" value="${esc(f.email)}" placeholder="minhquan@gmail.com" class="${inputCls('email')}">${fieldError('email')}</div>
     </div>
+    <!-- Bẫy honeypot chống bot tự động điền form -->
+    <div class="hidden" style="display:none;" aria-hidden="true"><label for="b-website-check">Kiểm tra website</label><input id="b-website-check" data-form="website_check" type="text" tabindex="-1" autocomplete="off" value=""></div>
     <div class="mt-5"><p class="text-sm font-medium text-foreground-800">Dịch vụ thêm</p><p class="mt-0.5 text-xs text-foreground-500">Trả cùng lúc tại sân, không bắt buộc.</p>
       <div class="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2">${extraServices
         .map((s) => {
@@ -566,6 +569,7 @@ async function goNext() {
     else if (!S.startSlot) S.error = 'Vui lòng chọn khung giờ còn trống trên lưới giờ.';
     if (S.error) return renderError();
     S.step = 2;
+    S.step2LoadedAt = Date.now();
     renderAll();
     window.scrollTo({ top: 0, behavior: 'smooth' });
     if (S.promoCode && !S.applied) applyPromo(true);
@@ -600,6 +604,8 @@ async function goNext() {
       extras: S.extras,
       promoCode: S.applied ? S.applied.promotion.code : '',
       depositMode: S.depositMode,
+      website_check: f.website_check || '',
+      loadedAt: S.step2LoadedAt || 0,
     });
     rememberBookingCode(S.booking.code);
     S.step = 3;

@@ -4,8 +4,8 @@ DirectoryIndex index.php
 
 <IfModule mod_rewrite.c>
   RewriteEngine On
-  # Không cho tải trực tiếp file cấu hình / SQL / thư mục includes
-  RewriteRule ^(config\.php|database\.sql|includes/|pages/) - [F,L]
+  # Không cho tải trực tiếp thư mục database, includes, pages, git
+  RewriteRule ^(database/|includes/|pages/|\.git) - [F,L]
   # File hoặc thư mục có thật thì trả về luôn (css, js, ảnh, api/*.php)
   RewriteCond %{REQUEST_FILENAME} -f [OR]
   RewriteCond %{REQUEST_FILENAME} -d

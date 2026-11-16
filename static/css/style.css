@@ -1,0 +1,101 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: sans-serif;
+  background-color: #ffffff;
+  color: #475569;
+}
+
+.container {
+  width: 92%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* ===== CÁC KHỐI XƯƠNG (WIREFRAME BLOCKS) ===== */
+.wf-box {
+  background-color: #f1f5f9;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  padding: 16px;
+}
+
+.wf-box-dark {
+  background-color: #e2e8f0;
+  border: 1.5px dashed #94a3b8;
+  color: #334155;
+}
+
+.wf-section {
+  padding: 48px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+/* ===== HEADER & FOOTER (PARTIAL) ===== */
+.wf-header {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 14px 0;
+  background: #fff;
+}
+.wf-header-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.wf-nav { display: flex; gap: 12px; }
+
+.wf-footer {
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  padding: 48px 0 24px;
+}
+.wf-footer-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1.5fr;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+/* ===== CÁC HỆ LƯỚI (GRID) ===== */
+.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+
+/* Bố cục trang Danh mục (Sidebar lọc + Lưới sân) */
+.catalog-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 24px;
+  padding: 36px 0;
+}
+
+/* Bố cục trang Đặt sân (Cột trái 5 bước + Cột phải tóm tắt) */
+.booking-layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 24px;
+  padding: 36px 0;
+}
+
+/* ===== RESPONSIVE (1024px -> 768px) ===== */
+@media (max-width: 1024px) {
+  .grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .grid-3 { grid-template-columns: repeat(2, 1fr); }
+  .wf-footer-grid { grid-template-columns: repeat(2, 1fr); }
+  .booking-layout { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 768px) {
+  .wf-nav { display: none; }
+  .grid-4, .grid-3, .grid-2, .catalog-layout, .wf-footer-grid {
+    grid-template-columns: 1fr;
+  }
+}

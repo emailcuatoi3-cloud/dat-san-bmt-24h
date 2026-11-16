@@ -1,0 +1,49 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', sans-serif; background: #f1f5f9; color: #1e293b; }
+
+.admin-layout { display: flex; min-height: 100vh; }
+
+/* SIDEBAR */
+.sidebar {
+  width: 240px;
+  background: #0b2239;
+  color: #cbd5e1;
+  padding: 20px;
+  flex-shrink: 0;
+}
+.sidebar-brand { color: #fff; font-weight: 800; font-size: 18px; margin-bottom: 28px; display: flex; align-items: center; gap: 8px; }
+.sidebar-brand span { background: #16a34a; padding: 2px 7px; border-radius: 5px; font-size: 13px; }
+.sidebar-menu { list-style: none; }
+.sidebar-menu li { margin-bottom: 8px; }
+.sidebar-menu a { display: block; padding: 10px 14px; border-radius: 8px; color: #cbd5e1; text-decoration: none; font-size: 14px; }
+.sidebar-menu a.active, .sidebar-menu a:hover { background: #16a34a; color: #fff; font-weight: 600; }
+
+/* MAIN CONTENT */
+.admin-main { flex: 1; padding: 24px; overflow-x: hidden; }
+.admin-topbar { display: flex; justify-content: space-between; align-items: center; background: #fff; padding: 16px 24px; border-radius: 10px; margin-bottom: 24px; border: 1px solid #e2e8f0; }
+
+/* KPI 4 CỘT */
+.kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+.kpi-card { background: #fff; padding: 20px; border-radius: 10px; border: 1px solid #e2e8f0; }
+.kpi-card span { font-size: 13px; color: #64748b; }
+.kpi-card h3 { font-size: 1.6rem; color: #0b2239; margin: 6px 0; }
+.kpi-trend { font-size: 12px; color: #16a34a; font-weight: 600; }
+
+/* BẢNG ĐƠN ĐẶT GẦN ĐÂY */
+.card-box { background: #fff; padding: 20px; border-radius: 10px; border: 1px solid #e2e8f0; margin-bottom: 24px; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
+th, td { text-align: left; padding: 12px; border-bottom: 1px solid #e2e8f0; }
+th { background: #f8fafc; color: #475569; font-weight: 600; }
+.status-ok { background: #dcfce7; color: #15803d; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.status-wait { background: #fef9c3; color: #a16207; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+
+/* RESPONSIVE ADMIN */
+@media (max-width: 1024px) {
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 768px) {
+  .admin-layout { flex-direction: column; }
+  .sidebar { width: 100%; }
+  .kpi-grid { grid-template-columns: 1fr; }
+}

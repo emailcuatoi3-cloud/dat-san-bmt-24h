@@ -125,7 +125,10 @@ CREATE TABLE bookings (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_court_date (court_id, booking_date),
   KEY idx_customer (customer_id),
-  KEY idx_phone (customer_phone)
+  KEY idx_phone (customer_phone),
+  KEY idx_status_hold (status, payment_status, hold_expires_at),
+  KEY idx_phone_status (customer_phone, status),
+  KEY idx_date_status (booking_date, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE blocked_slots (

@@ -30,4 +30,26 @@ define('AUTO_CONFIRM_SECONDS', 5);
 /** Chỉ cho hủy khi còn cách giờ chơi từ số giờ này trở lên */
 define('CANCEL_CUTOFF_HOURS', 4);
 
+// ---- Cấu hình chống spam đặt sân & giữ chỗ ảo ----
+/** Số đơn giữ chỗ (pending chưa cọc) tối đa của 1 số điện thoại tại một thời điểm */
+define('MAX_ACTIVE_HOLDS_PER_PHONE', 1);
+/** Số lượt đặt sân tối đa trong cùng 1 ngày chơi của 1 số điện thoại */
+define('MAX_BOOKINGS_PER_DATE_PER_PHONE', 1);
+/** Số lượt tạo đơn tối đa trong vòng 24 giờ của 1 số điện thoại */
+define('MAX_BOOKINGS_CREATED_PER_DAY', 2);
+/** Thời gian chờ tối thiểu (giây) giữa 2 lần bấm đặt sân từ cùng một phiên/IP */
+define('BOOKING_COOLDOWN_SECONDS', 15);
+/** Số lần để đơn giữ sân bị hủy do hết hạn tối đa trong ngày trước khi bị tạm khóa */
+define('MAX_EXPIRED_HOLDS_PER_DAY', 3);
+/** Thời gian tạm khóa (phút) đối với SĐT có dấu hiệu spam bùng cọc liên tiếp */
+define('SPAM_COOLDOWN_MINUTES', 60);
+/**
+ * Tự động xác nhận tiền cọc sau AUTO_CONFIRM_SECONDS giây (bản demo).
+ * Để CHỐNG SPAM triệt để: Đặt false -> khách bấm 'Tôi đã chuyển khoản', đơn ở trạng thái
+ * 'Chờ chủ sân duyệt'. Chủ sân kiểm tra tiền vào tài khoản rồi bấm 'Duyệt' thì vé mới mở.
+ */
+define('ENABLE_AUTO_CONFIRM_PAYMENT', false);
+/** Danh sách số điện thoại bị chặn đặt sân trực tuyến */
+define('BLACKLISTED_PHONES', []);
+
 date_default_timezone_set('Asia/Ho_Chi_Minh');

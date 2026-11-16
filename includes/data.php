@@ -175,6 +175,17 @@ function map_booking(array $r): array
 /** Câu SELECT đơn kèm slug + địa chỉ sân. */
 const BOOKING_SELECT = 'SELECT b.*, c.slug AS court_slug, c.address AS court_address, c.owner_id AS court_owner_id FROM bookings b LEFT JOIN courts c ON c.id = b.court_id';
 
+/** Tự động hủy các đơn giữ sân quá thời gian chờ cọc trong CSDL để trả lại khung giờ trống ngay lập tức. */
+function auto_cancel_expired_holds(): int
+{
+    $now = date('Y-m-d H:i:s');
+    $stmt = q("UPDATE bookings 
+               SET status = 'cancelled', cancel_reason = 'Hết thời gian giữ sân (hệ thống tự động hủy)' 
+               WHERE source = 'online' AND status = 'pending' AND payment_status = 'unpaid' 
+                 AND hold_expires_at IS NOT NULL AND hold_expires_at <= ?", [$now]);
+    return $stmt->rowCount();
+}
+
 /** Đơn đã duyệt và đã hết giờ chơi thì tự chốt Hoàn thành trong CSDL. */
 function auto_complete_bookings(): void
 {
@@ -187,11 +198,128 @@ function auto_complete_bookings(): void
 }
 
 /**
+ * Kiểm tra và ngăn chặn các hành vi spam đặt sân, giữ chỗ ảo, flood request.
+ * Ném lỗi RuntimeException (fail) nếu phát hiện hành vi spam.
+ */
+function check_booking_spam(string $phone, string $date = '', array $targetSlots = [], string $honeypot = '', int $formLoadedAt = 0): void
+{
+    // 1. Chống Bot qua Honeypot (nếu bot tự điền trường ẩn)
+    if (!empty($honeypot)) {
+        fail('Phát hiện thao tác bất thường từ trình duyệt. Vui lòng tải lại trang và thử lại.');
+    }
+
+    // 2. Chống Bot quét form quá nhanh (< 2 giây từ lúc mở Bước 2)
+    if ($formLoadedAt > 0) {
+        $nowMs = (int) round(microtime(true) * 1000);
+        if ($nowMs - $formLoadedAt < 1800) {
+            fail('Thao tác quá nhanh. Vui lòng kiểm tra lại thông tin trước khi gửi.');
+        }
+    }
+
+    // 3. Chuẩn hóa và kiểm tra số điện thoại
+    $cleanPhone = clean_vietnam_phone($phone);
+    if (!is_valid_vietnam_phone($cleanPhone)) {
+        fail('Số điện thoại không hợp lệ hoặc không thuộc nhà mạng Việt Nam. Vui lòng kiểm tra lại.');
+    }
+
+    // 4. Kiểm tra danh sách đen số điện thoại (nếu có)
+    if (defined('BLACKLISTED_PHONES') && in_array($cleanPhone, BLACKLISTED_PHONES, true)) {
+        fail('Số điện thoại này tạm thời không thể đặt sân trực tuyến. Vui lòng gọi hotline ' . HOTLINE . ' để được hỗ trợ.');
+    }
+
+    // 5. Rate limiting: Giới hạn tần suất đặt sân liên tục từ cùng một phiên/người dùng
+    $lastTime = $_SESSION['last_booking_create_time'] ?? 0;
+    $cooldown = defined('BOOKING_COOLDOWN_SECONDS') ? BOOKING_COOLDOWN_SECONDS : 15;
+    $elapsed = time() - $lastTime;
+    if ($elapsed < $cooldown) {
+        $wait = $cooldown - $elapsed;
+        fail("Bạn vừa gửi yêu cầu đặt sân. Vui lòng đợi $wait giây trước khi tạo đơn tiếp theo.");
+    }
+
+    // 6. Tự động giải phóng các đơn giữ sân quá hạn trước khi đếm
+    auto_cancel_expired_holds();
+
+    // 7. Chống spam giữ chỗ ảo: Giới hạn số đơn đang giữ chỗ (pending) của 1 số điện thoại
+    $maxActive = defined('MAX_ACTIVE_HOLDS_PER_PHONE') ? MAX_ACTIVE_HOLDS_PER_PHONE : 1;
+    $activeHold = q_one("SELECT code, court_name, booking_date, start_slot, payment_status 
+                         FROM bookings 
+                         WHERE REPLACE(customer_phone, ' ', '') = ? 
+                           AND status = 'pending' 
+                           AND (hold_expires_at IS NULL OR hold_expires_at > NOW()) 
+                         LIMIT 1", [$cleanPhone]);
+    if ($activeHold) {
+        if ($activeHold['payment_status'] === 'deposit_claimed') {
+            fail("Số điện thoại $cleanPhone đang có đơn " . $activeHold['code'] . " tại " . $activeHold['court_name'] . " đang chờ chủ sân kiểm tra và xác nhận tiền cọc. Vui lòng chờ chủ sân duyệt hoặc bấm Hủy đơn cũ trước khi đặt thêm.");
+        }
+        fail("Số điện thoại $cleanPhone đang có một lượt giữ sân chưa thanh toán (Đơn " . $activeHold['code'] . " tại " . $activeHold['court_name'] . "). Vui lòng hoàn tất chuyển khoản hoặc bấm Hủy đơn cũ trước khi đặt thêm.");
+    }
+
+    // 8. Chống đặt trùng khung giờ chơi: 1 người không thể chơi ở 2 sân cùng lúc trên cùng 1 ngày
+    if ($date && $targetSlots) {
+        $existingBookings = q_all("SELECT code, court_name, start_slot, slots 
+                                   FROM bookings 
+                                   WHERE REPLACE(customer_phone, ' ', '') = ? 
+                                     AND booking_date = ? 
+                                     AND status IN ('pending', 'confirmed')", [$cleanPhone, $date]);
+        foreach ($existingBookings as $eb) {
+            $bookedSlots = jd($eb['slots']);
+            $overlap = array_values(array_intersect($targetSlots, $bookedSlots));
+            if ($overlap) {
+                fail("Số điện thoại $cleanPhone đã có đơn {$eb['code']} tại {$eb['court_name']} trong khung giờ " . implode(', ', $overlap) . " cùng ngày. Bạn không thể đặt trùng khung giờ ở nhiều sân.");
+            }
+        }
+    }
+
+    // 9. Giới hạn số đơn tối đa trong cùng 1 ngày chơi (mặc định tối đa 1 đơn/ngày chơi)
+    if ($date) {
+        $maxPerDate = defined('MAX_BOOKINGS_PER_DATE_PER_PHONE') ? MAX_BOOKINGS_PER_DATE_PER_PHONE : 1;
+        $countOnDate = (int) q_val("SELECT COUNT(*) FROM bookings 
+                                    WHERE REPLACE(customer_phone, ' ', '') = ? 
+                                      AND booking_date = ? 
+                                      AND status IN ('pending', 'confirmed')", [$cleanPhone, $date]);
+        if ($countOnDate >= $maxPerDate) {
+            fail("Số điện thoại $cleanPhone đã có $countOnDate đơn đặt sân vào ngày $date. Để chống giữ sân ảo, mỗi khách chỉ được đặt tối đa $maxPerDate lượt trong cùng một ngày. Vui lòng liên hệ hotline " . HOTLINE . " nếu bạn cần đặt thêm.");
+        }
+    }
+
+    // 10. Giới hạn số đơn tạo trong vòng 24 giờ qua (mặc định tối đa 2 đơn/ngày)
+    $maxPerDay = defined('MAX_BOOKINGS_CREATED_PER_DAY') ? MAX_BOOKINGS_CREATED_PER_DAY : 2;
+    $countToday = (int) q_val("SELECT COUNT(*) FROM bookings 
+                               WHERE REPLACE(customer_phone, ' ', '') = ? 
+                                 AND DATE(created_at) = CURDATE() 
+                                 AND status IN ('pending', 'confirmed')", [$cleanPhone]);
+    if ($countToday >= $maxPerDay) {
+        fail("Số điện thoại $cleanPhone đã tạo tối đa $maxPerDay đơn trong ngày hôm nay. Để đảm bảo công bằng cho người chơi khác, bạn không thể tạo thêm đơn trực tuyến lúc này. Vui lòng gọi hotline " . HOTLINE . " để được hỗ trợ.");
+    }
+
+    // 11. Chống spam bùng cọc liên tiếp trong ngày:
+    $maxExpired = defined('MAX_EXPIRED_HOLDS_PER_DAY') ? MAX_EXPIRED_HOLDS_PER_DAY : 3;
+    $spamMinutes = defined('SPAM_COOLDOWN_MINUTES') ? SPAM_COOLDOWN_MINUTES : 60;
+    
+    $expiredStat = q_one("SELECT COUNT(*) AS total_expired, MAX(created_at) AS last_created 
+                          FROM bookings 
+                          WHERE REPLACE(customer_phone, ' ', '') = ? 
+                            AND status = 'cancelled' 
+                            AND cancel_reason LIKE '%Hết thời gian giữ sân%' 
+                            AND DATE(created_at) = CURDATE()", [$cleanPhone]);
+    
+    if ($expiredStat && (int) $expiredStat['total_expired'] >= $maxExpired) {
+        $lastExpiredTs = strtotime($expiredStat['last_created']);
+        $diffMinutes = (time() - $lastExpiredTs) / 60;
+        if ($diffMinutes < $spamMinutes) {
+            $remain = (int) ceil($spamMinutes - $diffMinutes);
+            fail("Số điện thoại $cleanPhone đã có {$expiredStat['total_expired']} lượt giữ sân quá hạn không thanh toán trong ngày. Quyền đặt chỗ tạm thời bị khóa trong $remain phút. Vui lòng quay lại sau hoặc gọi hotline " . HOTLINE . ".");
+        }
+    }
+}
+
+/**
  * Khung giờ đã bị chiếm trong một ngày: đơn còn hiệu lực + lượt đang giữ sân chưa hết hạn.
  * Trả về [court_id => [slot, ...]].
  */
 function occupied_slots(string $date, string $excludeId = ''): array
 {
+    auto_cancel_expired_holds();
     $rows = q_all("SELECT id, court_id, slots, source, status, payment_status, hold_expires_at FROM bookings
                    WHERE booking_date = ? AND status IN ('pending','confirmed')", [$date]);
     $map = [];

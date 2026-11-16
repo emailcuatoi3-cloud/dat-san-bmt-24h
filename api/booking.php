@@ -86,6 +86,7 @@ run_api([
     'availability' => function () {
         $date = $_GET['date'] ?? date('Y-m-d');
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) fail('Ngày không hợp lệ.');
+        auto_cancel_expired_holds();
         return ['occupied' => (object) occupied_slots($date), 'blocked' => (object) blocked_slots_map($date)];
     },
 
@@ -133,6 +134,8 @@ run_api([
         $email = in_str('email');
         $note = mb_substr(in_str('note'), 0, 500);
         $mode = in_str('depositMode') === 'full' ? 'full' : 'deposit';
+        $honeypot = in_str('website_check');
+        $loadedAt = in_int('loadedAt');
 
         if (!$court || $court['status'] !== 'active') fail('Vui lòng chọn sân đang hoạt động.');
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || $date < date('Y-m-d')) fail('Ngày chơi không hợp lệ.');
@@ -142,10 +145,14 @@ run_api([
         if (t2m($start) < t2m($court['openTime']) || t2m($start) + $duration > t2m($court['closeTime'])) fail('Khung giờ nằm ngoài giờ mở cửa của sân.');
         $len = mb_strlen($name);
         if ($len < 2 || $len > 50) fail('Họ tên cần từ 2 đến 50 ký tự.');
-        if (!preg_match('/^0\d{9}$/', $phone)) fail('Số điện thoại phải gồm 10 số và bắt đầu bằng 0.');
         if ($email && !filter_var($email, FILTER_VALIDATE_EMAIL)) fail('Email chưa đúng định dạng.');
 
         $slots = slots_in_range($start, $duration);
+
+        // Chống spam đặt sân, giữ chỗ ảo & bot flood request
+        check_booking_spam($phone, $date, $slots, $honeypot, $loadedAt);
+        $cleanPhone = clean_vietnam_phone($phone);
+
         $clash = array_values(array_intersect($slots, taken_slots($court['id'], $date)));
         if ($clash) fail('Khung giờ ' . implode(', ', $clash) . ' vừa có người đặt. Vui lòng chọn khung giờ khác.');
 
@@ -157,7 +164,8 @@ run_api([
         $promoCode = null;
         if ($code = strtoupper(in_str('promoCode'))) {
             $promo = find_active_promo($code);
-            if ($promo && !promo_check($promo, $date, $start, $subtotal)) {
+            // Kiểm tra mã ưu đãi hợp lệ và phải thuộc đúng chủ sân phụ trách
+            if ($promo && (!$promo['ownerId'] || !$court['ownerId'] || $promo['ownerId'] === $court['ownerId']) && !promo_check($promo, $date, $start, $subtotal)) {
                 $discount = promo_discount($promo, $subtotal);
                 $promoCode = $promo['code'];
             }
@@ -175,10 +183,12 @@ run_api([
              payment_method, payment_status, status, hold_expires_at, note)
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [
             $id, $bookingCode, 'online', $court['id'], $court['name'], $court['sport'], $court['area'], $court['image'], $u['id'] ?? null,
-            $name, $phone, $email ?: null, $date, $start, $duration, j($slots), $court['pricePerHour'], $subtotal, $discount, $promoCode,
+            $name, $cleanPhone, $email ?: null, $date, $start, $duration, j($slots), $court['pricePerHour'], $subtotal, $discount, $promoCode,
             $total, $deposit, j(array_map(fn($x) => ['id' => $x, 'label' => EXTRA_SERVICES[$x][0], 'price' => EXTRA_SERVICES[$x][1]], $extraIds)),
             $mode === 'full' ? 'vietqr-full' : 'vietqr-deposit', 'unpaid', 'pending', date('Y-m-d H:i:s', time() + HOLD_MINUTES * 60), $note ?: null,
         ]);
+
+        $_SESSION['last_booking_create_time'] = time();
         return booking_by_code($bookingCode);
     },
 
@@ -206,10 +216,14 @@ run_api([
         return ['autoConfirmSeconds' => AUTO_CONFIRM_SECONDS];
     },
 
-    // Sau thời gian đối soát, hệ thống tự xác nhận cọc và mở vé
+    // Sau thời gian đối soát, hệ thống tự xác nhận cọc và mở vé (nếu cấu hình ENABLE_AUTO_CONFIRM_PAYMENT)
     'auto_confirm' => function () {
         $b = q_one('SELECT * FROM bookings WHERE id = ?', [in_str('id')]);
         if (!$b || $b['payment_status'] === 'unpaid') fail('Không tìm thấy đơn để xác nhận tiền cọc. Vui lòng tải lại trang và thử lại.');
+        if (!defined('ENABLE_AUTO_CONFIRM_PAYMENT') || !ENABLE_AUTO_CONFIRM_PAYMENT) {
+            // Chế độ CHỐNG SPAM: Không tự duyệt đơn ảo! Đơn giữ nguyên trạng thái chờ chủ sân kiểm tra thực tế
+            return booking_by_code($b['code']);
+        }
         if ($b['payment_status'] === 'deposit_claimed') {
             $full = $b['payment_method'] === 'vietqr-full' || (int) $b['deposit_amount'] >= (int) $b['total_price'];
             q("UPDATE bookings SET payment_status = ?, status = 'confirmed' WHERE id = ?", [$full ? 'paid' : 'deposit_paid', $b['id']]);

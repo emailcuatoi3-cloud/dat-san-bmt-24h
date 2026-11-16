@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe - Admin</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .admin-wrap { display: flex; min-height: 100vh; }
+    .admin-side { width: 240px; padding: 16px; border-right: 1px solid #e2e8f0; flex-shrink: 0; }
+    .admin-body { flex: 1; padding: 24px; }
+    @media (max-width: 768px) { .admin-wrap { flex-direction: column; } .admin-side { width: 100%; } }
+  </style>
+</head>
+<body>
+  <div class="admin-wrap">
+    <!-- PARTIAL: admin-sidebar -->
+    <aside class="admin-side">
+      <div class="wf-box wf-box-dark" style="height: 100%; min-height: 120px;">SIDEBAR MENU ADMIN</div>
+    </aside>
+    <!-- END PARTIAL: admin-sidebar -->
+
+    <main class="admin-body">
+      <div class="wf-box" style="height: 60px; margin-bottom: 20px;">TOPBAR TỔNG QUAN HỆ THỐNG</div>
+      <div class="grid-4" style="margin-bottom: 20px;">
+        <div class="wf-box" style="height: 100px;">KPI 1</div>
+        <div class="wf-box" style="height: 100px;">KPI 2</div>
+        <div class="wf-box" style="height: 100px;">KPI 3</div>
+        <div class="wf-box" style="height: 100px;">KPI 4</div>
+      </div>
+      <div class="grid-2" style="margin-bottom: 20px;">
+        <div class="wf-box" style="height: 220px;">BIỂU ĐỒ DOANH THU</div>
+        <div class="wf-box" style="height: 220px;">THỐNG KÊ TỶ LỆ ĐẶT SÂN</div>
+      </div>
+      <div class="wf-box" style="height: 260px;">BẢNG ĐƠN ĐẶT SÂN GẦN ĐÂY</div>
+    </main>
+  </div>
+</body>
+</html>
