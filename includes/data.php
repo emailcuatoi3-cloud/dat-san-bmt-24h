@@ -11,7 +11,7 @@ function sport_label(string $sport): string
 // ======================= SÂN =======================
 
 function map_court(array $r): array
-{
+{ 
     $images = jd($r['images']);
     return [
         'id' => $r['id'],

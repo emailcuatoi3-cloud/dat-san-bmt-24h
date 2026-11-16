@@ -21,7 +21,7 @@ function require_sudo(): void
 
 function map_user(array $r): array
 {
-    return [
+    return [ 
         'id' => (int) $r['id'], 'email' => $r['email'], 'fullName' => $r['full_name'], 'phone' => $r['phone'], 'role' => $r['role'],
         'businessName' => $r['business_name'], 'status' => $r['status'], 'createdAt' => iso($r['created_at']),
         'adminRole' => $r['role_key'] ?? null,

@@ -138,7 +138,7 @@ export function renderCustomers() {
     <td class="px-4 py-3"><div class="flex items-center gap-3"><span class="flex h-9 w-9 items-center justify-center rounded-full bg-primary-50 text-xs font-bold text-primary-700">${esc(c.name.split(' ').slice(-1)[0].slice(0, 2).toUpperCase())}</span><div><p class="font-semibold">${esc(c.name)} ${c.visits >= 3 ? '<i class="ri-vip-crown-fill text-accent-500"></i>' : ''}</p><p class="text-xs text-foreground-500">${esc(c.phone || '—')}</p></div></div></td>
     <td class="px-4 py-3 text-right font-semibold">${c.visits}</td><td class="px-4 py-3 text-right font-semibold text-primary-700">${money(c.spend)}</td><td class="px-4 py-3 text-right ${c.cancelled ? 'text-accent-700' : ''}">${c.cancelled}</td><td class="px-4 py-3">${dateText(c.last)}</td>
     <td class="px-4 py-3"><div class="flex justify-end gap-1.5">${c.phone ? `<a href="tel:${esc(phoneKey(c.phone))}" data-stop class="${BTN_SM}"><i class="ri-phone-line"></i>Gọi</a><a href="https://zalo.me/${esc(phoneKey(c.phone))}" target="_blank" data-stop class="${BTN_SM}">Zalo</a>` : ''}</div></td></tr>`).join(''), 760)
-    : `<div class="p-4">${emptyState('ri-group-line', 'Không có khách phù hợp')}</div>`}</div>`;
+      : `<div class="p-4">${emptyState('ri-group-line', 'Không có khách phù hợp')}</div>`}</div>`;
 
   const root = main();
   on(root, 'click', '[data-cf]', (e, el) => { cf.filter = el.dataset.cf; renderCustomers(); });
@@ -222,7 +222,7 @@ export async function renderServices() {
     <td class="px-4 py-3"><div class="flex items-center gap-1.5"><button type="button" data-stock="${s.id}" data-d="-1" class="flex h-7 w-7 items-center justify-center rounded border border-background-300">−</button><span class="w-10 text-center font-semibold ${s.stock <= LOW_STOCK ? 'text-accent-700' : ''}">${s.stock}</span><button type="button" data-stock="${s.id}" data-d="1" class="flex h-7 w-7 items-center justify-center rounded border border-background-300">+</button><button type="button" data-stock="${s.id}" data-d="10" class="rounded border border-background-300 px-1.5 py-1 text-[11px]">+10</button></div></td>
     <td class="px-4 py-3"><button type="button" data-toggle="${s.id}" class="${s.active ? 'bg-primary-50 text-primary-700' : 'bg-background-100 text-foreground-600'} rounded-full px-2.5 py-1 text-xs font-semibold">${s.active ? 'Đang bán' : 'Tạm ngưng'}</button></td>
     <td class="px-4 py-3"><div class="flex justify-end gap-1.5"><button type="button" data-edit="${s.id}" class="${BTN_SM}"><i class="ri-edit-line"></i>Sửa</button><button type="button" data-del="${s.id}" class="${BTN_SM_DANGER}"><i class="ri-delete-bin-line"></i></button></div></td></tr>`).join(''), 760)
-    : `<div class="p-4">${emptyState('ri-cup-line', 'Chưa có dịch vụ', 'Thêm nước uống, dụng cụ cho thuê để bán kèm khi khách đến sân.')}</div>`}</div>`;
+      : `<div class="p-4">${emptyState('ri-cup-line', 'Chưa có dịch vụ', 'Thêm nước uống, dụng cụ cho thuê để bán kèm khi khách đến sân.')}</div>`}</div>`;
 
   const root = main();
   const find = (id) => sv.list.find((x) => x.id === id);
@@ -306,14 +306,16 @@ export async function renderPromotions() {
     ${statCard('ri-money-dollar-circle-line', 'Doanh thu từ mã', money(valid.reduce((s, r) => s + r.paidTotal, 0)), '', 'neutral')}
   </div>
   <div class="mt-5 mb-3 flex flex-wrap gap-2">${[['all', 'Tất cả'], ['active', 'Đang chạy'], ['upcoming', 'Sắp diễn ra'], ['paused', 'Tạm dừng'], ['expired', 'Hết hạn']].map(([k, l]) => `<button type="button" data-pf="${k}" class="${chip(pm.filter === k)}">${l}</button>`).join('')}</div>
-  ${list.length ? `<div class="grid grid-cols-1 gap-4 md:grid-cols-2">${list.map((p) => { const st = promotionState(p, TODAY); const s = stat(p.code); return `
+  ${list.length ? `<div class="grid grid-cols-1 gap-4 md:grid-cols-2">${list.map((p) => {
+    const st = promotionState(p, TODAY); const s = stat(p.code); return `
     <article class="${CARD} p-4">
       <div class="flex items-start justify-between gap-3"><div><p class="font-mono text-lg font-extrabold text-primary-700">${esc(p.code)}</p><p class="text-sm font-semibold text-foreground-950">${esc(p.title)}</p></div><span class="rounded-full px-2.5 py-1 text-[11px] font-semibold ${STATE[st][1]}">${STATE[st][0]}</span></div>
       <p class="mt-2 text-sm font-semibold text-accent-700">${esc(describeDiscount(p))}${p.minOrder ? ` · đơn từ ${money(p.minOrder)}` : ''}</p>
       <p class="mt-1 text-xs text-foreground-500">${esc(describeConditions(p))}</p>
       <div class="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div class="rounded-md bg-background-100 py-2"><p class="font-bold">${s.uses}${p.usageLimit ? `/${p.usageLimit}` : ''}</p>Lượt dùng</div><div class="rounded-md bg-background-100 py-2"><p class="font-bold">${money(s.discount)}</p>Đã giảm</div><div class="rounded-md bg-background-100 py-2"><p class="font-bold">${money(s.revenue)}</p>Doanh thu</div></div>
       <div class="mt-3 flex flex-wrap gap-1.5"><button type="button" data-edit="${p.id}" class="${BTN_SM}"><i class="ri-edit-line"></i>Sửa</button><button type="button" data-pause="${p.id}" class="${BTN_SM}">${p.status === 'paused' ? '<i class="ri-play-line"></i>Chạy lại' : '<i class="ri-pause-line"></i>Tạm dừng'}</button><button type="button" data-del="${p.id}" class="${BTN_SM_DANGER}"><i class="ri-delete-bin-line"></i>Xóa</button></div>
-    </article>`; }).join('')}</div>` : emptyState('ri-coupon-3-line', 'Chưa có mã khuyến mãi', 'Tạo mã giảm giá để thu hút khách vào khung giờ vắng.')}
+    </article>`;
+  }).join('')}</div>` : emptyState('ri-coupon-3-line', 'Chưa có mã khuyến mãi', 'Tạo mã giảm giá để thu hút khách vào khung giờ vắng.')}
   <section class="${CARD} mt-6 overflow-hidden">${sectionTitle('Lượt dùng mã gần đây')}${redemptions.length ? table(['Mã', 'Đơn', 'Khách', 'Sân · ngày', '>Đã giảm', '>Khách trả', 'Trạng thái'], redemptions.slice(0, 20).map((r) => `<tr><td class="px-4 py-3 font-mono text-xs font-bold text-primary-700">${esc(r.code)}</td><td class="px-4 py-3 font-mono text-xs">${esc(r.bookingCode)}</td><td class="px-4 py-3">${esc(r.customerName)}</td><td class="px-4 py-3 text-xs">${esc(r.courtName)}<br>${dateText(r.bookingDate)}</td><td class="px-4 py-3 text-right text-accent-700">-${money(r.discount)}</td><td class="px-4 py-3 text-right font-semibold">${money(r.paidTotal)}</td><td class="px-4 py-3">${statusBadge(r.status)}</td></tr>`).join(''), 820) : '<p class="px-4 py-5 text-sm text-foreground-500">Chưa có khách nào dùng mã của bạn.</p>'}</section>`;
 
   const root = main();
@@ -378,11 +380,10 @@ export async function renderDeposits() {
   </div>
   <div class="mt-5 mb-3 flex flex-wrap gap-2">${Object.entries(groups).map(([k, [l, li]]) => `<button type="button" data-dt="${k}" class="${chip(dp.tab === k)}">${l}<span class="opacity-75">${li ? li.length : dp.refunds.length}</span></button>`).join('')}</div>
   <p class="mb-3 text-xs text-foreground-500">${groups[dp.tab][2]}</p>
-  <div class="${CARD} overflow-hidden">${
-    dp.tab === 'done'
+  <div class="${CARD} overflow-hidden">${dp.tab === 'done'
       ? dp.refunds.length ? table(['Mã đơn', 'Khách · sân', '>Số tiền', 'Hình thức', 'Ghi chú', 'Ngày lập', ''], dp.refunds.map((r) => `<tr><td class="px-4 py-3 font-mono text-xs font-bold">${esc(r.bookingCode)}</td><td class="px-4 py-3 text-xs">${esc(r.customerName)}<br>${esc(r.courtName)}</td><td class="px-4 py-3 text-right font-semibold">${money(r.amount)}</td><td class="px-4 py-3 text-xs">${{ cash: 'Tiền mặt', transfer: 'Chuyển khoản', vietqr: 'VietQR' }[r.method]}</td><td class="px-4 py-3 text-xs">${esc(r.note)}</td><td class="px-4 py-3 text-xs">${formatDateTime(r.createdAt)}</td><td class="px-4 py-3 text-right"><button type="button" data-unrefund="${r.id}" class="${BTN_SM_DANGER}">Gỡ</button></td></tr>`).join(''), 820) : `<div class="p-4">${emptyState('ri-refund-2-line', 'Chưa có phiếu hoàn cọc')}</div>`
       : groups[dp.tab][1].length ? table(['Đơn · khách', 'Sân · giờ', '>Tổng', '>Cọc', '>Còn lại', '>Thao tác'], rows(groups[dp.tab][1]), 860) : `<div class="p-4">${emptyState('ri-safe-2-line', 'Không có đơn nào trong mục này')}</div>`
-  }</div>`;
+    }</div>`;
 
   const root = main();
   const find = (id) => S.bookings.find((b) => b.id === id);

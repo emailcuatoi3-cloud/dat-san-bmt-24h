@@ -16,7 +16,7 @@ const EXTRA_SERVICES = [
     'bib' => ['Thuê áo bib (bộ 10 áo)', 40000],
     'vot' => ['Thuê vợt cầu lông', 20000],
     'cau' => ['Ống cầu lông (3 quả)', 45000],
-];
+]; 
 
 function t2m(string $t): int
 {

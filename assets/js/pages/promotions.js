@@ -42,11 +42,10 @@ function card(p) {
       <p class="mt-2.5 rounded-md bg-background-50 px-2.5 py-2 text-[11px] leading-relaxed text-foreground-500">${esc(describeConditions(p))}</p>
       <div class="mt-auto flex items-center gap-2 pt-4">
         <button type="button" data-copy-code="${esc(p.code)}" class="inline-flex flex-1 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-background-300 bg-white px-3 py-2.5 text-xs font-semibold text-foreground-800 transition-colors hover:border-primary-400 hover:text-primary-700"><i class="ri-file-copy-line" aria-hidden="true"></i>Lấy mã</button>
-        ${
-          state === 'active'
-            ? `<a href="${url(`/dat-san?promo=${encodeURIComponent(p.code)}`)}" class="inline-flex flex-1 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-primary-500 px-3 py-2.5 text-xs font-bold text-white transition-colors hover:bg-primary-600">Đặt sân ngay<i class="ri-arrow-right-line" aria-hidden="true"></i></a>`
-            : `<span class="inline-flex flex-1 cursor-not-allowed items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-background-200 px-3 py-2.5 text-xs font-bold text-foreground-500">${state === 'upcoming' ? 'Chưa tới ngày' : 'Tạm dừng'}</span>`
-        }
+        ${state === 'active'
+      ? `<a href="${url(`/dat-san?promo=${encodeURIComponent(p.code)}`)}" class="inline-flex flex-1 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-primary-500 px-3 py-2.5 text-xs font-bold text-white transition-colors hover:bg-primary-600">Đặt sân ngay<i class="ri-arrow-right-line" aria-hidden="true"></i></a>`
+      : `<span class="inline-flex flex-1 cursor-not-allowed items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-background-200 px-3 py-2.5 text-xs font-bold text-foreground-500">${state === 'upcoming' ? 'Chưa tới ngày' : 'Tạm dừng'}</span>`
+    }
       </div>
     </div>
   </article>`;

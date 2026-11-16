@@ -19,7 +19,7 @@ function my_court(string $id): array
     global $OWNER;
     $row = q_one('SELECT * FROM courts WHERE id = ? AND owner_id = ?', [$id, $OWNER['id']]);
     if (!$row) fail('Không tìm thấy sân trong danh sách bạn quản lý.');
-    return $row;
+    return $row; 
 }
 
 function my_booking(string $id): array
