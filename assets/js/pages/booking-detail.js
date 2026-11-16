@@ -1,50 +1,114 @@
 /** Chi tiết đơn: vé QR, tóm tắt, nhắc lịch (Google Calendar / .ics), link chia sẻ. */
-import { $, PAGE, esc, openModal, statusBadge, formatVnd } from '../core/ui.js';
+import { $, PAGE, esc, openModal, statusBadge, formatVnd, api } from '../core/ui.js';
 import { ticketData, ticketQrUrl, downloadTicket } from '../core/ticket.js';
 import { formatLongDate, formatRelativeDay, formatShortDate, slotEndTime } from '../lib/format.js';
 import { buildBookingShareUrl, buildGoogleCalendarUrl, downloadBookingIcs, formatTimeUntil, getSessionWindow } from '../lib/bookingCalendar.js';
 import { cancelPolicyShort, formatCancelDeadline, isBeforeCancelCutoff } from '../lib/cancelPolicy.js';
 import { copyTicketText, shareTicketNative } from '../lib/ticketShare.js';
-import { HOTLINE } from '../lib/payment.js';
+import { HOTLINE, bankAccount, buildVietQrUrl } from '../lib/payment.js';
+import { formatCountdown, remainingHoldSeconds } from '../lib/booking.js';
 
 const b = PAGE.booking;
 if (b) {
   const endTime = slotEndTime(b.slots[b.slots.length - 1] || b.slots[0] || '18:00');
-  const confirmed = ['confirmed', 'completed'].includes(b.status) || ['paid', 'deposit_paid'].includes(b.paymentStatus);
-  const isActive = b.status === 'pending' || b.status === 'confirmed';
+  const confirmed = ['confirmed', 'completed'].includes(b.status) && b.paymentStatus !== 'unpaid';
+  const isPending = b.status === 'pending';
+  const isApprovedWaitingDeposit = b.approvedAt && b.paymentStatus === 'unpaid' && b.status !== 'cancelled';
+  const isWaitingApproval = isPending && !b.approvedAt;
+  const isActive = isPending || confirmed || isApprovedWaitingDeposit;
+  const secondsLeft = isApprovedWaitingDeposit ? remainingHoldSeconds(b.holdExpiresAt) : 0;
+  const expired = isApprovedWaitingDeposit && secondsLeft <= 0;
   const data = ticketData(b);
   const note = (ok, text) =>
     `<p class="mt-2.5 flex items-start gap-1.5 rounded-md px-3 py-2.5 text-[11px] leading-relaxed ${ok ? 'border border-primary-300 bg-primary-50/70 text-foreground-800' : 'border border-accent-300 bg-accent-50 text-accent-900'}"><i class="mt-0.5 ${ok ? 'ri-checkbox-circle-line text-primary-600' : 'ri-error-warning-line text-accent-700'}" aria-hidden="true"></i><span>${esc(text)}</span></p>`;
   const chip = (icon, text) => `<span class="inline-flex items-center gap-1.5 rounded-md border border-background-200 bg-background-50 px-3 py-1.5 text-xs text-foreground-700"><i class="${icon}" aria-hidden="true"></i>${esc(text)}</span>`;
 
-  $('#hero-chips').innerHTML = `${statusBadge(b.status)}${chip('ri-calendar-line text-primary-400', formatLongDate(b.date))}${chip('ri-time-line text-primary-400', `${b.slots[0]} - ${endTime}`)}${chip('ri-alarm-line text-accent-400', formatRelativeDay(b.date))}`;
+  const deposit = b.paymentStatus === 'paid' ? b.totalPrice : (b.depositAmount || Math.round(b.totalPrice * 0.3));
+  const remainder = Math.max(0, b.totalPrice - deposit);
 
-  // ---- Vé QR ----
+  const statusBadgeHtml = isApprovedWaitingDeposit
+    ? `<span class="inline-flex items-center gap-1.5 rounded-full border border-accent-300 bg-accent-50 px-2.5 py-1 text-xs font-bold text-accent-900 animate-pulse"><span class="h-1.5 w-1.5 rounded-full bg-accent-500"></span>Chờ chuyển cọc (<span data-countdown="${esc(b.holdExpiresAt || '')}">${formatCountdown(secondsLeft)}</span>)</span>`
+    : statusBadge(b.status);
+
+  $('#hero-chips').innerHTML = `${statusBadgeHtml}${chip('ri-calendar-line text-primary-400', formatLongDate(b.date))}${chip('ri-time-line text-primary-400', `${b.slots[0]} - ${endTime}`)}${chip('ri-alarm-line text-accent-400', formatRelativeDay(b.date))}`;
+
+  // ---- Vé QR hoặc Khối thanh toán cọc ----
   $('#ticket-card').innerHTML = `<section class="rounded-lg border border-primary-200 bg-white p-5 md:p-6">
     <div class="flex flex-wrap items-start justify-between gap-3">
-      <div class="min-w-0"><h2 class="flex items-center gap-2 font-heading text-lg font-bold text-foreground-950"><i class="ri-qr-code-line text-primary-600" aria-hidden="true"></i>Vé QR của bạn</h2><p class="mt-1 text-sm leading-relaxed text-foreground-600">Mở vé ngay khi tới sân, không cần tìm lại tin nhắn xác nhận.</p></div>
-      <span class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold ${confirmed ? 'border-primary-200 bg-primary-50 text-primary-700' : 'border-accent-200 bg-accent-50 text-accent-900'}"><i class="${confirmed ? 'ri-checkbox-circle-fill' : 'ri-time-fill'}" aria-hidden="true"></i>${confirmed ? 'Vé còn hiệu lực' : 'Chờ chủ sân xác nhận'}</span>
-    </div>
-    <div class="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start">
-      ${
-        confirmed
-          ? `<button type="button" data-open-qr aria-label="Phóng to mã QR" class="mx-auto flex h-[190px] w-[190px] shrink-0 cursor-pointer items-center justify-center rounded-lg border border-background-200 bg-white p-2.5 transition-transform hover:scale-[1.02] sm:mx-0"><img src="${ticketQrUrl(b)}" alt="Mã QR vé đặt sân ${esc(b.code)}" class="h-full w-full object-contain"></button>`
-          : `<div class="mx-auto flex h-[190px] w-[190px] shrink-0 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-accent-300 bg-background-50 px-4 text-center sm:mx-0"><i class="ri-qr-scan-2-line text-3xl text-accent-500" aria-hidden="true"></i><p class="text-[11px] leading-relaxed text-foreground-600">Mã QR mở ngay khi chủ sân xác nhận đơn và khoản cọc</p></div>`
-      }
-      <div class="min-w-0 flex-1">
-        <p class="text-xs font-medium text-foreground-500">Mã vé điện tử</p>
-        <p class="mt-0.5 font-heading text-xl font-extrabold tracking-wide text-primary-700">${esc(b.code)}</p>
-        <dl class="mt-3 space-y-2 text-sm"><div><dt class="text-xs text-foreground-500">Sân</dt><dd class="font-semibold text-foreground-950">${esc(b.courtName)}</dd></div><div><dt class="text-xs text-foreground-500">Thời gian</dt><dd class="font-semibold text-foreground-950">${b.slots[0]} - ${endTime} · ${formatLongDate(b.date)}</dd></div></dl>
-        <div class="mt-3 flex flex-wrap gap-2">${
-          confirmed
-            ? `<button type="button" data-open-qr class="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md bg-primary-500 px-3.5 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-primary-600"><i class="ri-qr-scan-2-line text-sm" aria-hidden="true"></i>Mở vé QR nhanh</button>
-               <button type="button" data-download class="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border border-background-300 px-3.5 py-2.5 text-xs font-semibold text-foreground-800 transition-colors hover:border-primary-400 hover:text-primary-700"><i class="ri-download-2-line text-sm" aria-hidden="true"></i>Tải ảnh vé</button>
-               <button type="button" onclick="window.print()" class="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border border-background-300 px-3.5 py-2.5 text-xs font-semibold text-foreground-800 transition-colors hover:border-primary-400 hover:text-primary-700"><i class="ri-printer-line text-sm" aria-hidden="true"></i>In vé</button>`
-            : `<span class="inline-flex items-center gap-1.5 rounded-md bg-accent-50 px-3 py-2.5 text-[11px] leading-relaxed text-accent-900"><i class="ri-shield-check-line text-sm" aria-hidden="true"></i>Đơn đang chờ chủ sân đối soát cọc. Vé QR và ảnh vé sẽ mở sau khi có xác nhận.</span>`
-        }</div>
+      <div class="min-w-0">
+        <h2 class="flex items-center gap-2 font-heading text-lg font-bold text-foreground-950">
+          <i class="${confirmed ? 'ri-qr-code-line text-primary-600' : isApprovedWaitingDeposit ? 'ri-bank-card-line text-accent-600' : 'ri-time-line text-accent-600'}" aria-hidden="true"></i>
+          ${confirmed ? 'Vé QR của bạn' : isApprovedWaitingDeposit ? 'Chủ sân đã duyệt — Chuyển khoản cọc' : 'Yêu cầu đặt sân'}
+        </h2>
+        <p class="mt-1 text-sm leading-relaxed text-foreground-600">
+          ${confirmed
+            ? 'Mở vé ngay khi tới sân để check-in nhận sân.'
+            : isApprovedWaitingDeposit
+              ? 'Vui lòng chuyển cọc trong vòng <b>5 phút</b> để hoàn tất giữ sân. Quá 5 phút chưa cọc, hệ thống tự động hủy sân.'
+              : 'Yêu cầu đặt sân đang chờ chủ sân duyệt. Khi chủ sân duyệt, hệ thống sẽ mở mã VietQR để bạn chuyển cọc.'}
+        </p>
       </div>
+      <span class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold ${confirmed ? 'border-primary-200 bg-primary-50 text-primary-700' : isApprovedWaitingDeposit ? 'border-accent-300 bg-accent-50 text-accent-900 animate-pulse' : isWaitingApproval ? 'border-accent-300 bg-accent-50 text-accent-900' : 'border-background-300 bg-background-100 text-foreground-600'}">
+        <i class="${confirmed ? 'ri-checkbox-circle-fill' : isApprovedWaitingDeposit ? 'ri-time-fill' : isWaitingApproval ? 'ri-time-line animate-pulse' : 'ri-close-circle-fill'}" aria-hidden="true"></i>
+        ${confirmed ? 'Chủ sân đã duyệt – Sân đã giữ' : isApprovedWaitingDeposit ? (expired ? 'Đã hết giờ chuyển cọc' : `Chờ cọc (<span data-countdown="${esc(b.holdExpiresAt || '')}">${formatCountdown(secondsLeft)}</span>)`) : isWaitingApproval ? 'Chờ chủ sân duyệt đơn' : 'Đơn đã hủy'}
+      </span>
     </div>
-    <p class="mt-4 flex items-start gap-1.5 rounded-md bg-accent-50 px-3 py-2.5 text-[11px] leading-relaxed text-accent-900"><i class="ri-information-line mt-0.5 text-sm" aria-hidden="true"></i><span>Có mặt trước giờ chơi 10 phút. Vé QR là căn cứ check-in tại sân, chỉ chia sẻ với người thật sự cùng đội.</span></p>
+
+    ${isApprovedWaitingDeposit ? `
+      <div class="mt-4 rounded-xl border border-accent-300 bg-accent-50/70 p-4">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 mb-3 border-b border-accent-200">
+          <div class="flex items-center gap-2">
+            <i class="ri-alarm-warning-line text-lg text-accent-700 animate-pulse shrink-0"></i>
+            <span class="text-xs font-bold text-accent-950">Thời gian giữ sân để bạn chuyển cọc:</span>
+          </div>
+          <span class="inline-flex items-center gap-1.5 font-mono text-sm font-extrabold text-accent-700 bg-white px-3 py-1 rounded-md border border-accent-300 shadow-sm">
+            <i class="ri-time-line text-xs"></i><span data-countdown="${esc(b.holdExpiresAt || '')}">${formatCountdown(secondsLeft)}</span>
+          </span>
+        </div>
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-center">
+          <div class="mx-auto flex h-[190px] w-[190px] shrink-0 items-center justify-center rounded-lg border border-background-200 bg-white p-2">
+            <img src="${buildVietQrUrl(deposit, b.code)}" alt="VietQR cọc ${formatVnd(deposit)}" class="h-full w-full object-contain ${expired ? 'opacity-40' : ''}">
+          </div>
+          <div class="min-w-0 flex-1 space-y-2 text-xs">
+            <div class="flex justify-between"><span class="text-foreground-500">Ngân hàng</span><span class="font-semibold text-foreground-900">${esc(bankAccount.bankName)}</span></div>
+            <div class="flex justify-between"><span class="text-foreground-500">Số tài khoản</span><span class="font-mono font-bold text-foreground-900">${esc(bankAccount.accountNumber)}</span></div>
+            <div class="flex justify-between"><span class="text-foreground-500">Chủ tài khoản</span><span class="font-semibold text-foreground-900">${esc(bankAccount.accountName)}</span></div>
+            <div class="flex justify-between"><span class="text-foreground-500">Số tiền cọc</span><span class="font-heading font-black text-primary-600 text-sm">${formatVnd(deposit)}</span></div>
+            <div class="flex justify-between"><span class="text-foreground-500">Nội dung CK</span><span class="font-mono font-bold text-primary-700">${esc(b.code)}</span></div>
+            <div class="mt-3 flex gap-2 pt-2">
+              <button type="button" data-claim-deposit ${expired ? 'disabled' : ''} class="inline-flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-accent-500 px-4 py-2.5 text-xs font-bold text-background-950 transition-colors hover:bg-accent-600 disabled:opacity-50">
+                <i class="ri-check-double-line"></i>Tôi đã chuyển khoản
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    ` : `
+      <div class="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start">
+        ${
+          confirmed
+            ? `<button type="button" data-open-qr aria-label="Phóng to mã QR" class="mx-auto flex h-[190px] w-[190px] shrink-0 cursor-pointer items-center justify-center rounded-lg border border-background-200 bg-white p-2.5 transition-transform hover:scale-[1.02] sm:mx-0"><img src="${ticketQrUrl(b)}" alt="Mã QR vé đặt sân ${esc(b.code)}" class="h-full w-full object-contain"></button>`
+            : `<div class="mx-auto flex h-[190px] w-[190px] shrink-0 flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-accent-300 bg-accent-50/50 p-4 text-center sm:mx-0">
+                <i class="ri-time-line text-3xl text-accent-600 animate-pulse" aria-hidden="true"></i>
+                <p class="text-xs font-bold text-accent-900">Đang chờ chủ sân duyệt</p>
+                <p class="text-[11px] leading-relaxed text-foreground-600">Khi chủ sân duyệt, hệ thống sẽ mở mã VietQR để bạn chuyển cọc trong 5 phút</p>
+               </div>`
+        }
+        <div class="min-w-0 flex-1">
+          <p class="text-xs font-medium text-foreground-500">Mã vé điện tử</p>
+          <p class="mt-0.5 font-heading text-xl font-extrabold tracking-wide text-primary-700">${esc(b.code)}</p>
+          <dl class="mt-3 space-y-2 text-sm"><div><dt class="text-xs text-foreground-500">Sân</dt><dd class="font-semibold text-foreground-950">${esc(b.courtName)}</dd></div><div><dt class="text-xs text-foreground-500">Thời gian</dt><dd class="font-semibold text-foreground-950">${b.slots[0]} - ${endTime} · ${formatLongDate(b.date)}</dd></div></dl>
+          <div class="mt-3 flex flex-wrap gap-2">${
+            confirmed
+              ? `<button type="button" data-open-qr class="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md bg-primary-500 px-3.5 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-primary-600"><i class="ri-qr-scan-2-line text-sm" aria-hidden="true"></i>Mở vé QR nhanh</button>
+                 <button type="button" data-download class="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border border-background-300 px-3.5 py-2.5 text-xs font-semibold text-foreground-800 transition-colors hover:border-primary-400 hover:text-primary-700"><i class="ri-download-2-line text-sm" aria-hidden="true"></i>Tải ảnh vé</button>
+                 <button type="button" onclick="window.print()" class="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border border-background-300 px-3.5 py-2.5 text-xs font-semibold text-foreground-800 transition-colors hover:border-primary-400 hover:text-primary-700"><i class="ri-printer-line text-sm" aria-hidden="true"></i>In vé</button>`
+              : `<span class="inline-flex items-center gap-1.5 rounded-md bg-accent-50 px-3 py-2 text-xs leading-relaxed text-accent-900 border border-accent-200"><i class="ri-time-line text-sm text-accent-700" aria-hidden="true"></i>Yêu cầu đang chờ chủ sân kiểm tra và duyệt lịch. Vé check-in sẽ mở sau khi hoàn tất cọc.</span>`
+          }</div>
+        </div>
+      </div>
+    `}
+    <p class="mt-4 flex items-start gap-1.5 rounded-md bg-background-50 px-3 py-2.5 text-[11px] leading-relaxed text-foreground-600"><i class="ri-information-line mt-0.5 text-sm" aria-hidden="true"></i><span>Có mặt trước giờ chơi 10 phút. Vé QR là căn cứ check-in tại sân, chỉ chia sẻ với người cùng đội.</span></p>
     <div data-ticket-note></div>
   </section>`;
 
@@ -52,10 +116,17 @@ if (b) {
   const steps = [
     { title: 'Yêu cầu đặt sân đã gửi', note: `Tạo ngày ${formatShortDate((b.createdAt || b.date).slice(0, 10))}`, done: true },
     {
-      title: 'Chủ sân xác nhận',
-      note: b.status === 'cancelled' ? 'Đơn đã hủy trước khi xác nhận' : b.status === 'pending' ? 'Đang chờ chủ sân phản hồi qua điện thoại' : 'Chủ sân đã xác nhận lịch chơi',
-      done: ['confirmed', 'completed'].includes(b.status),
-      pending: b.status === 'pending',
+      title: 'Chủ sân duyệt đơn',
+      note: b.status === 'cancelled' ? (b.rejectReason ? `Chủ sân từ chối: ${b.rejectReason}` : 'Đơn đã hủy') : b.approvedAt ? 'Chủ sân đã duyệt lịch đặt sân' : 'Chủ sân đang kiểm tra và duyệt lịch',
+      done: Boolean(b.approvedAt || confirmed),
+      pending: isWaitingApproval,
+    },
+    {
+      title: 'Thanh toán cọc giữ sân (5 phút)',
+      note: confirmed ? 'Đã nhận tiền cọc thành công' : isApprovedWaitingDeposit ? (expired ? 'Đã hết thời gian 5 phút chuyển cọc' : 'Vui lòng chuyển cọc trong vòng 5 phút') : 'Mở khi chủ sân duyệt đơn',
+      done: confirmed,
+      pending: isApprovedWaitingDeposit,
+      danger: expired && isPending,
     },
     {
       title: b.status === 'cancelled' ? 'Đơn đã hủy' : 'Hoàn thành lượt chơi',
@@ -69,7 +140,7 @@ if (b) {
     <div class="flex flex-col sm:flex-row">
       <div class="h-[170px] w-full shrink-0 overflow-hidden bg-background-100 sm:h-auto sm:w-[240px]"><img src="${esc(b.image)}" alt="${esc(b.courtName)}" class="h-full w-full object-cover object-top"></div>
       <div class="min-w-0 flex-1 p-5">
-        <div class="flex flex-wrap items-center gap-2"><h2 class="font-heading text-lg font-bold text-foreground-950">${esc(b.courtName)}</h2>${statusBadge(b.status)}</div>
+        <div class="flex flex-wrap items-center gap-2"><h2 class="font-heading text-lg font-bold text-foreground-950">${esc(b.courtName)}</h2>${statusBadgeHtml}</div>
         <p class="mt-1 flex items-start gap-1.5 text-xs text-foreground-500"><i class="ri-map-pin-line mt-0.5" aria-hidden="true"></i><span>${esc(b.address)}</span></p>
         <dl class="mt-4 grid grid-cols-1 gap-x-5 gap-y-3 text-sm sm:grid-cols-2">
           ${dd('Mã đơn', esc(b.code), 'font-mono text-xs font-semibold text-foreground-900')}${dd('Loại sân', esc(b.sportLabel))}
@@ -80,11 +151,20 @@ if (b) {
     </div>
     <div class="grid grid-cols-1 gap-3 border-t border-background-200 p-5 sm:grid-cols-2">
       <div class="rounded-md border border-background-200 bg-background-50 p-3.5"><p class="text-xs font-bold uppercase tracking-wide text-foreground-500">Thông tin liên hệ</p><p class="mt-2 text-sm font-semibold text-foreground-950">${esc(b.customerName || 'Khách hàng')}</p>${b.customerPhone ? `<p class="mt-0.5 text-xs text-foreground-600">${esc(b.customerPhone)}</p>` : ''}${b.customerEmail ? `<p class="text-xs text-foreground-600">${esc(b.customerEmail)}</p>` : ''}${b.note ? `<p class="mt-2 border-t border-background-200 pt-2 text-xs leading-relaxed text-foreground-600"><span class="font-semibold text-foreground-800">Ghi chú: </span>${esc(b.note)}</p>` : ''}</div>
-      <div class="rounded-md border border-background-200 bg-background-50 p-3.5"><p class="text-xs font-bold uppercase tracking-wide text-foreground-500">Thanh toán</p><div class="mt-2 space-y-1.5 text-sm">
+      <div class="rounded-md border border-background-200 bg-background-50 p-3.5"><p class="text-xs font-bold uppercase tracking-wide text-foreground-500">Thanh toán</p><div class="mt-2 space-y-2 text-sm">
         <div class="flex items-start justify-between gap-3 text-foreground-600"><span>Hình thức</span><span class="text-right font-medium text-foreground-900">${esc(b.payment)}</span></div>
-        ${b.discount ? `<div class="flex items-center justify-between gap-3 text-foreground-600"><span>Mã ${esc(b.promoCode || '')}</span><span class="text-right text-accent-700">-${formatVnd(b.discount)}</span></div>` : ''}
-        <div class="flex items-center justify-between gap-3 text-foreground-600"><span>Tiền sân &amp; dịch vụ (${b.slots.length} giờ)</span><span class="text-right text-foreground-900">${formatVnd(b.totalPrice)}</span></div>
-        <div class="flex items-center justify-between gap-3 border-t border-background-200 pt-1.5"><span class="font-semibold text-foreground-700">Tổng cộng</span><span class="font-heading text-base font-extrabold text-primary-700">${formatVnd(b.totalPrice)}</span></div>
+        <div class="flex items-center justify-between gap-3 text-foreground-600"><span>Tiền sân (${b.slots.length} giờ)</span><span class="text-right text-foreground-900">${formatVnd(b.baseTotal || b.totalPrice)}</span></div>
+        ${b.discount ? `<div class="flex items-center justify-between gap-3 text-accent-700"><span class="flex items-center gap-1"><i class="ri-coupon-3-line" aria-hidden="true"></i>Mã ${esc(b.promoCode || '')}</span><span class="text-right font-semibold">-${formatVnd(b.discount)}</span></div>` : ''}
+        <div class="flex items-center justify-between gap-3 border-t border-background-200 pt-2 text-foreground-800"><span class="font-semibold">Tổng tiền sân</span><span class="font-heading font-bold text-foreground-950">${formatVnd(b.totalPrice)}</span></div>
+        <div class="flex items-center justify-between gap-3 rounded bg-accent-50/80 px-2.5 py-1.5 text-xs dark:bg-accent-950/40">
+          <span class="font-medium text-accent-900 dark:text-accent-200">${b.paymentStatus === 'paid' ? 'Đã thanh toán (100%):' : 'Tiền cọc đã thanh toán:'}</span>
+          <span class="font-heading font-bold text-accent-700 dark:text-accent-300">${formatVnd(deposit)}</span>
+        </div>
+        ${b.paymentStatus !== 'paid' ? `
+          <div class="flex items-center justify-between gap-3 border-t border-dashed border-background-200 pt-1.5 text-xs text-foreground-600">
+            <span>Còn lại thanh toán tại sân:</span>
+            <span class="font-heading text-sm font-extrabold text-primary-600 dark:text-primary-400">${formatVnd(remainder)}</span>
+          </div>` : ''}
       </div></div>
     </div>
     <div class="border-t border-background-200 p-5"><p class="text-xs font-bold uppercase tracking-wide text-foreground-500">Trạng thái đơn</p>
@@ -170,6 +250,21 @@ if (b) {
 
   document.addEventListener('click', async (event) => {
     const t = event.target;
+    if (t.closest('[data-claim-deposit]')) {
+      const btn = t.closest('[data-claim-deposit]');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="ri-loader-4-line animate-spin text-sm"></i> Đang xác nhận cọc…';
+      try {
+        await api('booking', 'claim', { id: b.id });
+        await new Promise((r) => setTimeout(r, 4000));
+        await api('booking', 'auto_confirm', { id: b.id });
+        location.reload();
+      } catch (err) {
+        alert(err.message);
+        location.reload();
+      }
+      return;
+    }
     if (t.closest('[data-open-qr]')) return openQrModal();
     if (t.closest('#ticket-card [data-download]')) return doDownload($('#ticket-card'));
     if (t.closest('[data-ics]')) {
@@ -194,4 +289,33 @@ if (b) {
   });
 
   if (new URLSearchParams(location.search).get('ve') === '1' && confirmed) openQrModal();
+
+  if (isPending || isApprovedWaitingDeposit) {
+    const detailPollInterval = setInterval(async () => {
+      try {
+        const latest = await api('booking', 'get', { code: b.code }, 'GET');
+        if (latest) {
+          if (latest.approvedAt !== b.approvedAt || latest.status !== b.status || latest.paymentStatus !== b.paymentStatus) {
+            clearInterval(detailPollInterval);
+            location.reload();
+          }
+        }
+      } catch (e) {
+        // ignore background poll errors
+      }
+    }, 3000);
+  }
+
+  if (isApprovedWaitingDeposit && !expired) {
+    const countdownInterval = setInterval(() => {
+      const sec = remainingHoldSeconds(b.holdExpiresAt);
+      document.querySelectorAll('[data-countdown]').forEach((el) => {
+        el.textContent = formatCountdown(sec);
+      });
+      if (sec <= 0) {
+        clearInterval(countdownInterval);
+        location.reload();
+      }
+    }, 1000);
+  }
 }

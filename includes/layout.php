@@ -270,7 +270,13 @@ function render_site_header(bool $tr): void
           </div>
         </div>
       <?php else: ?>
-        <a href="<?= url('/dang-nhap') ?>" <?= tcls($tr, 'text-white hover:bg-white/15', 'text-foreground-800 hover:bg-background-100', 'flex items-center gap-2 rounded-md py-1.5 px-2.5 transition-colors') ?>>
+        <?php
+        $curPath = current_path();
+        $authPages = ['/dang-nhap', '/dang-ky', '/dang-ky-chu-san', '/quen-mat-khau', '/dat-lai-mat-khau', '/dang-xuat'];
+        $curFull = !in_array($curPath, $authPages, true) ? $curPath . (!empty($_SERVER['QUERY_STRING']) ? '?' . $_SERVER['QUERY_STRING'] : '') : '';
+        $headerLoginUrl = url('/dang-nhap' . ($curFull && $curFull !== '/' ? '?redirect=' . urlencode($curFull) : ''));
+        ?>
+        <a href="<?= $headerLoginUrl ?>" <?= tcls($tr, 'text-white hover:bg-white/15', 'text-foreground-800 hover:bg-background-100', 'flex items-center gap-2 rounded-md py-1.5 px-2.5 transition-colors') ?>>
           <span class="flex h-7 w-7 items-center justify-center rounded-full bg-secondary-500 text-background-950"><i class="ri-user-line text-sm" aria-hidden="true"></i></span>
           <span class="whitespace-nowrap text-sm font-semibold">Đăng nhập</span>
         </a>
@@ -333,7 +339,7 @@ function render_site_header(bool $tr): void
           <a href="<?= url('/tai-khoan') ?>" class="flex items-center gap-2.5 rounded-md bg-background-100 px-3 py-2.5 text-sm font-semibold text-foreground-900"><i class="ri-user-line text-base text-primary-600" aria-hidden="true"></i>Tài khoản của tôi</a>
         <?php endif; ?>
         <a href="<?= url('/dat-san') ?>" class="w-full text-center whitespace-nowrap rounded-md bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white">Đặt sân</a>
-        <?php if (!$u): ?><a href="<?= url('/dang-nhap') ?>" class="py-1 text-center text-xs font-medium text-foreground-500">Đăng nhập / Đăng ký</a><?php endif; ?>
+        <?php if (!$u): ?><a href="<?= $headerLoginUrl ?>" class="py-1 text-center text-xs font-medium text-foreground-500">Đăng nhập / Đăng ký</a><?php endif; ?>
       </div>
     </nav>
   </div>

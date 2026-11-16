@@ -57,7 +57,7 @@ render_page([
   </aside>
 
   <div class="lg:ml-[264px]">
-    <header class="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-background-200 bg-white/95 px-4 backdrop-blur md:px-6">
+    <header class="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-background-200 bg-background-100/95 px-4 backdrop-blur md:px-6">
       <div class="flex min-w-0 items-center gap-3">
         <button type="button" id="owner-menu-btn" class="flex h-9 w-9 items-center justify-center rounded-md border border-background-300 text-foreground-700 lg:hidden" aria-label="Mở menu"><i class="ri-menu-line text-lg" aria-hidden="true"></i></button>
         <div class="min-w-0">

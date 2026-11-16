@@ -65,13 +65,6 @@ if (loginForm) {
     event.currentTarget.setAttribute('aria-label', show ? 'Ẩn mật khẩu' : 'Hiện mật khẩu');
   });
 
-  $$('[data-demo]', loginForm).forEach((btn) =>
-    btn.addEventListener('click', () => {
-      loginForm.email.value = btn.dataset.demo;
-      loginForm.password.value = '123456';
-    }),
-  );
-
   loginForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const email = loginForm.email.value.trim().toLowerCase();

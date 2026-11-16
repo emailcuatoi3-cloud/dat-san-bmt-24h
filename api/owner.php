@@ -64,11 +64,24 @@ run_api([
 
     // ---------------- Đơn đặt sân ----------------
     'booking_status' => function () {
+        auto_cancel_expired_holds();
         $b = my_booking(in_str('id'));
         $status = in_str('status');
         if (!in_array($status, ['confirmed', 'cancelled', 'completed', 'pending'], true)) fail('Trạng thái không hợp lệ.');
         $reason = $status === 'cancelled' ? (mb_substr(in_str('reason'), 0, 250) ?: null) : null;
-        q('UPDATE bookings SET status = ?, reject_reason = ? WHERE id = ?', [$status, $reason, $b['id']]);
+        $now = date('Y-m-d H:i:s');
+        if ($status === 'confirmed') {
+            if ($b['source'] === 'online' && (int)$b['deposit_amount'] > 0 && $b['payment_status'] === 'unpaid') {
+                // Khách đặt online chưa cọc: chủ sân duyệt đơn -> cấp 5 phút để khách chuyển cọc
+                $holdExp = date('Y-m-d H:i:s', time() + HOLD_MINUTES * 60);
+                q('UPDATE bookings SET approved_at = ?, hold_expires_at = ?, status = ? WHERE id = ?', [$now, $holdExp, 'confirmed', $b['id']]);
+            } else {
+                // Đã cọc hoặc đơn tại quầy / tiền mặt: xác nhận giữ sân thành công, không giới hạn cọc
+                q('UPDATE bookings SET approved_at = COALESCE(approved_at, ?), hold_expires_at = NULL, status = ? WHERE id = ?', [$now, 'confirmed', $b['id']]);
+            }
+        } else {
+            q('UPDATE bookings SET status = ?, reject_reason = ? WHERE id = ?', [$status, $reason, $b['id']]);
+        }
         return map_booking(q_one(BOOKING_SELECT . ' WHERE b.id = ?', [$b['id']]));
     },
 

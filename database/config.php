@@ -34,7 +34,7 @@ define('BANK_ACCOUNT_NAME', 'DAT SAN BMT 24H');
 /** Tỷ lệ cọc mặc định khi khách chọn "cọc 30%" */
 define('DEPOSIT_RATE', 0.3);
 /** Số phút giữ sân trong lúc khách quét mã chuyển khoản */
-define('HOLD_MINUTES', 10);
+define('HOLD_MINUTES', 5);
 /** Số giây hệ thống chờ để đối soát giao dịch rồi tự động xác nhận tiền cọc */
 define('AUTO_CONFIRM_SECONDS', 5);
 /** Chỉ cho hủy khi còn cách giờ chơi từ số giờ này trở lên */

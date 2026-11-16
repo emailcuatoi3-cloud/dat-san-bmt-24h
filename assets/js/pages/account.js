@@ -5,6 +5,7 @@ import { openReviewModal } from '../core/reviewModal.js';
 import { ticketData, ticketQrUrl, downloadTicket } from '../core/ticket.js';
 import { invoiceBadge, openInvoiceModal, exportInvoices, slotRange } from '../core/invoice.js';
 import { formatLongDate, formatRelativeDay, formatShortDate, isTodayOrLater, parseIsoDate, slotEndTime } from '../lib/format.js';
+import { formatCountdown, remainingHoldSeconds } from '../lib/booking.js';
 import { readMyBookingCodes, rememberBookingCode } from '../lib/myBookings.js';
 import { CANCEL_CUTOFF_HOURS, cancelLockedNotice, cancelPolicyFull, formatCancelDeadline, isBeforeCancelCutoff } from '../lib/cancelPolicy.js';
 import { HOTLINE } from '../lib/payment.js';
@@ -48,15 +49,22 @@ const btn = (attrs, icon, label, cls) => `<button type="button" ${attrs} class="
 const emptyState = (icon, title, desc) => `<div class="flex flex-col items-center justify-center rounded-lg border border-dashed border-background-300 bg-white px-6 py-12 text-center"><span class="flex h-14 w-14 items-center justify-center rounded-full bg-background-100 text-foreground-400"><i class="${icon} text-2xl" aria-hidden="true"></i></span><p class="mt-4 font-heading text-base font-bold text-foreground-950">${title}</p><p class="mt-1.5 max-w-md text-sm leading-relaxed text-foreground-600">${desc}</p><a href="${url('/tim-san')}" class="mt-5 inline-flex items-center gap-1.5 whitespace-nowrap rounded-md bg-primary-500 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-primary-600">Tìm sân ngay</a></div>`;
 
 function bookingItem(b) {
-  const active = b.status === 'pending' || b.status === 'confirmed';
-  const canCancel = active && isBeforeCancelCutoff(b.date, b.slots);
+  const isApprovedWaitingDeposit = Boolean(b.approvedAt && b.paymentStatus === 'unpaid' && b.status !== 'cancelled');
+  const isPaidOrDeposited = ['paid', 'deposit_paid'].includes(b.paymentStatus);
+  const active = (b.status === 'pending' || b.status === 'confirmed') && !isApprovedWaitingDeposit;
+  const canCancel = (active || isApprovedWaitingDeposit) && isBeforeCancelCutoff(b.date, b.slots);
   const locked = active && isTodayOrLater(b.date) && !canCancel;
+  const secondsLeft = isApprovedWaitingDeposit ? remainingHoldSeconds(b.holdExpiresAt) : 0;
   return `<article class="overflow-hidden rounded-lg border border-background-200 bg-white transition-colors hover:border-primary-200"><div class="flex flex-col sm:flex-row">
     <div class="relative h-[160px] w-full shrink-0 overflow-hidden bg-background-100 sm:h-auto sm:min-h-[150px] sm:w-[190px]"><img src="${esc(b.image)}" alt="${esc(b.courtName)}" loading="lazy" class="h-full w-full object-cover object-top">
       <span class="absolute left-2.5 top-2.5 inline-flex items-center gap-1 rounded-full bg-background-50/90 px-2 py-0.5 text-[11px] font-semibold text-foreground-950 backdrop-blur-sm"><i class="${b.sport === 'football' ? 'ri-football-line' : 'ri-ping-pong-line'} text-primary-600" aria-hidden="true"></i>${esc(b.sportLabel)}</span></div>
     <div class="flex min-w-0 flex-1 flex-col gap-2.5 p-4">
       <div class="flex flex-wrap items-start justify-between gap-2">
-        <div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><h3 class="font-heading text-base font-bold text-foreground-950">${esc(b.courtName)}</h3>${statusBadge(b.status)}</div><p class="mt-1 flex items-start gap-1.5 text-xs text-foreground-500"><i class="ri-map-pin-line mt-0.5" aria-hidden="true"></i><span class="line-clamp-1">${esc(b.address)}</span></p></div>
+        <div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><h3 class="font-heading text-base font-bold text-foreground-950">${esc(b.courtName)}</h3>
+          ${isApprovedWaitingDeposit
+            ? `<span class="inline-flex items-center gap-1.5 rounded-full border border-accent-300 bg-accent-50 px-2.5 py-0.5 text-[11px] font-bold text-accent-900 animate-pulse"><span class="h-1.5 w-1.5 rounded-full bg-accent-500"></span>Chờ chuyển cọc (<span data-countdown="${esc(b.holdExpiresAt || '')}">${formatCountdown(secondsLeft)}</span>)</span>`
+            : statusBadge(b.status)}
+        </div><p class="mt-1 flex items-start gap-1.5 text-xs text-foreground-500"><i class="ri-map-pin-line mt-0.5" aria-hidden="true"></i><span class="line-clamp-1">${esc(b.address)}</span></p></div>
         <a href="${url(`/don-dat-san/${b.code}`)}" title="Mở trang chi tiết đơn" class="inline-flex items-center gap-1 rounded-md bg-background-100 px-2 py-1 font-mono text-[11px] font-semibold text-foreground-600 transition-colors hover:bg-primary-50 hover:text-primary-800">${esc(b.code)}<i class="ri-arrow-right-up-line text-[11px]" aria-hidden="true"></i></a>
       </div>
       <dl class="grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-2">
@@ -65,12 +73,26 @@ function bookingItem(b) {
         <div class="flex items-center gap-1.5 text-xs text-foreground-700"><i class="ri-wallet-3-line text-foreground-400" aria-hidden="true"></i><dd class="font-semibold text-primary-700">${formatVnd(b.totalPrice)}</dd></div>
         <div class="flex items-center gap-1.5 text-xs text-foreground-700"><i class="ri-bank-card-line text-foreground-400" aria-hidden="true"></i><dd>${esc(b.payment)}</dd></div>
       </dl>
-      ${active && isTodayOrLater(b.date) ? `<p class="flex items-center gap-1.5 rounded-md bg-accent-50 px-2.5 py-1.5 text-[11px] font-semibold text-accent-800"><i class="ri-alarm-line" aria-hidden="true"></i>${formatRelativeDay(b.date)} • ${b.status === 'pending' ? 'Đang chờ chủ sân xác nhận' : 'Chủ sân đã xác nhận'}</p>` : ''}
+      ${isApprovedWaitingDeposit ? `
+        <div class="rounded-lg border border-accent-300 bg-accent-50/90 p-3 text-xs text-accent-950 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+          <div class="flex items-center gap-2">
+            <i class="ri-alarm-warning-line text-lg text-accent-700 animate-pulse shrink-0" aria-hidden="true"></i>
+            <div>
+              <p class="font-bold text-accent-950">Chủ sân đã duyệt! Vui lòng chuyển cọc để hoàn tất giữ sân.</p>
+              <p class="text-[11px] text-accent-800">Quá thời gian giữ sân, đơn sẽ tự động hủy nếu chưa thanh toán.</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5 shrink-0 rounded-md bg-white px-3 py-1.5 border border-accent-300 shadow-sm">
+            <span class="text-[11px] font-semibold text-accent-800">Thời gian giữ sân:</span>
+            <span class="font-mono text-sm font-extrabold text-accent-700" data-countdown="${esc(b.holdExpiresAt || '')}">${formatCountdown(secondsLeft)}</span>
+          </div>
+        </div>` : active && isTodayOrLater(b.date) ? `<p class="flex items-center gap-1.5 rounded-md bg-accent-50 px-2.5 py-1.5 text-[11px] font-semibold text-accent-800"><i class="ri-alarm-line" aria-hidden="true"></i>${formatRelativeDay(b.date)} • ${b.status === 'pending' ? 'Đang chờ chủ sân xác nhận' : 'Chủ sân đã xác nhận'}</p>` : ''}
       ${locked ? `<p class="flex items-start gap-1.5 rounded-md bg-background-100 px-2.5 py-1.5 text-[11px] font-medium text-foreground-600"><i class="ri-lock-2-line mt-0.5" aria-hidden="true"></i>${cancelLockedNotice}</p>` : ''}
       ${b.status === 'cancelled' && b.cancelReason ? `<p class="flex items-start gap-1.5 rounded-md bg-background-100 px-2.5 py-1.5 text-[11px] text-foreground-600"><i class="ri-information-line mt-0.5" aria-hidden="true"></i>Lý do hủy: ${esc(b.cancelReason)}</p>` : ''}
       <div class="mt-auto flex flex-wrap items-center gap-2 pt-1">
+        ${isApprovedWaitingDeposit ? `<a href="${url(`/don-dat-san/${b.code}`)}" class="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md bg-accent-500 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-accent-600 animate-pulse"><i class="ri-bank-card-line text-sm"></i>Chuyển cọc ngay (<span data-countdown="${esc(b.holdExpiresAt || '')}">${formatCountdown(secondsLeft)}</span>)</a>` : ''}
         ${btn(`data-view="${b.id}"`, 'ri-file-list-3-line', 'Xem chi tiết', 'border border-background-300 bg-background-200 text-foreground-950 hover:border-primary-400')}
-        ${btn(`data-view="${b.id}"`, 'ri-qr-code-line', 'Vé QR', 'border border-primary-200 bg-primary-50 text-primary-800 hover:border-primary-400')}
+        ${isPaidOrDeposited ? btn(`data-view="${b.id}"`, 'ri-qr-code-line', 'Vé QR', 'border border-primary-200 bg-primary-50 text-primary-800 hover:border-primary-400') : ''}
         ${canCancel ? btn(`data-cancel="${b.id}"`, 'ri-close-circle-line', 'Hủy đơn', 'border border-accent-300 text-accent-800 hover:bg-accent-50') : ''}
         ${b.status === 'completed' ? (st.reviewed.has(b.code) ? '<span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md bg-primary-50 px-3 py-2 text-xs font-semibold text-primary-700"><i class="ri-checkbox-circle-line" aria-hidden="true"></i>Đã đánh giá</span>' : btn(`data-review="${b.id}"`, 'ri-star-smile-line', 'Đánh giá sân', 'border border-accent-300 bg-accent-50 text-accent-800 hover:bg-accent-100')) : ''}
         ${b.status === 'completed' || b.status === 'cancelled' ? `<a href="${url(`/dat-san/${b.courtSlug}`)}" class="ml-auto inline-flex items-center gap-1.5 whitespace-nowrap rounded-md bg-primary-500 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-600"><i class="ri-refresh-line" aria-hidden="true"></i>Đặt lại sân</a>` : ''}
@@ -217,6 +239,40 @@ function renderProfile() {
     </form></div>`;
 }
 
+// ---------------- Bộ đếm ngược giữ sân ----------------
+let countdownInterval = null;
+function tickCountdowns() {
+  const nodes = document.querySelectorAll('[data-countdown]');
+  if (!nodes.length) {
+    if (countdownInterval) {
+      clearInterval(countdownInterval);
+      countdownInterval = null;
+    }
+    return;
+  }
+  let hasExpired = false;
+  nodes.forEach((el) => {
+    const expiresAt = el.getAttribute('data-countdown');
+    if (!expiresAt) return;
+    const sec = remainingHoldSeconds(expiresAt);
+    el.textContent = formatCountdown(sec);
+    if (sec <= 0) hasExpired = true;
+  });
+  if (hasExpired) {
+    clearInterval(countdownInterval);
+    countdownInterval = null;
+    load();
+  }
+}
+
+function startCountdownTicker() {
+  if (countdownInterval) clearInterval(countdownInterval);
+  const nodes = document.querySelectorAll('[data-countdown]');
+  if (nodes.length) {
+    countdownInterval = setInterval(tickCountdowns, 1000);
+  }
+}
+
 // ---------------- Vẽ trang ----------------
 function render() {
   const g = groups();
@@ -237,6 +293,7 @@ function render() {
   main.innerHTML = views[st.tab](g);
   const grid = $('[data-fav-grid]');
   if (grid) bindFavoriteButtons(grid);
+  startCountdownTicker();
 }
 
 function goTab(tab) {
@@ -248,12 +305,13 @@ function goTab(tab) {
 
 // ---------------- Hộp thoại ----------------
 function openDetail(b) {
-  const confirmed = ['confirmed', 'completed'].includes(b.status) || ['paid', 'deposit_paid'].includes(b.paymentStatus);
-  const active = b.status === 'pending' || b.status === 'confirmed';
-  const canCancel = active && isBeforeCancelCutoff(b.date, b.slots);
+  const isApprovedWaitingDeposit = Boolean(b.approvedAt && b.paymentStatus === 'unpaid' && b.status !== 'cancelled');
+  const confirmed = ['confirmed', 'completed'].includes(b.status) && ['paid', 'deposit_paid'].includes(b.paymentStatus);
+  const active = (b.status === 'pending' || b.status === 'confirmed') && !isApprovedWaitingDeposit;
+  const canCancel = (active || isApprovedWaitingDeposit) && isBeforeCancelCutoff(b.date, b.slots);
   const steps = [
     ['Yêu cầu đặt sân đã gửi', `Tạo ngày ${formatShortDate((b.createdAt || b.date).slice(0, 10))}`, true],
-    ['Chủ sân xác nhận', b.status === 'cancelled' ? 'Đơn đã hủy trước khi xác nhận' : b.status === 'pending' ? 'Đang chờ chủ sân phản hồi (trong 15 phút)' : 'Chủ sân đã xác nhận qua điện thoại', ['confirmed', 'completed'].includes(b.status)],
+    ['Chủ sân xác nhận', b.status === 'cancelled' ? 'Đơn đã hủy trước khi xác nhận' : b.status === 'pending' ? 'Đang chờ chủ sân phản hồi (trong 15 phút)' : 'Chủ sân đã xác nhận và duyệt đơn', Boolean(b.approvedAt || ['confirmed', 'completed'].includes(b.status))],
     [b.status === 'cancelled' ? 'Đơn đã hủy' : 'Hoàn thành lượt chơi', b.status === 'cancelled' ? b.cancelReason || 'Khách hàng đã hủy đơn' : b.status === 'completed' ? 'Buổi chơi đã kết thúc, cảm ơn bạn đã sử dụng dịch vụ' : `Dự kiến ${formatLongDate(b.date)}`, b.status === 'completed'],
   ];
   const dd = (l, v) => `<div><dt class="text-xs text-foreground-500">${l}</dt><dd class="text-sm font-medium text-foreground-900">${v}</dd></div>`;
@@ -262,9 +320,13 @@ function openDetail(b) {
     html: `<div class="flex items-start justify-between gap-3 border-b border-background-200 px-5 py-4"><div><h2 class="font-heading text-lg font-extrabold text-foreground-950">Chi tiết đơn đặt sân</h2><p class="mt-0.5 font-mono text-xs text-foreground-500">${esc(b.code)}</p></div><button type="button" data-close aria-label="Đóng" class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md text-foreground-500 hover:bg-background-100"><i class="ri-close-line text-xl" aria-hidden="true"></i></button></div>
     <div class="px-5 py-4">
       <div class="flex flex-col gap-4 rounded-lg border border-primary-200 bg-primary-50/40 p-4 sm:flex-row sm:items-center">
-        ${confirmed ? `<div class="mx-auto h-[150px] w-[150px] shrink-0 overflow-hidden rounded-md border border-background-200 bg-white p-2 sm:mx-0"><img src="${ticketQrUrl(b)}" alt="Vé QR ${esc(b.code)}" class="h-full w-full object-contain"></div>` : `<div class="mx-auto flex h-[150px] w-[150px] shrink-0 flex-col items-center justify-center gap-2 rounded-md border border-dashed border-accent-300 bg-white px-3 text-center sm:mx-0"><i class="ri-qr-scan-2-line text-3xl text-accent-500" aria-hidden="true"></i><p class="text-[11px] text-foreground-600">Vé QR mở khi đơn được xác nhận</p></div>`}
-        <div class="min-w-0 flex-1"><p class="text-xs font-semibold uppercase tracking-wide text-primary-700">Vé điện tử của bạn</p><p class="mt-1 font-heading text-lg font-extrabold text-foreground-950">${esc(b.courtName)}</p><p class="mt-0.5 text-sm text-foreground-700">${b.slots[0]} - ${slotEndTime(b.slots[b.slots.length - 1])} · ${formatLongDate(b.date)}</p><p class="mt-1 text-xs text-foreground-500">Đưa mã này cho nhân viên sân khi tới nhận sân.</p>
-          ${confirmed ? `<button type="button" data-dl class="mt-3 inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-primary-500 px-3.5 py-2 text-xs font-semibold text-white hover:bg-primary-600"><i class="ri-download-2-line" aria-hidden="true"></i>Tải vé về máy</button>` : ''}</div>
+        ${confirmed
+          ? `<div class="mx-auto h-[150px] w-[150px] shrink-0 overflow-hidden rounded-md border border-background-200 bg-white p-2 sm:mx-0"><img src="${ticketQrUrl(b)}" alt="Vé QR ${esc(b.code)}" class="h-full w-full object-contain"></div>`
+          : isApprovedWaitingDeposit
+          ? `<div class="mx-auto flex h-[150px] w-[150px] shrink-0 flex-col items-center justify-center gap-2 rounded-md border border-accent-300 bg-accent-50/50 px-3 text-center sm:mx-0"><i class="ri-bank-card-line text-3xl text-accent-600 animate-pulse" aria-hidden="true"></i><p class="text-[11px] font-bold text-accent-900">Chờ chuyển cọc</p></div>`
+          : `<div class="mx-auto flex h-[150px] w-[150px] shrink-0 flex-col items-center justify-center gap-2 rounded-md border border-dashed border-accent-300 bg-white px-3 text-center sm:mx-0"><i class="ri-qr-scan-2-line text-3xl text-accent-500" aria-hidden="true"></i><p class="text-[11px] text-foreground-600">Vé QR mở khi hoàn tất chuyển cọc</p></div>`}
+        <div class="min-w-0 flex-1"><p class="text-xs font-semibold uppercase tracking-wide text-primary-700">Vé điện tử của bạn</p><p class="mt-1 font-heading text-lg font-extrabold text-foreground-950">${esc(b.courtName)}</p><p class="mt-0.5 text-sm text-foreground-700">${b.slots[0]} - ${slotEndTime(b.slots[b.slots.length - 1])} · ${formatLongDate(b.date)}</p><p class="mt-1 text-xs text-foreground-500">${confirmed ? 'Đưa mã này cho nhân viên sân khi tới nhận sân.' : isApprovedWaitingDeposit ? 'Chủ sân đã duyệt! Vui lòng chuyển cọc để nhận vé điện tử check-in.' : 'Chủ sân đang duyệt đơn. Vé QR sẽ mở sau khi hoàn tất cọc.'}</p>
+          ${confirmed ? `<button type="button" data-dl class="mt-3 inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-primary-500 px-3.5 py-2 text-xs font-semibold text-white hover:bg-primary-600"><i class="ri-download-2-line" aria-hidden="true"></i>Tải vé về máy</button>` : isApprovedWaitingDeposit ? `<a href="${url(`/don-dat-san/${b.code}`)}" class="mt-3 inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-accent-500 px-3.5 py-2 text-xs font-bold text-white hover:bg-accent-600 animate-pulse"><i class="ri-bank-card-line" aria-hidden="true"></i>Chuyển cọc ngay</a>` : ''}</div>
       </div>
       <dl class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">${dd('Mã đơn', `<span class="font-mono text-xs">${esc(b.code)}</span>`)}${dd('Loại sân', esc(b.sportLabel))}${dd('Ngày chơi', formatLongDate(b.date))}${dd('Khung giờ', `${b.slots[0]} - ${slotEndTime(b.slots[b.slots.length - 1])}`)}${dd('Thời lượng', `${b.slots.length} giờ`)}${dd('Giá trung bình', `${formatVnd(Math.round(b.totalPrice / Math.max(1, b.slots.length)))}/giờ`)}</dl>
       <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">

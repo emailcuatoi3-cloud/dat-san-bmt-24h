@@ -16,7 +16,7 @@ export async function loadData() {
 }
 
 export function refreshBadges() {
-  const pending = S.bookings.filter((b) => b.status === 'pending').length;
+  const pending = S.bookings.filter((b) => b.status === 'pending' && !b.approvedAt).length;
   const set = (el, n) => {
     if (!el) return;
     el.textContent = n > 99 ? '99+' : n;
