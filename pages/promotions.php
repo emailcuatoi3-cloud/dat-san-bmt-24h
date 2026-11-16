@@ -20,7 +20,7 @@ function () use ($active, $upcoming, $best) {
       <div class="flex items-center gap-3 rounded-lg border border-background-200 bg-background-50 px-4 py-3.5">
         <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md <?= $tone ?>"><i class="<?= $icon ?> text-lg" aria-hidden="true"></i></span>
         <div class="min-w-0"><p class="font-heading text-xl font-extrabold leading-none text-foreground-950"><?= $value ?><?php if ($unit): ?><span class="ml-1 text-xs font-semibold text-foreground-400"><?= $unit ?></span><?php endif; ?></p><p class="mt-1 text-[11px] font-medium text-foreground-500"><?= $label ?></p></div>
-      </div>
+      </div> 
     <?php };
     ?>
 <div class="w-full bg-white px-4 py-6 md:px-8">
