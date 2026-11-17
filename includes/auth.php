@@ -133,6 +133,7 @@ function public_profile(?array $u): ?array
 const ADMIN_MODULES = [
     ['key' => 'overview', 'label' => 'Tổng quan', 'description' => 'Xem bảng điều khiển và số liệu toàn hệ thống.', 'icon' => 'ri-dashboard-3-line'],
     ['key' => 'accounts', 'label' => 'Tài khoản', 'description' => 'Xem, đổi vai trò và tạm khóa tài khoản.', 'icon' => 'ri-group-line'],
+    ['key' => 'owners', 'label' => 'Chủ sân', 'description' => 'Duyệt yêu cầu đăng ký, quản lý cơ sở và sân của chủ sân.', 'icon' => 'ri-store-2-line'],
     ['key' => 'courts', 'label' => 'Sân & cơ sở', 'description' => 'Tạm dừng hoặc gỡ sân khỏi nền tảng.', 'icon' => 'ri-football-line', 'danger' => true],
     ['key' => 'bookings', 'label' => 'Đơn đặt sân', 'description' => 'Duyệt hoặc từ chối đơn đặt sân.', 'icon' => 'ri-calendar-check-line'],
     ['key' => 'invoices', 'label' => 'Hóa đơn & công nợ', 'description' => 'Đối soát doanh thu, công nợ và xuất Excel.', 'icon' => 'ri-receipt-line'],
@@ -155,6 +156,9 @@ function admin_access(): array
     $row = q_one('SELECT r.`key`, r.name, r.permissions FROM admin_role_assignments a JOIN admin_roles r ON r.`key` = a.role_key WHERE a.user_id = ?', [$u['id']]);
     if ($row) {
         $perms = array_values(array_intersect(jd($row['permissions']), $all));
+        if (in_array('accounts', $perms, true) && !in_array('owners', $perms, true)) {
+            $perms[] = 'owners';
+        }
         $access['roleKey'] = $row['key'];
         $access['roleName'] = $row['name'];
         $access['allowed'] = ($row['key'] === 'super_admin' || !$perms) ? $all : $perms;

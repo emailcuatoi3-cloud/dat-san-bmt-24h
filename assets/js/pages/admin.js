@@ -176,8 +176,8 @@ async function renderOverview() {
 // =====================================================================
 // TÀI KHOẢN & PHÂN QUYỀN
 // =====================================================================
-function accountForm(d, user = null) {
-  const u = user || { id: 0, fullName: '', email: '', phone: '', address: '', role: 'customer', businessName: '', status: 'active', adminRole: '' };
+function accountForm(d, user = null, defaultRole = 'customer') {
+  const u = user || { id: 0, fullName: '', email: '', phone: '', address: '', role: defaultRole, businessName: '', status: 'active', adminRole: '' };
   const isEdit = Boolean(u.id);
 
   const m = modal(
@@ -278,10 +278,12 @@ function accountForm(d, user = null) {
       address: form.address.value.trim(),
     };
 
+    delete C.owners;
+    delete C.accounts;
     const ok = await run(
       () => api('admin', 'account_save', payload),
       isEdit ? 'Đã cập nhật thông tin tài khoản.' : 'Đã tạo tài khoản mới thành công.',
-      'accounts'
+      PAGE.tab === 'owners' ? 'owners' : 'accounts'
     );
     if (ok) m.close();
     else setBusy(e.currentTarget, false);
@@ -472,11 +474,20 @@ function ownerRequestsBlock(reqs, showAll) {
 async function renderAccounts() {
   const d = await get('accounts', 'accounts');
   const reqs = await get('ownerReq', 'owner_requests');
-  const f = filter('accounts', { role: 'all', status: 'all', q: '' });
+  const f = filter('accounts', { role: 'all', status: 'all', q: '', page: 1 });
   const q = f.q.toLowerCase();
   const list = d.users.filter((u) => f.role === 'all' || u.role === f.role).filter((u) => f.status === 'all' || u.status === f.status).filter((u) => !q || `${u.fullName} ${u.email} ${u.phone} ${u.businessName}`.toLowerCase().includes(q));
   const roleName = (k) => (d.roles.find((r) => r.key === k) || {}).name || 'Toàn quyền (mặc định)';
   const isSuper = PAGE.access.roleKey === 'super_admin';
+
+  const pageSize = 10;
+  const total = list.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  f.page = Math.min(Math.max(1, f.page || 1), totalPages);
+  const pagedList = list.slice((f.page - 1) * pageSize, f.page * pageSize);
+  const fromIdx = total > 0 ? (f.page - 1) * pageSize + 1 : 0;
+  const toIdx = Math.min(f.page * pageSize, total);
+
   actions().innerHTML = `
     <button type="button" id="ac-new" class="${BTN_SM_PRI} !px-3.5 !py-2 text-xs font-semibold">
       <i class="ri-user-add-line text-sm"></i> Thêm tài khoản
@@ -498,7 +509,7 @@ async function renderAccounts() {
   </div>
   <div class="mt-5 mb-3 flex flex-wrap gap-2">${[['all', 'Tất cả'], ...Object.entries(ROLE)].map(([k, l]) => `<button type="button" data-role-f="${k}" class="${chip(f.role === k)}">${l}</button>`).join('')}<span class="mx-1 w-px bg-background-300"></span>${[['all', 'Mọi trạng thái'], ['active', 'Hoạt động'], ['suspended', 'Tạm khóa']].map(([k, l]) => `<button type="button" data-status-f="${k}" class="${chip(f.status === k)}">${l}</button>`).join('')}</div>
   <div class="mb-4">${search('ac-q', f.q, 'Tìm theo tên, email, số điện thoại, tên cơ sở...')}</div>
-  <div class="${CARD} overflow-hidden">${list.length ? table(['Tài khoản', 'Vai trò', 'Bộ quyền quản trị', 'Hoạt động', 'Trạng thái', '>Thao tác'], list.map((u) => {
+  <div class="${CARD} overflow-hidden">${list.length ? table(['Tài khoản', 'Vai trò', 'Bộ quyền quản trị', 'Hoạt động', 'Trạng thái', '>Thao tác'], pagedList.map((u) => {
     const me = u.id === d.me;
     return `<tr class="${u.status === 'suspended' ? 'bg-accent-50/40' : ''}">
       ${td(`<p class="font-semibold">${esc(u.fullName || '—')} ${me ? '<span class="rounded bg-primary-50 px-1.5 text-[10px] text-primary-700">Bạn</span>' : ''}</p><p class="text-xs text-foreground-500">${esc(u.email)}${u.phone ? ' · ' + esc(u.phone) : ''}</p>${u.businessName && u.role === 'owner' ? `<p class="text-xs text-secondary-700">${esc(u.businessName)}</p>` : ''}`)}
@@ -532,7 +543,22 @@ async function renderAccounts() {
         ` : ''}
       </div>`)}
     </tr>`;
-  }).join(''), 1020) : `<div class="p-4">${emptyState('ri-user-search-line', 'Không tìm thấy tài khoản')}</div>`}</div>
+  }).join(''), 1020) : `<div class="p-4">${emptyState('ri-user-search-line', 'Không tìm thấy tài khoản')}</div>`}
+  ${list.length ? `
+    <div class="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-background-200 px-4 py-3 bg-white">
+      <p class="text-xs text-foreground-500">Hiển thị <span class="font-semibold text-foreground-800">${fromIdx} - ${toIdx}</span> trên tổng số <span class="font-semibold text-foreground-800">${total}</span> tài khoản</p>
+      ${totalPages > 1 ? `
+        <div class="flex items-center gap-1">
+          <button type="button" data-ac-page="${f.page - 1}" ${f.page === 1 ? 'disabled' : ''} class="h-8 w-8 inline-flex items-center justify-center rounded border border-background-300 bg-white text-xs font-semibold text-foreground-700 hover:border-primary-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors" title="Trang trước"><i class="ri-arrow-left-s-line text-sm"></i></button>
+          ${Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => `
+            <button type="button" data-ac-page="${n}" class="h-8 min-w-[32px] px-2 inline-flex items-center justify-center rounded border text-xs font-semibold transition-colors ${n === f.page ? 'border-primary-600 bg-primary-50 text-primary-700 font-bold' : 'border-background-300 bg-white text-foreground-700 hover:border-primary-400'}">${n}</button>
+          `).join('')}
+          <button type="button" data-ac-page="${f.page + 1}" ${f.page === totalPages ? 'disabled' : ''} class="h-8 w-8 inline-flex items-center justify-center rounded border border-background-300 bg-white text-xs font-semibold text-foreground-700 hover:border-primary-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors" title="Trang sau"><i class="ri-arrow-right-s-line text-sm"></i></button>
+        </div>
+      ` : ''}
+    </div>
+  ` : ''}
+  </div>
   <section class="${CARD} mt-6">${sectionTitle('Bộ quyền quản trị', isSuper ? `<button type="button" data-role-new class="${BTN_SM_PRI}"><i class="ri-add-line"></i>Tạo bộ quyền</button>` : '<span class="text-xs text-foreground-500">Chỉ Quản trị cấp cao được chỉnh</span>')}
     <div class="grid grid-cols-1 gap-3 p-4 md:grid-cols-2">${d.roles.map((r) => `<div class="rounded-md border border-background-200 p-4"><div class="flex items-start justify-between gap-2"><div><p class="font-semibold">${esc(r.name)}</p><p class="text-xs text-foreground-500">${esc(r.description)}</p></div><span class="whitespace-nowrap text-xs text-foreground-500">${d.users.filter((u) => u.adminRole === r.key).length} người</span></div>
       <div class="mt-2 flex flex-wrap gap-1">${(r.key === 'super_admin' ? d.modules.map((m) => m.key) : r.permissions).map((k) => `<span class="rounded bg-background-100 px-1.5 py-0.5 text-[11px]">${(d.modules.find((m) => m.key === k) || {}).label || k}</span>`).join('')}</div>
@@ -556,7 +582,14 @@ async function renderAccounts() {
     if (!ok) return;
     run(() => api('admin', 'account_delete', { id: targetId }), 'Đã xóa tài khoản vĩnh viễn.', 'accounts');
   });
-  on(root, 'click', '[data-role-f]', (e, el) => { f.role = el.dataset.roleF; render(); });
+  on(root, 'click', '[data-ac-page]', (e, el) => {
+    const p = Number(el.dataset.acPage);
+    if (p >= 1 && p <= totalPages && p !== f.page) {
+      f.page = p;
+      render();
+    }
+  });
+  on(root, 'click', '[data-role-f]', (e, el) => { f.role = el.dataset.roleF; f.page = 1; render(); });
   on(root, 'click', '[data-or-all]', () => { f.orAll = !f.orAll; render(); });
   const reviewReq = (id, decision, note) => { delete C.ownerReq; return run(api('admin', 'owner_request_review', { id, decision, note }), decision === 'approve' ? 'Đã duyệt — tài khoản đã được mở kênh chủ sân.' : 'Đã từ chối yêu cầu.', 'accounts'); };
   on(root, 'click', '[data-or-approve]', async (e, el) => {
@@ -567,8 +600,8 @@ async function renderAccounts() {
     const note = await askNote('Từ chối đăng ký chủ sân', 'Lý do (người đăng ký sẽ thấy nội dung này)', { min: 5, confirm: 'Từ chối', danger: true });
     if (note !== null) reviewReq(el.dataset.orReject, 'reject', note);
   });
-  on(root, 'click', '[data-status-f]', (e, el) => { f.status = el.dataset.statusF; render(); });
-  root.querySelector('#ac-q').addEventListener('change', (e) => { f.q = e.target.value; render(); });
+  on(root, 'click', '[data-status-f]', (e, el) => { f.status = el.dataset.statusF; f.page = 1; render(); });
+  root.querySelector('#ac-q').addEventListener('change', (e) => { f.q = e.target.value; f.page = 1; render(); });
   root.addEventListener('change', async (e) => {
     const r = e.target.closest('[data-role]');
     if (r) {
@@ -600,6 +633,149 @@ async function renderAccounts() {
     if (await confirmBox({ title: 'Xóa bộ quyền?', message: 'Bộ quyền chưa gán cho ai mới xóa được.', confirmText: 'Xóa', danger: true })) {
       run(() => api('admin', 'role_delete', { key: el.dataset.roleDel }), 'Đã xóa bộ quyền.', 'accounts');
     }
+  });
+}
+
+// =====================================================================
+// QUẢN LÝ CHỦ SÂN
+// =====================================================================
+async function renderOwners() {
+  const d = await get('owners', 'owners');
+  const reqs = await get('ownerReq', 'owner_requests');
+  const f = filter('owners', { status: 'all', q: '', page: 1, orAll: false });
+  const q = f.q.toLowerCase();
+  const list = d.owners.filter((u) => f.status === 'all' || u.status === f.status).filter((u) => !q || `${u.fullName} ${u.email} ${u.phone} ${u.businessName} ${u.courtNames}`.toLowerCase().includes(q));
+
+  const pageSize = 10;
+  const total = list.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  f.page = Math.min(Math.max(1, f.page || 1), totalPages);
+  const pagedList = list.slice((f.page - 1) * pageSize, f.page * pageSize);
+  const fromIdx = total > 0 ? (f.page - 1) * pageSize + 1 : 0;
+  const toIdx = Math.min(f.page * pageSize, total);
+
+  actions().innerHTML = `
+    <button type="button" id="ow-new" class="${BTN_SM_PRI} !px-3.5 !py-2 text-xs font-semibold">
+      <i class="ri-user-add-line text-sm"></i> Thêm chủ sân
+    </button>
+    <button type="button" id="ow-csv" class="${BTN_OUT} !px-3.5 !py-2 text-xs font-semibold">
+      <i class="ri-file-excel-2-line text-sm"></i> Xuất danh sách
+    </button>
+  `;
+  actions().querySelector('#ow-new').onclick = () => accountForm(d, null, 'owner');
+  actions().querySelector('#ow-csv').onclick = () => downloadCsv([['Họ tên', 'Tên cơ sở', 'Email', 'Điện thoại', 'Số sân', 'Tổng đơn', 'Doanh thu', 'Trạng thái', 'Ngày tạo'], ...list.map((u) => [u.fullName, u.businessName || '', u.email, u.phone, u.courtCount, u.bookingCount, u.revenue, u.status === 'active' ? 'Hoạt động' : 'Tạm khóa', (u.createdAt || '').slice(0, 10)])], `chu-san-${TODAY}.csv`);
+
+  main().innerHTML = `
+  ${ownerRequestsBlock(reqs, f.orAll)}
+  <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    ${statCard('ri-store-2-line', 'Tổng số chủ sân', d.stat.total)}
+    ${statCard('ri-checkbox-circle-line', 'Đang hoạt động', d.stat.active, '', 'primary')}
+    ${statCard('ri-football-line', 'Sân trực thuộc', d.stat.totalCourts, '', 'secondary')}
+    ${statCard('ri-money-dollar-circle-line', 'Doanh thu các sân', money(d.stat.totalRevenue), '', 'neutral')}
+  </div>
+  <div class="mt-5 mb-3 flex flex-wrap gap-2">${[['all', 'Mọi trạng thái'], ['active', 'Hoạt động'], ['suspended', 'Tạm khóa']].map(([k, l]) => `<button type="button" data-ow-status="${k}" class="${chip(f.status === k)}">${l}</button>`).join('')}</div>
+  <div class="mb-4">${search('ow-q', f.q, 'Tìm theo tên chủ sân, tên cơ sở kinh doanh, email, SĐT, tên sân...')}</div>
+  <div class="${CARD} overflow-hidden">${list.length ? table(['Chủ sân & Cơ sở', 'Sân trực thuộc', '>Đơn · Doanh thu', 'Trạng thái', '>Thao tác'], pagedList.map((u) => {
+    const me = u.id === d.me;
+    return `<tr class="${u.status === 'suspended' ? 'bg-accent-50/40' : ''}">
+      ${td(`<p class="font-semibold text-foreground-950">${esc(u.fullName || '—')} ${me ? '<span class="rounded bg-primary-50 px-1.5 text-[10px] text-primary-700">Bạn</span>' : ''}</p>
+            ${u.businessName ? `<p class="text-xs font-bold text-secondary-700 flex items-center gap-1 mt-0.5"><i class="ri-store-2-fill text-[11px]"></i>${esc(u.businessName)}</p>` : ''}
+            <p class="text-xs text-foreground-500 mt-0.5">${esc(u.email)}${u.phone ? ' · ' + esc(u.phone) : ''}</p>
+            ${u.address ? `<p class="truncate text-[11px] text-foreground-400 mt-0.5 max-w-[280px]"><i class="ri-map-pin-line"></i> ${esc(u.address)}</p>` : ''}`)}
+      ${td(`<p class="font-semibold text-foreground-900">${u.courtCount} sân</p>
+            ${u.courtNames ? `<p class="text-xs text-foreground-500 truncate max-w-[220px]" title="${esc(u.courtNames)}">${esc(u.courtNames)}</p>` : '<span class="text-xs text-foreground-400 italic">Chưa tạo sân</span>'}`)}
+      ${td(`<p class="text-xs text-foreground-700">${u.bookingCount} đơn</p>
+            <p class="font-semibold text-foreground-950 mt-0.5">${money(u.revenue)}</p>`, 'text-right')}
+      ${td(u.status === 'active' ? '<span class="rounded-full bg-primary-50 px-2 py-1 text-[11px] font-semibold text-primary-700">Hoạt động</span>' : '<span class="rounded-full bg-accent-100 px-2 py-1 text-[11px] font-semibold text-accent-800">Tạm khóa</span>')}
+      ${td(`<div class="flex items-center justify-end gap-1.5">
+        <button type="button" data-detail="${u.id}" class="inline-flex h-8 items-center gap-1 rounded border border-background-300 bg-white px-2 text-xs font-semibold text-foreground-700 hover:bg-background-100 hover:text-foreground-950 transition-colors" title="Xem chi tiết & lịch sử">
+          <i class="ri-eye-line text-sm"></i> Chi tiết
+        </button>
+        <button type="button" data-edit="${u.id}" class="inline-flex h-8 items-center gap-1 rounded border border-background-300 bg-white px-2 text-xs font-semibold text-foreground-700 hover:bg-background-100 hover:text-foreground-950 transition-colors" title="Chỉnh sửa chủ sân">
+          <i class="ri-edit-line text-sm"></i> Sửa
+        </button>
+        ${!me ? `
+          <button type="button" data-impersonate="${u.id}" class="inline-flex h-8 items-center gap-1 rounded border border-secondary-300 bg-secondary-50 px-2 text-xs font-semibold text-secondary-800 hover:bg-secondary-100 transition-colors" title="Đăng nhập danh nghĩa vào kênh Chủ sân">
+            <i class="ri-spy-line text-sm"></i> Giả lập
+          </button>
+          ${u.status === 'active' ? `
+            <button type="button" data-lock="${u.id}" class="${BTN_SM_DANGER}" title="Tạm khóa tài khoản chủ sân">
+              <i class="ri-lock-line"></i> Khóa
+            </button>
+          ` : `
+            <button type="button" data-unlock="${u.id}" class="${BTN_SM}" title="Mở khóa tài khoản chủ sân">
+              <i class="ri-lock-unlock-line"></i> Mở khóa
+            </button>
+          `}
+          <button type="button" data-del="${u.id}" class="${BTN_SM_DANGER} !bg-accent-700 hover:!bg-accent-800" title="Xóa tài khoản chủ sân">
+            <i class="ri-delete-bin-line"></i>
+          </button>
+        ` : ''}
+      </div>`)}
+    </tr>`;
+  }).join(''), 1020) : `<div class="p-4">${emptyState('ri-store-2-line', 'Không tìm thấy chủ sân phù hợp')}</div>`}
+  ${list.length ? `
+    <div class="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-background-200 px-4 py-3 bg-white">
+      <p class="text-xs text-foreground-500">Hiển thị <span class="font-semibold text-foreground-800">${fromIdx} - ${toIdx}</span> trên tổng số <span class="font-semibold text-foreground-800">${total}</span> chủ sân</p>
+      ${totalPages > 1 ? `
+        <div class="flex items-center gap-1">
+          <button type="button" data-ow-page="${f.page - 1}" ${f.page === 1 ? 'disabled' : ''} class="h-8 w-8 inline-flex items-center justify-center rounded border border-background-300 bg-white text-xs font-semibold text-foreground-700 hover:border-primary-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors" title="Trang trước"><i class="ri-arrow-left-s-line text-sm"></i></button>
+          ${Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => `
+            <button type="button" data-ow-page="${n}" class="h-8 min-w-[32px] px-2 inline-flex items-center justify-center rounded border text-xs font-semibold transition-colors ${n === f.page ? 'border-primary-600 bg-primary-50 text-primary-700 font-bold' : 'border-background-300 bg-white text-foreground-700 hover:border-primary-400'}">${n}</button>
+          `).join('')}
+          <button type="button" data-ow-page="${f.page + 1}" ${f.page === totalPages ? 'disabled' : ''} class="h-8 w-8 inline-flex items-center justify-center rounded border border-background-300 bg-white text-xs font-semibold text-foreground-700 hover:border-primary-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors" title="Trang sau"><i class="ri-arrow-right-s-line text-sm"></i></button>
+        </div>
+      ` : ''}
+    </div>
+  ` : ''}
+  </div>`;
+
+  const root = main();
+  const user = (id) => d.owners.find((u) => u.id === Number(id));
+  on(root, 'click', '[data-detail]', (e, el) => showAccountDetailModal(el.dataset.detail));
+  on(root, 'click', '[data-edit]', (e, el) => accountForm(d, user(el.dataset.edit)));
+  on(root, 'click', '[data-impersonate]', (e, el) => triggerImpersonate(el.dataset.impersonate));
+  on(root, 'click', '[data-del]', async (e, el) => {
+    const targetId = Number(el.dataset.del);
+    const u = user(targetId);
+    if (!u) return;
+    const ok = await confirmBox({
+      title: '<span class="flex items-center gap-2 text-accent-700 font-heading"><i class="ri-delete-bin-line text-xl"></i> Xóa tài khoản chủ sân?</span>',
+      message: `Bạn có chắc chắn muốn xóa tài khoản <b>${esc(u.fullName || u.email)}</b> (${esc(u.businessName || 'Chủ sân')})?<br><br><span class="text-xs text-accent-700 font-semibold">Lưu ý: Nếu chủ sân này đang có sân bóng, hệ thống sẽ yêu cầu gỡ sân trước khi xóa.</span>`,
+      confirmText: 'Xóa tài khoản',
+      danger: true
+    });
+    if (!ok) return;
+    run(() => api('admin', 'account_delete', { id: targetId }), 'Đã xóa tài khoản vĩnh viễn.', 'owners');
+  });
+  on(root, 'click', '[data-ow-page]', (e, el) => {
+    const p = Number(el.dataset.owPage);
+    if (p >= 1 && p <= totalPages && p !== f.page) {
+      f.page = p;
+      render();
+    }
+  });
+  on(root, 'click', '[data-ow-status]', (e, el) => { f.status = el.dataset.owStatus; f.page = 1; render(); });
+  on(root, 'click', '[data-or-all]', () => { f.orAll = !f.orAll; render(); });
+  const reviewReq = (id, decision, note) => { delete C.ownerReq; delete C.owners; return run(api('admin', 'owner_request_review', { id, decision, note }), decision === 'approve' ? 'Đã duyệt — tài khoản đã được cấp quyền chủ sân.' : 'Đã từ chối yêu cầu.', 'owners'); };
+  on(root, 'click', '[data-or-approve]', async (e, el) => {
+    const r = reqs.find((x) => x.id === el.dataset.orApprove);
+    if (await confirmBox({ title: 'Duyệt làm chủ sân?', message: `Tài khoản <b>${esc(r.email)}</b> sẽ trở thành chủ sân của "<b>${esc(r.businessName)}</b>" và vào được kênh chủ sân.`, confirmText: 'Duyệt' })) reviewReq(r.id, 'approve', '');
+  });
+  on(root, 'click', '[data-or-reject]', async (e, el) => {
+    const note = await askNote('Từ chối đăng ký chủ sân', 'Lý do (người đăng ký sẽ thấy nội dung này)', { min: 5, confirm: 'Từ chối', danger: true });
+    if (note !== null) reviewReq(el.dataset.orReject, 'reject', note);
+  });
+  root.querySelector('#ow-q').addEventListener('change', (e) => { f.q = e.target.value; f.page = 1; render(); });
+  on(root, 'click', '[data-lock]', async (e, el) => {
+    const u = user(el.dataset.lock);
+    const reason = await askNote(`Tạm khóa ${esc(u.email)}`, 'Lý do khóa (ghi vào nhật ký)', { min: 5, confirm: 'Khóa chủ sân', danger: true });
+    if (reason !== null) {
+      run(() => api('admin', 'account_status', { id: u.id, status: 'suspended', reason }), 'Đã tạm khóa tài khoản.', 'owners');
+    }
+  });
+  on(root, 'click', '[data-unlock]', (e, el) => {
+    run(() => api('admin', 'account_status', { id: Number(el.dataset.unlock), status: 'active' }), 'Đã mở khóa tài khoản.', 'owners');
   });
 }
 
@@ -1027,7 +1203,7 @@ async function renderAudit() {
 }
 
 // =====================================================================
-const RENDER = { overview: renderOverview, accounts: renderAccounts, courts: renderCourts, bookings: renderBookings, invoices: renderInvoices, categories: renderCategories, content: renderContent, moderation: renderModeration, promotions: renderPromotions, audit: renderAudit };
+const RENDER = { overview: renderOverview, accounts: renderAccounts, owners: renderOwners, courts: renderCourts, bookings: renderBookings, invoices: renderInvoices, categories: renderCategories, content: renderContent, moderation: renderModeration, promotions: renderPromotions, audit: renderAudit };
 
 async function render() {
   actions().innerHTML = '';
@@ -1053,6 +1229,7 @@ api('admin', 'overview').then((d) => {
   set('bookings', d.statuses.pending);
   set('moderation', d.totals.openReports + d.totals.pendingReviews);
   set('accounts', d.totals.pendingOwnerRequests);
+  set('owners', d.totals.pendingOwnerRequests);
 }).catch(() => { });
 
 render();

@@ -8,6 +8,7 @@ $access = admin_access();
 $meta = [
     'overview' => ['Tổng quan hệ thống', 'Toàn cảnh tài khoản, sân và đơn đặt sân trên Đặt Sân BMT 24H trong một màn hình.'],
     'accounts' => ['Quản lý tài khoản', 'Tra cứu khách hàng, chủ sân và quản trị viên; đổi vai trò, cấp hoặc thu bộ quyền quản trị và tạm khóa tài khoản vi phạm.'],
+    'owners' => ['Quản lý chủ sân', 'Duyệt yêu cầu đăng ký làm chủ sân, quản lý hồ sơ cơ sở kinh doanh, số lượng sân trực thuộc và doanh thu của từng chủ sân.'],
     'courts' => ['Sân & cơ sở', 'Giám sát mọi sân trên hệ thống, tạm dừng sân chưa đạt tiêu chuẩn hoặc gỡ sân khỏi nền tảng.'],
     'bookings' => ['Đơn đặt sân', 'Theo dõi toàn bộ đơn của khách, duyệt hoặc từ chối các đơn còn chờ xử lý.'],
     'invoices' => ['Hóa đơn & công nợ', 'Đối soát hóa đơn toàn hệ thống: doanh thu, phần đã thu, công nợ và xuất Excel để lưu trữ.'],

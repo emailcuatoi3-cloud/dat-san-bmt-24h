@@ -68,6 +68,17 @@ run_api([
         $status = in_str('status');
         if (!in_array($status, ['confirmed', 'cancelled', 'completed', 'pending'], true)) fail('Trạng thái không hợp lệ.');
         $reason = $status === 'cancelled' ? (mb_substr(in_str('reason'), 0, 250) ?: null) : null;
+
+        if ($status === 'confirmed') {
+            $slots = jd($b['slots']);
+            $occ = occupied_slots($b['booking_date'], $b['id'])[$b['court_id']] ?? [];
+            $blocked = blocked_slots_map($b['booking_date'], [$b['court_id']])[$b['court_id'] . ':' . $b['booking_date']] ?? [];
+            $unavailable = array_intersect($slots, array_merge($occ, $blocked));
+            if (!empty($unavailable)) {
+                fail('Không thể xác nhận đơn vì khung giờ ' . implode(', ', $unavailable) . ' ngày ' . $b['booking_date'] . ' đã bị trùng lịch với đơn khác hoặc đang bị khóa.');
+            }
+        }
+
         q('UPDATE bookings SET status = ?, reject_reason = ? WHERE id = ?', [$status, $reason, $b['id']]);
         return map_booking(q_one(BOOKING_SELECT . ' WHERE b.id = ?', [$b['id']]));
     },
