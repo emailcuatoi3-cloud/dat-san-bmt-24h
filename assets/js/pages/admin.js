@@ -112,6 +112,36 @@ function roleForm(d, role = null) {
   });
 }
 
+function ownerForm(u = null) {
+  const isEdit = Boolean(u);
+  const m = modal(
+    isEdit ? `Sửa thông tin chủ sân: ${esc(u.businessName || u.fullName)}` : 'Thêm tài khoản chủ sân mới',
+    `<form class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div class="sm:col-span-2"><label class="${LABEL}">Tên cơ sở / sân <span class="text-accent-600">*</span></label><input name="businessName" value="${esc(u ? u.businessName : '')}" class="${INPUT}" placeholder="VD: Hưng Sport BMT" required></div>
+      <div><label class="${LABEL}">Họ và tên người đại diện <span class="text-accent-600">*</span></label><input name="fullName" value="${esc(u ? u.fullName : '')}" class="${INPUT}" placeholder="Trần Quốc Hưng" required></div>
+      <div><label class="${LABEL}">Số điện thoại <span class="text-accent-600">*</span></label><input name="phone" type="tel" value="${esc(u ? u.phone : '')}" class="${INPUT}" placeholder="0905123456" required></div>
+      <div class="${isEdit ? 'sm:col-span-2' : ''}"><label class="${LABEL}">Email đăng nhập <span class="text-accent-600">*</span></label><input name="email" type="email" value="${esc(u ? u.email : '')}" class="${INPUT}" placeholder="chusan@bmt24h.vn" required></div>
+      ${!isEdit ? `<div><label class="${LABEL}">Mật khẩu khởi tạo</label><input name="password" type="text" value="123456" class="${INPUT}" placeholder="Mặc định: 123456"></div>` : ''}
+      <div class="sm:col-span-2"><label class="${LABEL}">Địa chỉ liên hệ</label><input name="address" value="${esc(u ? u.address : '')}" class="${INPUT}" placeholder="15 Mai Hắc Đế, Buôn Ma Thuột"></div>
+    </form>`,
+    `<button type="button" data-close class="${BTN_OUT}">Hủy</button><button type="button" data-ok class="${BTN}"><i class="ri-check-line"></i>${isEdit ? 'Cập nhật' : 'Tạo chủ sân'}</button>`,
+    'max-w-xl',
+  );
+  m.el.querySelector('[data-ok]').addEventListener('click', async (e) => {
+    const f = formData(m.el.querySelector('form'));
+    if (!f.businessName || !f.fullName || !f.email) return toast('Vui lòng điền đủ tên cơ sở, người đại diện và email.', 'error');
+    setBusy(e.currentTarget, true, 'Đang lưu...');
+    const action = isEdit ? 'owner_edit' : 'owner_create';
+    const payload = isEdit ? { ...f, id: u.id } : f;
+    delete C.accounts;
+    if (await run(api('admin', action, payload), isEdit ? 'Đã cập nhật chủ sân.' : 'Đã tạo tài khoản chủ sân mới.', 'accounts')) {
+      m.close();
+    } else {
+      setBusy(e.currentTarget, false);
+    }
+  });
+}
+
 /** Khối "Yêu cầu đăng ký chủ sân" ở đầu mục Tài khoản */
 function ownerRequestsBlock(reqs, showAll) {
   const RS = { pending: ['Chờ duyệt', 'bg-accent-100 text-accent-800'], approved: ['Đã duyệt', 'bg-primary-50 text-primary-700'], rejected: ['Từ chối', 'bg-background-200 text-foreground-700'] };
@@ -142,28 +172,32 @@ async function renderAccounts() {
   const list = d.users.filter((u) => f.role === 'all' || u.role === f.role).filter((u) => f.status === 'all' || u.status === f.status).filter((u) => !q || `${u.fullName} ${u.email} ${u.phone} ${u.businessName}`.toLowerCase().includes(q));
   const roleName = (k) => (d.roles.find((r) => r.key === k) || {}).name || 'Toàn quyền (mặc định)';
   const isSuper = PAGE.access.roleKey === 'super_admin';
-  actions().innerHTML = `<button type="button" id="ac-csv" class="${BTN_OUT}"><i class="ri-file-excel-2-line"></i>Xuất danh sách</button>`;
+  actions().innerHTML = `<button type="button" id="owner-add-btn" class="${BTN}"><i class="ri-store-2-line"></i>Thêm chủ sân mới</button><button type="button" id="ac-csv" class="${BTN_OUT}"><i class="ri-file-excel-2-line"></i>Xuất danh sách</button>`;
+  actions().querySelector('#owner-add-btn').onclick = () => ownerForm(null);
   actions().querySelector('#ac-csv').onclick = () => downloadCsv([['Họ tên', 'Email', 'Điện thoại', 'Vai trò', 'Trạng thái', 'Ngày tạo'], ...list.map((u) => [u.fullName, u.email, u.phone, ROLE[u.role], u.status === 'active' ? 'Hoạt động' : 'Tạm khóa', (u.createdAt || '').slice(0, 10)])], `tai-khoan-${TODAY}.csv`);
 
   main().innerHTML = `
   ${ownerRequestsBlock(reqs, f.orAll)}
   <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
     ${statCard('ri-user-line', 'Khách hàng', d.users.filter((u) => u.role === 'customer').length)}
-    ${statCard('ri-store-2-line', 'Chủ sân', d.users.filter((u) => u.role === 'owner').length, '', 'secondary')}
+    ${statCard('ri-store-2-line', 'Chủ sân (QL chủ sân)', d.users.filter((u) => u.role === 'owner').length, '', 'secondary')}
     ${statCard('ri-shield-user-line', 'Quản trị viên', d.users.filter((u) => u.role === 'admin').length, '', 'neutral')}
     ${statCard('ri-lock-line', 'Đang bị khóa', d.users.filter((u) => u.status === 'suspended').length, '', 'accent')}
   </div>
-  <div class="mt-5 mb-3 flex flex-wrap gap-2">${[['all', 'Tất cả'], ...Object.entries(ROLE)].map(([k, l]) => `<button type="button" data-role-f="${k}" class="${chip(f.role === k)}">${l}</button>`).join('')}<span class="mx-1 w-px bg-background-300"></span>${[['all', 'Mọi trạng thái'], ['active', 'Hoạt động'], ['suspended', 'Tạm khóa']].map(([k, l]) => `<button type="button" data-status-f="${k}" class="${chip(f.status === k)}">${l}</button>`).join('')}</div>
+  <div class="mt-5 mb-3 flex flex-wrap gap-2">${[['all', 'Tất cả'], ['owner', 'Chủ sân (QL chủ sân)'], ['customer', 'Khách hàng'], ['admin', 'Quản trị viên']].map(([k, l]) => `<button type="button" data-role-f="${k}" class="${chip(f.role === k)}">${l}</button>`).join('')}<span class="mx-1 w-px bg-background-300"></span>${[['all', 'Mọi trạng thái'], ['active', 'Hoạt động'], ['suspended', 'Tạm khóa / Ẩn']].map(([k, l]) => `<button type="button" data-status-f="${k}" class="${chip(f.status === k)}">${l}</button>`).join('')}</div>
   <div class="mb-4">${search('ac-q', f.q, 'Tìm theo tên, email, số điện thoại, tên cơ sở...')}</div>
   <div class="${CARD} overflow-hidden">${list.length ? table(['Tài khoản', 'Vai trò', 'Bộ quyền quản trị', 'Hoạt động', 'Trạng thái', '>Thao tác'], list.map((u) => {
     const me = u.id === d.me;
     return `<tr class="${u.status === 'suspended' ? 'bg-accent-50/40' : ''}">
-      ${td(`<p class="font-semibold">${esc(u.fullName || '—')} ${me ? '<span class="rounded bg-primary-50 px-1.5 text-[10px] text-primary-700">Bạn</span>' : ''}</p><p class="text-xs text-foreground-500">${esc(u.email)}${u.phone ? ' · ' + esc(u.phone) : ''}</p>${u.businessName && u.role === 'owner' ? `<p class="text-xs text-secondary-700">${esc(u.businessName)}</p>` : ''}`)}
+      ${td(`<p class="font-semibold">${esc(u.fullName || '—')} ${me ? '<span class="rounded bg-primary-50 px-1.5 text-[10px] text-primary-700">Bạn</span>' : ''}</p><p class="text-xs text-foreground-500">${esc(u.email)}${u.phone ? ' · ' + esc(u.phone) : ''}</p>${u.businessName && u.role === 'owner' ? `<p class="text-xs text-secondary-700 font-medium"><i class="ri-store-2-line"></i> ${esc(u.businessName)}</p>` : ''}`)}
       ${td(`<select data-role="${u.id}" ${me ? 'disabled' : ''} class="rounded-md border border-background-300 bg-white px-2 py-1.5 text-xs font-semibold">${Object.entries(ROLE).map(([k, l]) => `<option value="${k}" ${u.role === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`)}
       ${td(u.role === 'admin' ? `<select data-arole="${u.id}" class="max-w-[180px] rounded-md border border-background-300 bg-white px-2 py-1.5 text-xs">${`<option value="">Toàn quyền (mặc định)</option>`}${d.roles.map((r) => `<option value="${r.key}" ${u.adminRole === r.key ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select>` : '<span class="text-xs text-foreground-400">—</span>')}
       ${td(`<span class="text-xs text-foreground-600">${u.role === 'owner' ? `${u.courtCount} sân` : `${u.bookingCount} đơn`}<br>Từ ${dateText((u.createdAt || '').slice(0, 10))}</span>`)}
-      ${td(u.status === 'active' ? '<span class="rounded-full bg-primary-50 px-2 py-1 text-[11px] font-semibold text-primary-700">Hoạt động</span>' : '<span class="rounded-full bg-accent-100 px-2 py-1 text-[11px] font-semibold text-accent-800">Tạm khóa</span>')}
-      ${td(me ? '' : `<div class="flex justify-end">${u.status === 'active' ? `<button type="button" data-lock="${u.id}" class="${BTN_SM_DANGER}"><i class="ri-lock-line"></i>Khóa</button>` : `<button type="button" data-unlock="${u.id}" class="${BTN_SM}"><i class="ri-lock-unlock-line"></i>Mở khóa</button>`}</div>`)}
+      ${td(u.status === 'active' ? '<span class="rounded-full bg-primary-50 px-2 py-1 text-[11px] font-semibold text-primary-700">Hoạt động</span>' : '<span class="rounded-full bg-accent-100 px-2 py-1 text-[11px] font-semibold text-accent-800">Tạm khóa / Ẩn</span>')}
+      ${td(me ? '' : `<div class="flex items-center justify-end gap-1.5">
+        ${u.role === 'owner' ? `<button type="button" data-owner-edit="${u.id}" class="${BTN_SM}"><i class="ri-edit-line"></i>Sửa</button>` : ''}
+        ${u.status === 'active' ? `<button type="button" data-lock="${u.id}" class="${BTN_SM_DANGER}" title="Tạm khóa / Ẩn chủ sân"><i class="ri-lock-line"></i>${u.role === 'owner' ? 'Ẩn / Khóa' : 'Khóa'}</button>` : `<button type="button" data-unlock="${u.id}" class="${BTN_SM}"><i class="ri-lock-unlock-line"></i>Mở khóa</button>`}
+      </div>`)}
     </tr>`;
   }).join(''), 900) : `<div class="p-4">${emptyState('ri-user-search-line', 'Không tìm thấy tài khoản')}</div>`}</div>
   <section class="${CARD} mt-6">${sectionTitle('Bộ quyền quản trị', isSuper ? `<button type="button" data-role-new class="${BTN_SM_PRI}"><i class="ri-add-line"></i>Tạo bộ quyền</button>` : '<span class="text-xs text-foreground-500">Chỉ Quản trị cấp cao được chỉnh</span>')}
@@ -202,6 +236,7 @@ async function renderAccounts() {
     if (reason !== null) run(api('admin', 'account_status', { id: u.id, status: 'suspended', reason }), 'Đã tạm khóa tài khoản.', 'accounts');
   });
   on(root, 'click', '[data-unlock]', (e, el) => run(api('admin', 'account_status', { id: Number(el.dataset.unlock), status: 'active' }), 'Đã mở khóa tài khoản.', 'accounts'));
+  on(root, 'click', '[data-owner-edit]', (e, el) => ownerForm(user(el.dataset.ownerEdit)));
   on(root, 'click', '[data-role-new]', () => roleForm(d));
   on(root, 'click', '[data-role-edit]', (e, el) => roleForm(d, d.roles.find((r) => r.key === el.dataset.roleEdit)));
   on(root, 'click', '[data-role-del]', async (e, el) => {
@@ -340,18 +375,45 @@ function categoryForm(c = null, kind = 'sport') {
 
 async function renderCategories() {
   const list = await get('categories', 'categories');
-  actions().innerHTML = `<button type="button" id="cat-add" class="${BTN}"><i class="ri-add-line"></i>Thêm danh mục</button>`;
-  actions().querySelector('#cat-add').onclick = () => categoryForm();
-  const col = (kind, title) => `<section class="${CARD}">${sectionTitle(title, `<button type="button" data-add="${kind}" class="${BTN_SM}"><i class="ri-add-line"></i>Thêm</button>`)}<ul class="divide-y divide-background-200">${list.filter((c) => c.kind === kind).map((c) => `<li class="flex items-center gap-3 px-4 py-3 ${c.active ? '' : 'opacity-60'}"><span class="flex h-9 w-9 items-center justify-center rounded-md bg-primary-50 text-primary-600"><i class="${esc(c.icon)}"></i></span><div class="min-w-0 flex-1"><p class="text-sm font-semibold">${esc(c.name)} ${c.active ? '' : '<span class="text-[10px] text-foreground-500">(ẩn)</span>'}</p><p class="truncate text-xs text-foreground-500">${esc(c.description || c.slug)} · ${c.courtCount} sân</p></div><button type="button" data-edit="${c.id}" class="${BTN_SM}"><i class="ri-edit-line"></i></button><button type="button" data-del="${c.id}" class="${BTN_SM_DANGER}"><i class="ri-delete-bin-line"></i></button></li>`).join('') || '<li class="px-4 py-5 text-sm text-foreground-500">Chưa có danh mục.</li>'}</ul></section>`;
+  const isSuper = PAGE.access.roleKey === 'super_admin';
+  actions().innerHTML = isSuper ? `<button type="button" id="cat-add" class="${BTN}"><i class="ri-add-line"></i>Thêm danh mục</button>` : '';
+  if (isSuper && actions().querySelector('#cat-add')) actions().querySelector('#cat-add').onclick = () => categoryForm();
+
+  const col = (kind, title) => `<section class="${CARD}">
+    ${sectionTitle(title, isSuper ? `<button type="button" data-add="${kind}" class="${BTN_SM}"><i class="ri-add-line"></i>Thêm</button>` : '<span class="text-xs font-medium text-foreground-400">Chỉ xem (NV)</span>')}
+    <ul class="divide-y divide-background-200">${list.filter((c) => c.kind === kind).map((c) => `
+      <li class="flex items-center gap-3 px-4 py-3 ${c.active ? '' : 'opacity-60'}">
+        <span class="flex h-9 w-9 items-center justify-center rounded-md bg-primary-50 text-primary-600"><i class="${esc(c.icon)}"></i></span>
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-semibold">${esc(c.name)} ${c.active ? '' : '<span class="rounded bg-accent-50 px-1.5 py-0.5 text-[10px] font-semibold text-accent-700">(Đã ẩn)</span>'}</p>
+          <p class="truncate text-xs text-foreground-500">${esc(c.description || c.slug)} · ${c.courtCount} sân</p>
+        </div>
+        ${isSuper ? `
+          <div class="flex items-center gap-1">
+            <button type="button" data-toggle="${c.id}" class="${BTN_SM}" title="${c.active ? 'Ẩn danh mục' : 'Hiện danh mục'}">
+              <i class="${c.active ? 'ri-eye-off-line' : 'ri-eye-line'}"></i>${c.active ? 'Ẩn' : 'Hiện'}
+            </button>
+            <button type="button" data-edit="${c.id}" class="${BTN_SM}" title="Sửa danh mục"><i class="ri-edit-line"></i>Sửa</button>
+            <button type="button" data-del="${c.id}" class="${BTN_SM_DANGER}" title="Xóa danh mục"><i class="ri-delete-bin-line"></i></button>
+          </div>
+        ` : '<span class="text-xs text-foreground-400">Chỉ xem</span>'}
+      </li>`).join('') || '<li class="px-4 py-5 text-sm text-foreground-500">Chưa có danh mục.</li>'}</ul></section>`;
+
   main().innerHTML = `<div class="grid grid-cols-1 gap-5 lg:grid-cols-2">${col('sport', 'Môn thể thao')}${col('area', 'Khu vực')}</div>`;
   const root = main();
-  on(root, 'click', '[data-add]', (e, el) => categoryForm(null, el.dataset.add));
-  on(root, 'click', '[data-edit]', (e, el) => categoryForm(list.find((c) => c.id === el.dataset.edit)));
-  on(root, 'click', '[data-del]', async (e, el) => {
-    const c = list.find((x) => x.id === el.dataset.del);
-    if (await confirmBox({ title: `Xóa danh mục "${esc(c.name)}"?`, message: c.courtCount ? `Đang có ${c.courtCount} sân dùng danh mục này — sân vẫn giữ nguyên, chỉ bộ lọc bị mất.` : 'Danh mục sẽ bị xóa khỏi bộ lọc tìm sân.', confirmText: 'Xóa', danger: true }))
-      run(api('admin', 'category_delete', { id: c.id }), 'Đã xóa danh mục.', 'categories');
-  });
+  if (isSuper) {
+    on(root, 'click', '[data-add]', (e, el) => categoryForm(null, el.dataset.add));
+    on(root, 'click', '[data-edit]', (e, el) => categoryForm(list.find((c) => c.id === el.dataset.edit)));
+    on(root, 'click', '[data-toggle]', (e, el) => {
+      const c = list.find((x) => x.id === el.dataset.toggle);
+      run(api('admin', 'category_toggle', { id: c.id }), c.active ? 'Đã ẩn danh mục.' : 'Đã hiển thị danh mục.', 'categories');
+    });
+    on(root, 'click', '[data-del]', async (e, el) => {
+      const c = list.find((x) => x.id === el.dataset.del);
+      if (await confirmBox({ title: `Xóa danh mục "${esc(c.name)}"?`, message: c.courtCount ? `Đang có ${c.courtCount} sân dùng danh mục này — sân vẫn giữ nguyên, chỉ bộ lọc bị mất.` : 'Danh mục sẽ bị xóa khỏi bộ lọc tìm sân.', confirmText: 'Xóa', danger: true }))
+        run(api('admin', 'category_delete', { id: c.id }), 'Đã xóa danh mục.', 'categories');
+    });
+  }
 }
 
 // =====================================================================

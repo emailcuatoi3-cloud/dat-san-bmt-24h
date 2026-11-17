@@ -120,6 +120,7 @@ function booking_payment_label(array $r): string
         case 'unpaid': return 'VietQR – chờ cọc ' . money($dep);
         case 'paid': return 'VietQR – đã thu đủ ' . money($total);
         case 'deposit_paid': return 'VietQR – đã nhận cọc ' . money($dep);
+        case 'refunded': return 'Đã hoàn cọc ' . money($dep ?: $total);
         default: return $dep > 0 ? 'VietQR – đã báo cọc ' . money($dep) : 'Thanh toán tại sân';
     }
 }

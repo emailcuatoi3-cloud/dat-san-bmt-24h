@@ -189,6 +189,53 @@ run_api([
         return true;
     },
 
+    'owner_create' => function () {
+        need('accounts');
+        $name = in_str('fullName');
+        $business = in_str('businessName');
+        $email = strtolower(in_str('email'));
+        $phone = preg_replace('/[^\d+]/', '', in_str('phone'));
+        $address = in_str('address');
+        $password = in_str('password') ?: '123456';
+        if (mb_strlen($name) < 2) fail('Vui lòng nhập họ tên chủ sân.');
+        if (mb_strlen($business) < 2) fail('Vui lòng nhập tên cơ sở / sân.');
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) fail('Email không hợp lệ.');
+        if (q_val('SELECT id FROM users WHERE email = ?', [$email])) fail('Email này đã được sử dụng.');
+        if (strlen($password) < 6) fail('Mật khẩu tối thiểu 6 ký tự.');
+
+        $hash = password_hash($password, PASSWORD_BCRYPT);
+        q('INSERT INTO users (email, password_hash, full_name, phone, address, role, business_name, status) VALUES (?,?,?,?,?,?,?,?)',
+            [$email, $hash, $name, $phone, $address, 'owner', $business, 'active']);
+        $newId = (int) db()->lastInsertId();
+        audit('accounts', 'Thêm chủ sân mới', $business . ' · ' . $email, 'Admin tạo trực tiếp', 'success');
+        return true;
+    },
+
+    'owner_edit' => function () {
+        need('accounts');
+        $id = in_int('id');
+        $u = q_one("SELECT * FROM users WHERE id = ? AND role = 'owner'", [$id]) ?: fail('Không tìm thấy chủ sân.');
+        $name = in_str('fullName');
+        $business = in_str('businessName');
+        $phone = preg_replace('/[^\d+]/', '', in_str('phone'));
+        $address = in_str('address');
+        if (mb_strlen($name) < 2) fail('Vui lòng nhập họ tên chủ sân.');
+        if (mb_strlen($business) < 2) fail('Vui lòng nhập tên cơ sở / sân.');
+        
+        $email = strtolower(in_str('email'));
+        if ($email && $email !== $u['email']) {
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) fail('Email không hợp lệ.');
+            if (q_val('SELECT id FROM users WHERE email = ? AND id != ?', [$email, $id])) fail('Email này đã được sử dụng.');
+        } else {
+            $email = $u['email'];
+        }
+
+        q('UPDATE users SET full_name = ?, business_name = ?, phone = ?, address = ?, email = ? WHERE id = ?',
+            [$name, $business, $phone, $address, $email, $id]);
+        audit('accounts', 'Sửa thông tin chủ sân', $business . ' · ' . $email, 'Cập nhật thông tin cơ sở', 'info');
+        return true;
+    },
+
     // ---------------- Sân ----------------
     'courts' => function () {
         need('courts');
@@ -288,6 +335,7 @@ run_api([
 
     'category_save' => function () {
         need('categories');
+        if (admin_access()['roleKey'] !== 'super_admin') fail('Chỉ Quản trị hệ thống mới có quyền thêm/sửa danh mục. Nhân viên chỉ có quyền xem.');
         $name = in_str('name');
         if (mb_strlen($name) < 2) fail('Vui lòng nhập tên danh mục.');
         $kind = in_str('kind') === 'area' ? 'area' : 'sport';
@@ -302,8 +350,19 @@ run_api([
         return true;
     },
 
+    'category_toggle' => function () {
+        need('categories');
+        if (admin_access()['roleKey'] !== 'super_admin') fail('Chỉ Quản trị hệ thống mới có quyền ẩn/hiện danh mục. Nhân viên chỉ có quyền xem.');
+        $c = q_one('SELECT * FROM categories WHERE id = ?', [in_str('id')]) ?: fail('Không tìm thấy danh mục.');
+        $newActive = $c['active'] ? 0 : 1;
+        q('UPDATE categories SET active = ? WHERE id = ?', [$newActive, $c['id']]);
+        audit('categories', $newActive ? 'Hiện danh mục' : 'Ẩn danh mục', $c['name'], '', $newActive ? 'success' : 'warning');
+        return true;
+    },
+
     'category_delete' => function () {
         need('categories');
+        if (admin_access()['roleKey'] !== 'super_admin') fail('Chỉ Quản trị hệ thống mới có quyền xóa danh mục. Nhân viên chỉ có quyền xem.');
         $c = q_one('SELECT * FROM categories WHERE id = ?', [in_str('id')]) ?: fail('Không tìm thấy danh mục.');
         q('DELETE FROM categories WHERE id = ?', [$c['id']]);
         audit('categories', 'Xóa danh mục', $c['name'], '', 'danger');
