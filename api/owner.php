@@ -70,7 +70,11 @@ run_api([
         $status = in_str('status');
         if (!in_array($status, ['confirmed', 'cancelled', 'completed', 'pending'], true)) fail('Trạng thái không hợp lệ.');
         $reason = $status === 'cancelled' ? (mb_substr(in_str('reason'), 0, 250) ?: null) : null;
+<<<<<<< HEAD
+
+=======
         $now = date('Y-m-d H:i:s');
+>>>>>>> origin/an
         if ($status === 'confirmed') {
             $slots = jd($b['slots']);
             $occ = occupied_slots($b['booking_date'], $b['id'])[$b['court_id']] ?? [];
@@ -79,6 +83,11 @@ run_api([
             if (!empty($unavailable)) {
                 fail('Không thể xác nhận đơn vì khung giờ ' . implode(', ', $unavailable) . ' ngày ' . $b['booking_date'] . ' đã bị trùng lịch với đơn khác hoặc đang bị khóa.');
             }
+<<<<<<< HEAD
+        }
+
+        q('UPDATE bookings SET status = ?, reject_reason = ? WHERE id = ?', [$status, $reason, $b['id']]);
+=======
             if ($b['source'] === 'online' && (int)$b['deposit_amount'] > 0 && $b['payment_status'] === 'unpaid') {
                 // Khách đặt online chưa cọc: chủ sân duyệt đơn -> cấp 5 phút để khách chuyển cọc
                 $holdExp = date('Y-m-d H:i:s', time() + HOLD_MINUTES * 60);
@@ -124,6 +133,7 @@ run_api([
         q('UPDATE bookings SET booking_date = ?, start_slot = ?, duration_minutes = ?, slots = ?, total_price = ?, note = ? WHERE id = ?',
             [$newDate, $slots[0], count($slots) * 60, j($slots), $total, $note, $b['id']]);
 
+>>>>>>> origin/an
         return map_booking(q_one(BOOKING_SELECT . ' WHERE b.id = ?', [$b['id']]));
     },
 

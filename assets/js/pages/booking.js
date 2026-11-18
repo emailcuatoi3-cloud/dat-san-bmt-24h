@@ -2,7 +2,11 @@
  * Module: Controller luồng Đặt sân 3 bước (Mã Minh Hoan - PK04409)
  * - Quản lý state đặt sân, tải slot bận theo ngày và vẽ lưới giờ kèm giá động
  * - Validate form thông tin, kiểm tra điều kiện voucher và tính tổng tiền real-time
+<<<<<<< HEAD
+ * - Điều khiển đồng hồ giữ chỗ 10 phút, đối soát thanh toán VietQR và render vé QR
+=======
  * - Điều khiển luồng duyệt đơn & đồng hồ giữ chỗ 5 phút, đối soát thanh toán VietQR và render vé QR
+>>>>>>> origin/an
  */
 
 import { $, $$, PAGE, APP, api, esc, url, cx, formatVnd, copyText } from '../core/ui.js';

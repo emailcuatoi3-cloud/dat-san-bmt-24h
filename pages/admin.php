@@ -48,7 +48,11 @@ render_page([
   <div id="owner-overlay" class="fixed inset-0 z-40 hidden bg-black/40 lg:hidden"></div>
   <aside id="owner-sidebar" class="fixed inset-y-0 left-0 z-50 flex w-[264px] -translate-x-full flex-col border-r border-background-200 bg-white transition-transform lg:translate-x-0">
     <a href="<?= url('/') ?>" class="flex h-16 shrink-0 items-center gap-2.5 border-b border-background-200 px-5">
+<<<<<<< HEAD
+      <img src="<?= site_logo() ?>" alt="Logo Đặt Sân BMT 24H" class="h-9 w-9 object-contain">
+=======
       <img src="<?= site_logo() ?>" alt="Logo Đặt Sân BMT 24H" class="h-9 w-9 rounded-md object-contain">
+>>>>>>> origin/an
       <span class="leading-tight"><span class="block font-heading text-sm font-extrabold text-foreground-950">Đặt Sân BMT 24H</span><span class="block text-[11px] font-medium text-foreground-500">Trang quản trị</span></span>
     </a>
     <nav class="flex-1 overflow-y-auto px-3 py-4" aria-label="Điều hướng quản trị">

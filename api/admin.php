@@ -622,7 +622,10 @@ run_api([
         $status = in_str('status');
         if (!in_array($status, ['confirmed', 'cancelled'], true)) fail('Trạng thái không hợp lệ.');
         $reason = $status === 'cancelled' ? (in_str('reason') ?: 'Quản trị viên từ chối đơn') : null;
+<<<<<<< HEAD
+=======
         $now = date('Y-m-d H:i:s');
+>>>>>>> origin/an
 
         if ($status === 'confirmed') {
             $slots = jd($b['slots']);
@@ -632,6 +635,12 @@ run_api([
             if (!empty($unavailable)) {
                 fail('Không thể duyệt đơn vì khung giờ ' . implode(', ', $unavailable) . ' ngày ' . $b['booking_date'] . ' đã bị trùng lịch với đơn khác hoặc đang bị khóa.');
             }
+<<<<<<< HEAD
+        }
+
+        q('UPDATE bookings SET status = ?, reject_reason = ? WHERE id = ?', [$status, $reason, $b['id']]);
+        approve_deposit($b, $status);
+=======
             if ($b['source'] === 'online' && (int) $b['deposit_amount'] > 0 && $b['payment_status'] === 'unpaid') {
                 $holdExp = date('Y-m-d H:i:s', time() + HOLD_MINUTES * 60);
                 q('UPDATE bookings SET approved_at = ?, hold_expires_at = ?, status = ?, reject_reason = NULL WHERE id = ?', [$now, $holdExp, 'confirmed', $b['id']]);
@@ -643,6 +652,7 @@ run_api([
             q('UPDATE bookings SET status = ?, reject_reason = ? WHERE id = ?', [$status, $reason, $b['id']]);
             approve_deposit($b, $status);
         }
+>>>>>>> origin/an
         audit('bookings', $status === 'confirmed' ? 'Duyệt đơn đặt sân' : 'Từ chối đơn đặt sân', $b['code'] . ' · ' . $b['court_name'], (string) $reason, $status === 'confirmed' ? 'success' : 'warning');
         return map_booking(q_one(BOOKING_SELECT . ' WHERE b.id = ?', [$b['id']]));
     },
