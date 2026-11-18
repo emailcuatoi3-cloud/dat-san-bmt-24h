@@ -1,4 +1,10 @@
 <?php
+/*
+ * Module: API Quản lý Tài khoản & Đơn hàng (Mã Minh Hoan - PK04409)
+ * - Phân quyền truy xuất đơn theo tài khoản đăng nhập hoặc mã vé trên thiết bị
+ * - Xử lý tra cứu đơn, hủy đơn (ràng buộc mốc 4 giờ), xuất hóa đơn, lưu sân yêu thích
+ * - Cập nhật thông tin hồ sơ cá nhân và đổi mật khẩu bảo mật
+ */
 /**
  * API tài khoản khách hàng: đơn của tôi, tra cứu đơn, hủy đơn, hóa đơn, sân yêu thích, hồ sơ, đổi mật khẩu.
  * Khách vãng lai vẫn xem được đơn qua danh sách mã vé lưu trên thiết bị (localStorage).
@@ -86,6 +92,7 @@ run_api([
     },
 
     'update_profile' => function () {
+        if (impersonating_admin()) fail('Đang trong chế độ Ghost Login: Không thể sửa đổi thông tin của người dùng.');
         $u = api_require_login();
         $name = in_str('name');
         $phone = preg_replace('/[^\d+]/', '', in_str('phone'));
@@ -108,6 +115,7 @@ run_api([
     },
 
     'change_password' => function () {
+        if (impersonating_admin()) fail('Đang trong chế độ Ghost Login: Không thể thay đổi mật khẩu của người dùng.');
         $u = api_require_login();
         $hash = q_val('SELECT password_hash FROM users WHERE id = ?', [$u['id']]);
         if (!password_verify((string) (input()['current'] ?? ''), $hash)) fail('Mật khẩu hiện tại chưa đúng.');

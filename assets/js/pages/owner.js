@@ -1,10 +1,10 @@
 /**
  * KÊNH CHỦ SÂN — điểm vào: tải dữ liệu, vẽ tab đang mở, menu di động, nút "Tạo đơn tại quầy".
  */
-import { errorBlock, loadingBlock } from '../core/ui.js?v=20261116-02';
-import { PAGE, main, loadData } from './owner-shared.js?v=20261116-02';
-import { renderOverview, renderBookings, renderInvoices, renderCourts, renderSchedule, renderReviews, openCounterBooking, resetInvoices } from './owner-ops.js?v=20261116-02';
-import { renderReports, renderCustomers, renderServices, renderPromotions, renderDeposits } from './owner-biz.js?v=20261116-02';
+import { errorBlock, loadingBlock } from '../core/ui.js';
+import { PAGE, main, loadData } from './owner-shared.js';
+import { renderOverview, renderBookings, renderInvoices, renderCourts, renderSchedule, renderReviews, openCounterBooking, resetInvoices } from './owner-ops.js';
+import { renderReports, renderCustomers, renderServices, renderPromotions, renderDeposits } from './owner-biz.js';
 
 const RENDER = {
   overview: renderOverview,

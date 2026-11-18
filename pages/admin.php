@@ -8,6 +8,7 @@ $access = admin_access();
 $meta = [
     'overview' => ['Tổng quan hệ thống', 'Toàn cảnh tài khoản, sân và đơn đặt sân trên Đặt Sân BMT 24H trong một màn hình.'],
     'accounts' => ['Quản lý tài khoản', 'Tra cứu khách hàng, chủ sân và quản trị viên; đổi vai trò, cấp hoặc thu bộ quyền quản trị và tạm khóa tài khoản vi phạm.'],
+    'owners' => ['Quản lý chủ sân', 'Duyệt yêu cầu đăng ký làm chủ sân, quản lý hồ sơ cơ sở kinh doanh, số lượng sân trực thuộc và doanh thu của từng chủ sân.'],
     'courts' => ['Sân & cơ sở', 'Giám sát mọi sân trên hệ thống, tạm dừng sân chưa đạt tiêu chuẩn hoặc gỡ sân khỏi nền tảng.'],
     'bookings' => ['Đơn đặt sân', 'Theo dõi toàn bộ đơn của khách, duyệt hoặc từ chối các đơn còn chờ xử lý.'],
     'invoices' => ['Hóa đơn & công nợ', 'Đối soát hóa đơn toàn hệ thống: doanh thu, phần đã thu, công nợ và xuất Excel để lưu trữ.'],
@@ -35,7 +36,7 @@ render_page([
   <div id="owner-overlay" class="fixed inset-0 z-40 hidden bg-black/40 lg:hidden"></div>
   <aside id="owner-sidebar" class="fixed inset-y-0 left-0 z-50 flex w-[264px] -translate-x-full flex-col border-r border-background-200 bg-white transition-transform lg:translate-x-0">
     <a href="<?= url('/') ?>" class="flex h-16 shrink-0 items-center gap-2.5 border-b border-background-200 px-5">
-      <span class="flex h-9 w-9 items-center justify-center rounded-md bg-secondary-700 text-white"><i class="ri-shield-star-fill text-lg" aria-hidden="true"></i></span>
+      <img src="<?= site_logo() ?>" alt="Logo Đặt Sân BMT 24H" class="h-9 w-9 rounded-md object-contain">
       <span class="leading-tight"><span class="block font-heading text-sm font-extrabold text-foreground-950">Đặt Sân BMT 24H</span><span class="block text-[11px] font-medium text-foreground-500">Trang quản trị</span></span>
     </a>
     <nav class="flex-1 overflow-y-auto px-3 py-4" aria-label="Điều hướng quản trị">
@@ -57,7 +58,7 @@ render_page([
   </aside>
 
   <div class="lg:ml-[264px]">
-    <header class="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-background-200 bg-background-100/95 px-4 backdrop-blur md:px-6">
+    <header class="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-background-200 bg-white/95 px-4 backdrop-blur md:px-6">
       <div class="flex min-w-0 items-center gap-3">
         <button type="button" id="owner-menu-btn" class="flex h-9 w-9 items-center justify-center rounded-md border border-background-300 text-foreground-700 lg:hidden" aria-label="Mở menu"><i class="ri-menu-line text-lg" aria-hidden="true"></i></button>
         <div class="min-w-0">

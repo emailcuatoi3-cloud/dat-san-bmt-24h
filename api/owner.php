@@ -32,6 +32,7 @@ function my_booking(string $id): array
 
 function my_bookings(): array
 {
+    auto_cancel_expired_holds();
     auto_complete_bookings();
     $ids = my_court_ids();
     if (!$ids) return [];
@@ -71,6 +72,13 @@ run_api([
         $reason = $status === 'cancelled' ? (mb_substr(in_str('reason'), 0, 250) ?: null) : null;
         $now = date('Y-m-d H:i:s');
         if ($status === 'confirmed') {
+            $slots = jd($b['slots']);
+            $occ = occupied_slots($b['booking_date'], $b['id'])[$b['court_id']] ?? [];
+            $blocked = blocked_slots_map($b['booking_date'], [$b['court_id']])[$b['court_id'] . ':' . $b['booking_date']] ?? [];
+            $unavailable = array_intersect($slots, array_merge($occ, $blocked));
+            if (!empty($unavailable)) {
+                fail('Không thể xác nhận đơn vì khung giờ ' . implode(', ', $unavailable) . ' ngày ' . $b['booking_date'] . ' đã bị trùng lịch với đơn khác hoặc đang bị khóa.');
+            }
             if ($b['source'] === 'online' && (int)$b['deposit_amount'] > 0 && $b['payment_status'] === 'unpaid') {
                 // Khách đặt online chưa cọc: chủ sân duyệt đơn -> cấp 5 phút để khách chuyển cọc
                 $holdExp = date('Y-m-d H:i:s', time() + HOLD_MINUTES * 60);

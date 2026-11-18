@@ -51,6 +51,11 @@ if ($path === '/dang-xuat') {
     redirect('/');
 }
 
+if ($path === '/thoat-gia-lap') {
+    stop_impersonating();
+    redirect('/quan-tri?tab=accounts');
+}
+
 $page = 'not-found';
 foreach ($routes as $pattern => $name) {
     if (preg_match($pattern, $path, $m)) {

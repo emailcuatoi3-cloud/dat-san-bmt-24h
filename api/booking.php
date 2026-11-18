@@ -1,4 +1,10 @@
 <?php
+/*
+ * Module: API Xử lý nghiệp vụ Đặt sân (Mã Minh Hoan - PK04409)
+ * - Kiểm tra lịch trống (availability), gợi ý sân tối nay và xác thực mã khuyến mãi
+ * - Tính giá theo khung giờ, tạo đơn giữ chỗ 10 phút, chuyển chế độ cọc 30%/100%
+ * - Ghi nhận báo chuyển khoản, đối soát tự động cấp vé và hủy giữ chỗ hết hạn
+ */
 /**
  * API đặt sân của khách: lịch trống, kiểm tra mã giảm giá, giữ sân, báo cọc, tự xác nhận cọc, xem vé.
  * Giá tiền luôn được TÍNH LẠI ở máy chủ, không tin số tiền trình duyệt gửi lên.

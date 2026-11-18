@@ -1,7 +1,7 @@
 /**
  * Kênh chủ sân — nhóm VẬN HÀNH: tổng quan, đơn đặt sân, sân của tôi, lịch & khung giờ, đánh giá, hóa đơn.
  */
-import { api, esc, toast, confirmBox, setBusy, formData, on, statusBadge, emptyState, loadingBlock, errorBlock, formatDateTime } from '../core/ui.js?v=20261116-02';
+import { api, esc, toast, confirmBox, setBusy, formData, on, statusBadge, emptyState, loadingBlock, errorBlock, formatDateTime } from '../core/ui.js';
 import { openInvoiceModal, invoiceBadge, filterByDate, exportInvoices } from '../core/invoice.js';
 import { detectBookingConflicts, collectConflictIds } from '../lib/bookingConflicts.js';
 import { parseTicketPayload } from '../lib/checkin.js';
@@ -9,7 +9,7 @@ import { TIME_OPTIONS, WEEKDAY_KEYS, WEEKDAY_LABELS, normalizeWeeklyHours, weekd
 import {
   S, PAGE, TODAY, main, actions, loadData, refreshBadges, BTN, BTN_OUT, BTN_SM, BTN_SM_PRI, BTN_SM_DANGER, INPUT, LABEL, CARD,
   chip, statCard, sectionTitle, modal, slotText, dateText, longDate, money, isActive, courtById, addDays, sourceBadge, courtOptions,
-} from './owner-shared.js?v=20261116-02';
+} from './owner-shared.js';
 
 const rerender = () => window.__ownerRender && window.__ownerRender();
 

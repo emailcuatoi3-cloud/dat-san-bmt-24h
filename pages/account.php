@@ -1,4 +1,9 @@
 <?php
+/*
+ * Module: Giao diện Tài khoản khách hàng (Mã Minh Hoan - PK04409)
+ * - Quản lý 6 phân khu: Tổng quan, Đơn sắp tới, Lịch sử đặt, Hóa đơn, Sân yêu thích, Hồ sơ
+ * - Hỗ trợ tra cứu đơn nhanh qua mã vé + SĐT dành cho khách vãng lai
+ */
 /**
  * TÀI KHOẢN CỦA TÔI — /tai-khoan?tab=overview|upcoming|history|invoices|favorites|profile
  * Đã đăng nhập: lấy đơn theo tài khoản + số điện thoại. Khách vãng lai: theo mã vé lưu trên thiết bị.

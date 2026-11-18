@@ -167,7 +167,7 @@ render_page([
 
     <?php if ($court['status'] !== 'maintenance'): ?>
     <!-- Thanh đặt sân cố định ở đáy màn hình (chỉ điện thoại / tablet) -->
-    <div id="mobile-book-bar" class="fixed inset-x-0 bottom-0 z-40 flex items-center justify-between gap-3 border-t border-background-200 bg-background-100/95 px-4 py-3 backdrop-blur lg:hidden">
+    <div id="mobile-book-bar" class="fixed inset-x-0 bottom-0 z-40 flex items-center justify-between gap-3 border-t border-background-200 bg-white/95 px-4 py-3 backdrop-blur lg:hidden">
       <div class="min-w-0"><p class="text-[11px] text-foreground-500">Giá thuê từ</p><p class="font-heading text-lg font-extrabold leading-tight text-primary-600"><?= money($lowest) ?><span class="text-xs font-medium text-foreground-500">/giờ</span></p></div>
       <a href="<?= url('/dat-san/' . $court['slug']) ?>" class="inline-flex shrink-0 items-center gap-2 rounded-md bg-primary-500 px-5 py-3 text-sm font-bold text-white hover:bg-primary-600"><i class="ri-calendar-check-line" aria-hidden="true"></i>Đặt sân ngay</a>
     </div>

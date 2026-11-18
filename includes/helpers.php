@@ -37,6 +37,12 @@ function asset(string $path): string
     return url('/assets/' . ltrim($path, '/')) . '?v=' . $ver;
 }
 
+/** Đường dẫn logo chính của website */
+function site_logo(): string
+{
+    return asset('img/logo_new.png');
+}
+
 function redirect(string $path): void
 {
     header('Location: ' . (preg_match('#^https?://#', $path) ? $path : url($path)));
@@ -159,9 +165,9 @@ function json_out($data, int $status = 200): void
     exit;
 }
 
-function json_error(string $message, int $status = 400): void
+function json_error(string $message, int $status = 400, array $extra = []): void
 {
-    json_out(['ok' => false, 'error' => $message], $status);
+    json_out(array_merge(['ok' => false, 'error' => $message], $extra), $status);
 }
 
 /**

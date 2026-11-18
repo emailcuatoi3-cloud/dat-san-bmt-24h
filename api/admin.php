@@ -7,9 +7,23 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 $ADMIN = api_require_admin();
 const ROLE_LABELS = ['customer' => 'Khách hàng', 'owner' => 'Chủ sân', 'admin' => 'Quản trị viên'];
 
-function need(string $module): void
+function need(string ...$modules): void
 {
-    api_require_admin($module);
+    $allowed = admin_access()['allowed'];
+    foreach ($modules as $m) {
+        if (in_array($m, $allowed, true)) {
+            api_require_admin();
+            return;
+        }
+    }
+    api_require_admin($modules[0] ?? '');
+}
+
+function require_sudo(): void
+{
+    if (!is_sudo_active()) {
+        json_error('Yêu cầu xác thực Quản trị viên (Sudo Mode) để thực hiện thao tác nhạy cảm này.', 403, ['require_sudo' => true]);
+    }
 }
 
 function map_user(array $r): array
@@ -99,13 +113,117 @@ run_api([
         ];
     },
 
+    'account_save' => function () {
+        need('accounts');
+        require_sudo();
+        $id = in_int('id');
+        $email = mb_strtolower(in_str('email'));
+        $name = in_str('fullName');
+        $phone = in_str('phone');
+        $role = in_str('role') ?: 'customer';
+        $businessName = in_str('businessName');
+        $address = in_str('address');
+        $status = in_str('status') === 'suspended' ? 'suspended' : 'active';
+        $adminRole = in_str('adminRole');
+        $password = (string) (input()['password'] ?? '');
+
+        if (!isset(ROLE_LABELS[$role])) fail('Vai trò không hợp lệ.');
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) fail('Email chưa đúng định dạng. Ví dụ: user@example.com.');
+        if (mb_strlen($name) < 2) fail('Họ tên cần ít nhất 2 ký tự.');
+
+        if ($id <= 0) {
+            // TẠO MỚI (CREATE)
+            if (strlen($password) < 6) fail('Mật khẩu tạo mới cần ít nhất 6 ký tự.');
+            if (q_val('SELECT id FROM users WHERE email = ?', [$email])) fail('Email này đã được sử dụng bởi tài khoản khác.');
+
+            q('INSERT INTO users (email, password_hash, full_name, phone, address, role, business_name, status, favorites) VALUES (?,?,?,?,?,?,?,?,?)',
+                [$email, password_hash($password, PASSWORD_DEFAULT), $name, $phone, $address, $role, $businessName, $status, '[]']);
+            $id = (int) db()->lastInsertId();
+
+            if ($role === 'admin' && $adminRole) {
+                q('INSERT INTO admin_role_assignments (user_id, role_key, assigned_by) VALUES (?,?,?)',
+                    [$id, $adminRole, admin_access()['actorName']]);
+            }
+            audit('accounts', 'Tạo tài khoản mới', $email, 'Tạo tài khoản ' . $name . ' (' . (ROLE_LABELS[$role] ?? $role) . ')', 'success');
+            return ['id' => $id, 'created' => true];
+        } else {
+            // CẬP NHẬT (UPDATE)
+            $existing = q_one('SELECT * FROM users WHERE id = ?', [$id]) ?: fail('Không tìm thấy tài khoản cần sửa.');
+            if (q_val('SELECT id FROM users WHERE email = ? AND id <> ?', [$email, $id])) fail('Email này đã được tài khoản khác sử dụng.');
+
+            $me = (int) current_user()['id'];
+            if ($id === $me && $status === 'suspended') fail('Bạn không thể tự khóa tài khoản của chính mình.');
+            if ($id === $me && $role !== 'admin') fail('Bạn không thể tự hạ quyền quản trị của chính mình.');
+
+            if ($existing['role'] === 'admin' && ($status === 'suspended' || $role !== 'admin')) {
+                $activeAdminCount = (int) q_val("SELECT COUNT(*) FROM users WHERE role = 'admin' AND status = 'active' AND id <> ?", [$id]);
+                if ($activeAdminCount === 0) fail('Không thể tạm khóa hoặc chuyển vai trò của Quản trị viên duy nhất còn đang hoạt động trên hệ thống.');
+            }
+
+            if ($password !== '') {
+                if (strlen($password) < 6) fail('Mật khẩu mới cần ít nhất 6 ký tự.');
+                $hash = password_hash($password, PASSWORD_DEFAULT);
+                q('UPDATE users SET email = ?, full_name = ?, phone = ?, address = ?, role = ?, business_name = ?, status = ?, password_hash = ? WHERE id = ?',
+                    [$email, $name, $phone, $address, $role, $businessName, $status, $hash, $id]);
+            } else {
+                q('UPDATE users SET email = ?, full_name = ?, phone = ?, address = ?, role = ?, business_name = ?, status = ? WHERE id = ?',
+                    [$email, $name, $phone, $address, $role, $businessName, $status, $id]);
+            }
+
+            if ($role === 'admin') {
+                if ($adminRole) {
+                    q('INSERT INTO admin_role_assignments (user_id, role_key, assigned_by) VALUES (?,?,?) ON DUPLICATE KEY UPDATE role_key = VALUES(role_key), assigned_by = VALUES(assigned_by)',
+                        [$id, $adminRole, admin_access()['actorName']]);
+                } else {
+                    q('DELETE FROM admin_role_assignments WHERE user_id = ?', [$id]);
+                }
+            } else {
+                q('DELETE FROM admin_role_assignments WHERE user_id = ?', [$id]);
+            }
+
+            audit('accounts', 'Cập nhật tài khoản', $email, "Chỉnh sửa thông tin {$name} (#{$id})", 'info');
+            return ['id' => $id, 'created' => false];
+        }
+    },
+
+    'account_delete' => function () {
+        need('accounts');
+        require_sudo();
+        $id = in_int('id');
+        $me = (int) current_user()['id'];
+        if ($id === $me) fail('Bạn không thể tự xóa tài khoản của chính mình.');
+        $u = q_one('SELECT * FROM users WHERE id = ?', [$id]) ?: fail('Không tìm thấy tài khoản.');
+
+        if ($u['role'] === 'admin') {
+            $activeAdminCount = (int) q_val("SELECT COUNT(*) FROM users WHERE role = 'admin' AND status = 'active' AND id <> ?", [$id]);
+            if ($activeAdminCount === 0) fail('Không thể xóa Quản trị viên duy nhất còn đang hoạt động trên hệ thống.');
+        }
+
+        $courtCount = (int) q_val('SELECT COUNT(*) FROM courts WHERE owner_id = ? AND deleted_at IS NULL', [$id]);
+        if ($courtCount > 0) {
+            fail("Không thể xóa tài khoản này vì đang phụ trách {$courtCount} sân bóng trên hệ thống. Vui lòng chuyển giao hoặc gỡ sân trước.");
+        }
+
+        q('DELETE FROM admin_role_assignments WHERE user_id = ?', [$id]);
+        q('UPDATE bookings SET customer_id = NULL WHERE customer_id = ?', [$id]);
+        q('DELETE FROM users WHERE id = ?', [$id]);
+
+        audit('accounts', 'Xóa tài khoản', $u['email'], "Đã xóa vĩnh viễn tài khoản {$u['full_name']} (#{$id})", 'danger');
+        return true;
+    },
+
     'account_role' => function () {
         need('accounts');
+        require_sudo();
         $id = in_int('id');
         $role = in_str('role');
         if (!isset(ROLE_LABELS[$role])) fail('Vai trò không hợp lệ.');
         if ($id === (int) current_user()['id']) fail('Bạn không thể tự đổi vai trò của chính mình.');
         $u = q_one('SELECT * FROM users WHERE id = ?', [$id]) ?: fail('Không tìm thấy tài khoản.');
+        if ($u['role'] === 'admin' && $role !== 'admin') {
+            $activeAdminCount = (int) q_val("SELECT COUNT(*) FROM users WHERE role = 'admin' AND status = 'active' AND id <> ?", [$id]);
+            if ($activeAdminCount === 0) fail('Hệ thống phải có ít nhất một Quản trị viên hoạt động. Không thể chuyển vai trò của Quản trị viên cuối cùng.');
+        }
         q('UPDATE users SET role = ?, business_name = IF(? = "owner" AND business_name = "", full_name, business_name) WHERE id = ?', [$role, $role, $id]);
         if ($role !== 'admin') q('DELETE FROM admin_role_assignments WHERE user_id = ?', [$id]);
         audit('accounts', 'Đổi vai trò tài khoản', $u['email'], ROLE_LABELS[$u['role']] . ' → ' . ROLE_LABELS[$role], 'warning');
@@ -114,10 +232,15 @@ run_api([
 
     'account_status' => function () {
         need('accounts');
+        require_sudo();
         $id = in_int('id');
         if ($id === (int) current_user()['id']) fail('Bạn không thể tự khóa tài khoản của chính mình.');
         $u = q_one('SELECT * FROM users WHERE id = ?', [$id]) ?: fail('Không tìm thấy tài khoản.');
         $status = in_str('status') === 'suspended' ? 'suspended' : 'active';
+        if ($status === 'suspended' && $u['role'] === 'admin') {
+            $activeAdminCount = (int) q_val("SELECT COUNT(*) FROM users WHERE role = 'admin' AND status = 'active' AND id <> ?", [$id]);
+            if ($activeAdminCount === 0) fail('Không thể tạm khóa Quản trị viên duy nhất còn đang hoạt động trên hệ thống.');
+        }
         q('UPDATE users SET status = ? WHERE id = ?', [$status, $id]);
         audit('accounts', $status === 'suspended' ? 'Tạm khóa tài khoản' : 'Mở khóa tài khoản', $u['email'], in_str('reason'), $status === 'suspended' ? 'danger' : 'success');
         return true;
@@ -125,6 +248,7 @@ run_api([
 
     'assign_admin_role' => function () {
         need('accounts');
+        require_sudo();
         $id = in_int('id');
         $key = in_str('roleKey');
         $u = q_one("SELECT * FROM users WHERE id = ? AND role = 'admin'", [$id]) ?: fail('Chỉ gán bộ quyền cho tài khoản quản trị.');
@@ -142,6 +266,7 @@ run_api([
 
     'role_save' => function () {
         need('accounts');
+        require_sudo();
         if (admin_access()['roleKey'] !== 'super_admin') fail('Chỉ Quản trị cấp cao được chỉnh bộ quyền.');
         $key = in_str('key') ?: slugify(in_str('name'));
         $name = in_str('name');
@@ -157,6 +282,7 @@ run_api([
 
     'role_delete' => function () {
         need('accounts');
+        require_sudo();
         $key = in_str('key');
         if ($key === 'super_admin') fail('Không thể xóa bộ quyền Quản trị cấp cao.');
         if (q_val('SELECT COUNT(*) FROM admin_role_assignments WHERE role_key = ?', [$key])) fail('Bộ quyền đang được gán cho tài khoản, hãy thu hồi trước.');
@@ -165,15 +291,127 @@ run_api([
         return true;
     },
 
+    'verify_sudo' => function () {
+        $password = (string) (input()['password'] ?? '');
+        if ($password === '') fail('Vui lòng nhập mật khẩu quản trị.');
+        $u = current_user();
+        if (!$u) fail('Phiên đăng nhập đã hết hạn.');
+        $row = q_one('SELECT password_hash FROM users WHERE id = ?', [$u['id']]);
+        if (!$row || !password_verify($password, $row['password_hash'])) {
+            fail('Mật khẩu quản trị không chính xác.');
+        }
+        activate_sudo(900);
+        audit('accounts', 'Xác thực Sudo Mode', $u['email'], 'Mở khóa phiên quản trị nhạy cảm thành công (15 phút)', 'info');
+        return ['ok' => true, 'expiresIn' => 900];
+    },
+
+    'impersonate' => function () {
+        need('accounts');
+        require_sudo();
+        $id = in_int('id');
+        $me = (int) current_user()['id'];
+        if ($id === $me) fail('Bạn không thể đăng nhập danh nghĩa chính mình.');
+        $target = q_one('SELECT id, email, full_name, role, status FROM users WHERE id = ?', [$id]);
+        if (!$target) fail('Không tìm thấy tài khoản người dùng.');
+        if ($target['role'] === 'admin' && admin_access()['roleKey'] !== 'super_admin') {
+            fail('Chỉ Quản trị cấp cao mới được phép giả lập tài khoản quản trị khác.');
+        }
+        if (!start_impersonating($id)) fail('Không thể khởi tạo phiên giả lập.');
+        
+        $redirect = $target['role'] === 'owner' ? url('/chu-san') : ($target['role'] === 'admin' ? url('/quan-tri') : url('/tai-khoan'));
+        return ['redirect' => $redirect, 'target' => $target['full_name'] ?: $target['email']];
+    },
+
+    'account_detail' => function () {
+        need('accounts');
+        $id = in_int('id');
+        $u = q_one('SELECT u.*, a.role_key FROM users u LEFT JOIN admin_role_assignments a ON a.user_id = u.id WHERE u.id = ?', [$id]);
+        if (!$u) fail('Không tìm thấy tài khoản.');
+
+        $rows = q_all(BOOKING_SELECT . ' WHERE b.customer_id = ? ORDER BY b.created_at DESC LIMIT 6', [$id]);
+        $recentBookings = array_map('map_booking', $rows);
+
+        $totalSpent = (int) q_val("SELECT COALESCE(SUM(total_price), 0) FROM bookings WHERE customer_id = ? AND status IN ('confirmed', 'completed')", [$id]);
+        $totalBookings = (int) q_val("SELECT COUNT(*) FROM bookings WHERE customer_id = ?", [$id]);
+
+        $courts = [];
+        $ownerRevenue = 0;
+        if ($u['role'] === 'owner') {
+            $courts = q_all("SELECT id, name, sport, sport_label, area, status, rating, review_count, monthly_bookings FROM courts WHERE owner_id = ? AND deleted_at IS NULL ORDER BY created_at DESC", [$id]);
+            $ownerRevenue = (int) q_val("SELECT COALESCE(SUM(b.total_price), 0) FROM bookings b JOIN courts c ON c.id = b.court_id WHERE c.owner_id = ? AND b.status IN ('confirmed', 'completed')", [$id]);
+        }
+
+        $logs = q_all("SELECT * FROM audit_logs WHERE target_label LIKE ? OR detail LIKE ? OR actor_id = ? ORDER BY id DESC LIMIT 10",
+            ['%' . $u['email'] . '%', '%' . $u['email'] . '%', $id]);
+
+        return [
+            'user' => map_user($u),
+            'phone' => $u['phone'],
+            'address' => $u['address'],
+            'totalSpent' => $totalSpent,
+            'totalBookings' => $totalBookings,
+            'ownerRevenue' => $ownerRevenue,
+            'courts' => $courts,
+            'recentBookings' => $recentBookings,
+            'auditLogs' => array_map(fn($a) => [
+                'action' => $a['action'],
+                'actor' => $a['actor_name'],
+                'detail' => $a['detail'],
+                'level' => $a['level'],
+                'createdAt' => iso($a['created_at']),
+            ], $logs),
+        ];
+    },
+
+    // ---------------- Quản lý chủ sân ----------------
+    'owners' => function () {
+        need('owners', 'accounts');
+        $owners = q_all("SELECT u.*,
+                            (SELECT COUNT(*) FROM courts c WHERE c.owner_id = u.id AND c.deleted_at IS NULL) court_count,
+                            (SELECT GROUP_CONCAT(c.name SEPARATOR ', ') FROM courts c WHERE c.owner_id = u.id AND c.deleted_at IS NULL) court_names,
+                            (SELECT COUNT(*) FROM bookings b JOIN courts c ON c.id = b.court_id WHERE c.owner_id = u.id) booking_count,
+                            (SELECT COALESCE(SUM(b.total_price), 0) FROM bookings b JOIN courts c ON c.id = b.court_id WHERE c.owner_id = u.id AND b.status IN ('confirmed','completed')) revenue
+                         FROM users u
+                         WHERE u.role = 'owner'
+                         ORDER BY u.created_at DESC");
+
+        $mappedOwners = array_map(function ($u) {
+            $user = map_user($u);
+            $user['courtCount'] = (int) $u['court_count'];
+            $user['courtNames'] = (string) ($u['court_names'] ?? '');
+            $user['bookingCount'] = (int) $u['booking_count'];
+            $user['revenue'] = (int) $u['revenue'];
+            return $user;
+        }, $owners);
+
+        $pendingReqs = (int) q_val("SELECT COUNT(*) FROM owner_requests WHERE status = 'pending'");
+        $totalCourts = (int) q_val("SELECT COUNT(*) FROM courts WHERE owner_id IS NOT NULL AND deleted_at IS NULL");
+        $totalRevenue = (int) q_val("SELECT COALESCE(SUM(total_price), 0) FROM bookings b JOIN courts c ON c.id = b.court_id WHERE c.owner_id IS NOT NULL AND b.status IN ('confirmed','completed')");
+
+        return [
+            'owners' => $mappedOwners,
+            'roles' => array_map('map_role', q_all('SELECT * FROM admin_roles ORDER BY `key` = "super_admin" DESC, name')),
+            'stat' => [
+                'total' => count($mappedOwners),
+                'active' => count(array_filter($mappedOwners, fn($o) => $o['status'] === 'active')),
+                'suspended' => count(array_filter($mappedOwners, fn($o) => $o['status'] === 'suspended')),
+                'pendingRequests' => $pendingReqs,
+                'totalCourts' => $totalCourts,
+                'totalRevenue' => $totalRevenue,
+            ],
+            'me' => (int) current_user()['id'],
+        ];
+    },
+
     // ---------------- Yêu cầu làm chủ sân ----------------
     'owner_requests' => function () {
-        need('accounts');
+        need('owners', 'accounts');
         return array_map('map_owner_request', q_all("SELECT r.*, u.role user_role, u.status user_status FROM owner_requests r JOIN users u ON u.id = r.user_id
             ORDER BY FIELD(r.status, 'pending', 'approved', 'rejected'), r.created_at DESC"));
     },
 
     'owner_request_review' => function () {
-        need('accounts');
+        need('owners', 'accounts');
         $r = q_one('SELECT r.*, u.email user_email, u.role user_role FROM owner_requests r JOIN users u ON u.id = r.user_id WHERE r.id = ?', [in_str('id')]) ?: fail('Không tìm thấy yêu cầu.');
         if ($r['status'] !== 'pending') fail('Yêu cầu này đã được xử lý.');
         $approve = in_str('decision') === 'approve';
@@ -190,7 +428,8 @@ run_api([
     },
 
     'owner_create' => function () {
-        need('accounts');
+        need('owners', 'accounts');
+        require_sudo();
         $name = in_str('fullName');
         $business = in_str('businessName');
         $email = strtolower(in_str('email'));
@@ -203,16 +442,16 @@ run_api([
         if (q_val('SELECT id FROM users WHERE email = ?', [$email])) fail('Email này đã được sử dụng.');
         if (strlen($password) < 6) fail('Mật khẩu tối thiểu 6 ký tự.');
 
-        $hash = password_hash($password, PASSWORD_BCRYPT);
-        q('INSERT INTO users (email, password_hash, full_name, phone, address, role, business_name, status) VALUES (?,?,?,?,?,?,?,?)',
-            [$email, $hash, $name, $phone, $address, 'owner', $business, 'active']);
-        $newId = (int) db()->lastInsertId();
+        $hash = password_hash($password, PASSWORD_DEFAULT);
+        q('INSERT INTO users (email, password_hash, full_name, phone, address, role, business_name, status, favorites) VALUES (?,?,?,?,?,?,?,?,?)',
+            [$email, $hash, $name, $phone, $address, 'owner', $business, 'active', '[]']);
         audit('accounts', 'Thêm chủ sân mới', $business . ' · ' . $email, 'Admin tạo trực tiếp', 'success');
         return true;
     },
 
     'owner_edit' => function () {
-        need('accounts');
+        need('owners', 'accounts');
+        require_sudo();
         $id = in_int('id');
         $u = q_one("SELECT * FROM users WHERE id = ? AND role = 'owner'", [$id]) ?: fail('Không tìm thấy chủ sân.');
         $name = in_str('fullName');
@@ -221,7 +460,7 @@ run_api([
         $address = in_str('address');
         if (mb_strlen($name) < 2) fail('Vui lòng nhập họ tên chủ sân.');
         if (mb_strlen($business) < 2) fail('Vui lòng nhập tên cơ sở / sân.');
-        
+
         $email = strtolower(in_str('email'));
         if ($email && $email !== $u['email']) {
             if (!filter_var($email, FILTER_VALIDATE_EMAIL)) fail('Email không hợp lệ.');
@@ -295,20 +534,98 @@ run_api([
         return true;
     },
 
+    'court_save' => function () {
+        need('courts');
+        require_sudo();
+        $id = in_str('id');
+        $name = in_str('name');
+        if (mb_strlen($name) < 3) fail('Tên sân cần ít nhất 3 ký tự.');
+        $sport = in_str('sport') === 'badminton' ? 'badminton' : 'football';
+        $price = in_int('pricePerHour');
+        $peak = in_int('peakPrice') ?: $price;
+        if ($price <= 0) fail('Vui lòng nhập giá thuê mỗi giờ.');
+        $area = in_str('area') ?: 'Tân Lợi';
+        $address = in_str('address') ?: 'Buôn Ma Thuột';
+        $ownerId = in_int('ownerId') ?: null;
+        $image = in_str('image') ?: 'https://images.unsplash.com/photo-1529900240041-22f114d18e40?w=1000';
+        $status = in_array(in_str('status'), ['active', 'maintenance', 'paused'], true) ? in_str('status') : 'active';
+        $featured = in_int('featured') ? 1 : 0;
+        $desc = in_str('description') ?: 'Sân thể thao chất lượng cao tại Buôn Ma Thuột.';
+
+        $bands = [
+            ['id' => 'morning', 'label' => 'Buổi sáng và chiều', 'shortLabel' => 'Sáng – chiều', 'start' => '05:00', 'end' => '17:00', 'price' => $price],
+            ['id' => 'evening', 'label' => 'Buổi tối', 'shortLabel' => 'Tối', 'start' => '17:00', 'end' => '23:00', 'price' => $peak, 'peak' => true],
+        ];
+
+        if (!$id) {
+            $num = (int) q_val('SELECT MAX(CAST(SUBSTRING(id, 2) AS UNSIGNED)) FROM courts');
+            $id = 'c' . str_pad((string) ($num + 1), 2, '0', STR_PAD_LEFT);
+            $slug = slugify($name);
+            if (q_val('SELECT id FROM courts WHERE slug = ?', [$slug])) {
+                $slug .= '-' . bin2hex(random_bytes(2));
+            }
+            q('INSERT INTO courts (id, slug, owner_id, name, sport, sport_label, area, address, price_per_hour, peak_price, price_bands, images, description, status, featured, open_time, close_time, highlights, facilities) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                [$id, $slug, $ownerId, $name, $sport, sport_label($sport), $area, $address, $price, $peak, j($bands), j([$image]), $desc, $status, $featured, '05:00', '23:00', j(['Mặt sân mới', 'Đèn LED chiếu sáng']), j(['Bãi giữ xe', 'Nước uống'])]);
+            audit('courts', 'Thêm sân mới', $name, "Tạo sân {$name} ({$area})", 'success');
+            return ['id' => $id, 'created' => true];
+        } else {
+            $c = q_one('SELECT * FROM courts WHERE id = ?', [$id]) ?: fail('Không tìm thấy sân.');
+            q('UPDATE courts SET name = ?, sport = ?, sport_label = ?, area = ?, address = ?, owner_id = ?, price_per_hour = ?, peak_price = ?, price_bands = ?, images = ?, description = ?, status = ?, featured = ? WHERE id = ?',
+                [$name, $sport, sport_label($sport), $area, $address, $ownerId, $price, $peak, j($bands), j([$image]), $desc, $status, $featured, $id]);
+            audit('courts', 'Cập nhật sân', $name, "Sửa thông tin sân {$name} (#{$id})", 'info');
+            return ['id' => $id, 'created' => false];
+        }
+    },
+
+    'court_delete_permanent' => function () {
+        need('courts');
+        require_sudo();
+        $id = in_str('id');
+        $c = q_one('SELECT * FROM courts WHERE id = ?', [$id]) ?: fail('Không tìm thấy sân.');
+        $bookings = (int) q_val('SELECT COUNT(*) FROM bookings WHERE court_id = ?', [$id]);
+        if ($bookings > 0) {
+            fail("Sân này đã có {$bookings} đơn đặt trong lịch sử. Để bảo toàn dữ liệu đối soát tài chính, bạn hãy dùng chức năng 'Gỡ sân' thay vì xóa vĩnh viễn.");
+        }
+        q('DELETE FROM courts WHERE id = ?', [$id]);
+        audit('courts', 'Xóa sân vĩnh viễn', $c['name'], "Đã xóa vĩnh viễn sân {$c['name']} khỏi hệ thống", 'danger');
+        return true;
+    },
+
     // ---------------- Đơn & hóa đơn ----------------
     'bookings' => function () {
         need('bookings');
+        auto_cancel_expired_holds();
         return all_bookings();
     },
 
     'booking_status' => function () {
         need('bookings');
+        auto_cancel_expired_holds();
         $b = q_one('SELECT * FROM bookings WHERE id = ?', [in_str('id')]) ?: fail('Không tìm thấy đơn.');
         $status = in_str('status');
         if (!in_array($status, ['confirmed', 'cancelled'], true)) fail('Trạng thái không hợp lệ.');
         $reason = $status === 'cancelled' ? (in_str('reason') ?: 'Quản trị viên từ chối đơn') : null;
-        q('UPDATE bookings SET status = ?, reject_reason = ? WHERE id = ?', [$status, $reason, $b['id']]);
-        approve_deposit($b, $status);
+        $now = date('Y-m-d H:i:s');
+
+        if ($status === 'confirmed') {
+            $slots = jd($b['slots']);
+            $occ = occupied_slots($b['booking_date'], $b['id'])[$b['court_id']] ?? [];
+            $blocked = blocked_slots_map($b['booking_date'], [$b['court_id']])[$b['court_id'] . ':' . $b['booking_date']] ?? [];
+            $unavailable = array_intersect($slots, array_merge($occ, $blocked));
+            if (!empty($unavailable)) {
+                fail('Không thể duyệt đơn vì khung giờ ' . implode(', ', $unavailable) . ' ngày ' . $b['booking_date'] . ' đã bị trùng lịch với đơn khác hoặc đang bị khóa.');
+            }
+            if ($b['source'] === 'online' && (int) $b['deposit_amount'] > 0 && $b['payment_status'] === 'unpaid') {
+                $holdExp = date('Y-m-d H:i:s', time() + HOLD_MINUTES * 60);
+                q('UPDATE bookings SET approved_at = ?, hold_expires_at = ?, status = ?, reject_reason = NULL WHERE id = ?', [$now, $holdExp, 'confirmed', $b['id']]);
+            } else {
+                q('UPDATE bookings SET approved_at = COALESCE(approved_at, ?), hold_expires_at = NULL, status = ?, reject_reason = NULL WHERE id = ?', [$now, 'confirmed', $b['id']]);
+                approve_deposit($b, $status);
+            }
+        } else {
+            q('UPDATE bookings SET status = ?, reject_reason = ? WHERE id = ?', [$status, $reason, $b['id']]);
+            approve_deposit($b, $status);
+        }
         audit('bookings', $status === 'confirmed' ? 'Duyệt đơn đặt sân' : 'Từ chối đơn đặt sân', $b['code'] . ' · ' . $b['court_name'], (string) $reason, $status === 'confirmed' ? 'success' : 'warning');
         return map_booking(q_one(BOOKING_SELECT . ' WHERE b.id = ?', [$b['id']]));
     },
