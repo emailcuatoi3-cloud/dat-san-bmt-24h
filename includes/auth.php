@@ -182,17 +182,17 @@ function public_profile(?array $u): ?array
 // ---------------- Phân quyền quản trị ----------------
 
 const ADMIN_MODULES = [
-    ['key' => 'overview', 'label' => 'Tổng quan', 'description' => 'Xem bảng điều khiển và số liệu toàn hệ thống.', 'icon' => 'ri-dashboard-3-line'],
-    ['key' => 'accounts', 'label' => 'Tài khoản', 'description' => 'Xem, đổi vai trò và tạm khóa tài khoản.', 'icon' => 'ri-group-line'],
-    ['key' => 'owners', 'label' => 'Chủ sân', 'description' => 'Duyệt yêu cầu đăng ký, quản lý cơ sở và sân của chủ sân.', 'icon' => 'ri-store-2-line'],
-    ['key' => 'courts', 'label' => 'Sân & cơ sở', 'description' => 'Tạm dừng hoặc gỡ sân khỏi nền tảng.', 'icon' => 'ri-football-line', 'danger' => true],
-    ['key' => 'bookings', 'label' => 'Đơn đặt sân', 'description' => 'Duyệt hoặc từ chối đơn đặt sân.', 'icon' => 'ri-calendar-check-line'],
-    ['key' => 'invoices', 'label' => 'Hóa đơn & công nợ', 'description' => 'Đối soát doanh thu, công nợ và xuất Excel.', 'icon' => 'ri-receipt-line'],
-    ['key' => 'categories', 'label' => 'Danh mục', 'description' => 'Quản lý môn thể thao và khu vực hiển thị.', 'icon' => 'ri-price-tag-3-line'],
-    ['key' => 'content', 'label' => 'Nội dung', 'description' => 'Banner, tin tức, FAQ và chính sách.', 'icon' => 'ri-article-line'],
-    ['key' => 'moderation', 'label' => 'Kiểm duyệt & báo cáo', 'description' => 'Ẩn đánh giá vi phạm và xử lý báo cáo.', 'icon' => 'ri-shield-check-line', 'danger' => true],
-    ['key' => 'promotions', 'label' => 'Khuyến mãi & mã giảm giá', 'description' => 'Theo dõi hiệu quả mã giảm giá toàn hệ thống.', 'icon' => 'ri-coupon-3-line'],
-    ['key' => 'audit', 'label' => 'Nhật ký thao tác', 'description' => 'Xem lịch sử thao tác của quản trị viên.', 'icon' => 'ri-history-line'],
+    ['key' => 'overview', 'label' => 'Tổng quan', 'description' => 'Số người dùng, số sân, số đơn, doanh thu và yêu cầu chờ duyệt.', 'icon' => 'ri-dashboard-3-line'],
+    ['key' => 'accounts', 'label' => 'Quản lý tài khoản', 'description' => 'Khách hàng, chủ sân, duyệt đăng ký chủ sân và phân quyền quản trị.', 'icon' => 'ri-group-line'],
+    ['key' => 'courts', 'label' => 'Quản lý sân', 'description' => 'Danh sách sân, duyệt sân mới và tạm ngưng sân vi phạm.', 'icon' => 'ri-football-line', 'danger' => true],
+    ['key' => 'bookings', 'label' => 'Quản lý đơn đặt sân', 'description' => 'Theo dõi, duyệt hoặc từ chối đơn đặt sân.', 'icon' => 'ri-calendar-check-line'],
+    ['key' => 'payments', 'label' => 'Thanh toán & đối soát', 'description' => 'Giao dịch toàn hệ thống, đối soát chuyển tiền chủ sân và yêu cầu hoàn tiền.', 'icon' => 'ri-bank-card-line'],
+    ['key' => 'moderation', 'label' => 'Đánh giá & khiếu nại', 'description' => 'Kiểm duyệt đánh giá và xử lý khiếu nại vi phạm.', 'icon' => 'ri-shield-check-line', 'danger' => true],
+    ['key' => 'content', 'label' => 'Nội dung & khuyến mãi', 'description' => 'Quản lý banner, tin tức, FAQ và mã giảm giá.', 'icon' => 'ri-article-line'],
+    ['key' => 'categories', 'label' => 'Danh mục', 'description' => 'Quản lý loại sân, tiện ích và khu vực.', 'icon' => 'ri-price-tag-3-line'],
+    ['key' => 'reports', 'label' => 'Báo cáo', 'description' => 'Thống kê doanh thu toàn hệ thống và xuất Excel.', 'icon' => 'ri-bar-chart-2-line'],
+    ['key' => 'ai', 'label' => 'Quản lý AI', 'description' => 'Cấu hình trợ lý chatbot AI và kịch bản trả lời tự động.', 'icon' => 'ri-robot-2-line'],
+    ['key' => 'settings', 'label' => 'Cấu hình hệ thống', 'description' => 'Thông tin website, cổng thanh toán, chính sách chung và nhật ký thao tác.', 'icon' => 'ri-settings-3-line'],
 ];
 
 /** Vai trò quản trị + danh sách module được phép của người đang đăng nhập. */
@@ -206,10 +206,12 @@ function admin_access(): array
     if (!$u) return $access;
     $row = q_one('SELECT r.`key`, r.name, r.permissions FROM admin_role_assignments a JOIN admin_roles r ON r.`key` = a.role_key WHERE a.user_id = ?', [$u['id']]);
     if ($row) {
-        $perms = array_values(array_intersect(jd($row['permissions']), $all));
-        if (in_array('accounts', $perms, true) && !in_array('owners', $perms, true)) {
-            $perms[] = 'owners';
+        $rawPerms = jd($row['permissions']);
+        $legacyMap = ['invoices' => 'payments', 'promotions' => 'content', 'audit' => 'settings', 'owners' => 'accounts'];
+        foreach ($legacyMap as $old => $new) {
+            if (in_array($old, $rawPerms, true) && !in_array($new, $rawPerms, true)) $rawPerms[] = $new;
         }
+        $perms = array_values(array_intersect($rawPerms, $all));
         $access['roleKey'] = $row['key'];
         $access['roleName'] = $row['name'];
         $access['allowed'] = ($row['key'] === 'super_admin' || !$perms) ? $all : $perms;

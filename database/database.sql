@@ -77,7 +77,7 @@ CREATE TABLE courts (
   weekly_hours TEXT NULL COMMENT 'JSON: giờ mở cửa riêng từng thứ',
   field_types TEXT NULL COMMENT 'JSON',
   featured TINYINT(1) NOT NULL DEFAULT 0,
-  status ENUM('active','maintenance','paused') NOT NULL DEFAULT 'active',
+  status ENUM('active','pending','maintenance','paused') NOT NULL DEFAULT 'active',
   map_query VARCHAR(255) NOT NULL DEFAULT '',
   note TEXT NULL,
   sort_order INT NOT NULL DEFAULT 0,
@@ -183,7 +183,7 @@ CREATE TABLE promotions (
 
 CREATE TABLE categories (
   id VARCHAR(40) PRIMARY KEY,
-  kind ENUM('sport','area') NOT NULL DEFAULT 'sport',
+  kind ENUM('sport','area','amenity') NOT NULL DEFAULT 'sport',
   name VARCHAR(120) NOT NULL,
   slug VARCHAR(120) NOT NULL,
   description VARCHAR(255) NOT NULL DEFAULT '',
@@ -295,6 +295,131 @@ CREATE TABLE contact_messages (
   topic VARCHAR(120) NOT NULL DEFAULT '',
   message TEXT NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Bảng mở rộng theo Sitemap (Lịch cố định, Ví voucher, Thông báo, Kho, Nhân viên, Cài đặt, Đối soát, Cấu hình)
+CREATE TABLE IF NOT EXISTS recurring_bookings (
+  id VARCHAR(40) PRIMARY KEY,
+  court_id VARCHAR(40) NOT NULL,
+  court_name VARCHAR(160) NOT NULL,
+  owner_id INT NULL,
+  customer_id INT NULL,
+  customer_name VARCHAR(120) NOT NULL,
+  customer_phone VARCHAR(30) NOT NULL DEFAULT '',
+  weekdays TEXT NOT NULL COMMENT 'JSON: 1=T2..7=CN',
+  start_slot VARCHAR(5) NOT NULL,
+  duration_minutes INT NOT NULL DEFAULT 60,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  price_per_session INT NOT NULL DEFAULT 0,
+  status ENUM('active','paused','cancelled') NOT NULL DEFAULT 'active',
+  note VARCHAR(500) NOT NULL DEFAULT '',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_rec_owner (owner_id),
+  KEY idx_rec_customer (customer_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS user_vouchers (
+  id VARCHAR(40) PRIMARY KEY,
+  user_id INT NOT NULL,
+  code VARCHAR(40) NOT NULL,
+  title VARCHAR(160) NOT NULL,
+  description VARCHAR(300) NOT NULL DEFAULT '',
+  discount_type ENUM('percent','amount','gift') NOT NULL DEFAULT 'percent',
+  discount_value INT NOT NULL DEFAULT 0,
+  min_order INT NOT NULL DEFAULT 0,
+  source ENUM('promo','wheel','system') NOT NULL DEFAULT 'promo',
+  status ENUM('available','used','expired') NOT NULL DEFAULT 'available',
+  expires_at DATE NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_uv_user (user_id),
+  UNIQUE KEY uq_uv_user_code (user_id, code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS wheel_spins (
+  id VARCHAR(40) PRIMARY KEY,
+  user_id INT NOT NULL,
+  prize_code VARCHAR(40) NOT NULL,
+  prize_title VARCHAR(160) NOT NULL,
+  prize_desc VARCHAR(300) NOT NULL DEFAULT '',
+  spun_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_ws_user_time (user_id, spun_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id VARCHAR(40) PRIMARY KEY,
+  user_id INT NOT NULL,
+  title VARCHAR(200) NOT NULL,
+  body VARCHAR(500) NOT NULL DEFAULT '',
+  type ENUM('booking','payment','promo','system') NOT NULL DEFAULT 'system',
+  link VARCHAR(255) NOT NULL DEFAULT '',
+  is_read TINYINT(1) NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_nt_user (user_id, is_read)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS inventory_logs (
+  id VARCHAR(40) PRIMARY KEY,
+  owner_id INT NOT NULL,
+  service_id VARCHAR(40) NOT NULL,
+  service_name VARCHAR(160) NOT NULL,
+  type ENUM('import','export','adjust') NOT NULL DEFAULT 'import',
+  quantity INT NOT NULL DEFAULT 0,
+  unit_cost INT NOT NULL DEFAULT 0,
+  note VARCHAR(255) NOT NULL DEFAULT '',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_inv_owner (owner_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS owner_staff (
+  id VARCHAR(40) PRIMARY KEY,
+  owner_id INT NOT NULL,
+  full_name VARCHAR(120) NOT NULL,
+  phone VARCHAR(30) NOT NULL DEFAULT '',
+  email VARCHAR(190) NOT NULL DEFAULT '',
+  role_name VARCHAR(80) NOT NULL DEFAULT 'Nhân viên lễ tân',
+  permissions TEXT NULL COMMENT 'JSON',
+  status ENUM('active','inactive') NOT NULL DEFAULT 'active',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_staff_owner (owner_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS owner_settings (
+  owner_id INT PRIMARY KEY,
+  deposit_rate INT NOT NULL DEFAULT 30,
+  cancel_cutoff_hours INT NOT NULL DEFAULT 4,
+  hold_minutes INT NOT NULL DEFAULT 5,
+  auto_approve TINYINT(1) NOT NULL DEFAULT 0,
+  policy_note TEXT NULL,
+  notify_new_booking TINYINT(1) NOT NULL DEFAULT 1,
+  notify_cancel TINYINT(1) NOT NULL DEFAULT 1,
+  notify_review TINYINT(1) NOT NULL DEFAULT 1,
+  bank_name VARCHAR(120) NOT NULL DEFAULT '',
+  bank_account VARCHAR(60) NOT NULL DEFAULT '',
+  bank_holder VARCHAR(120) NOT NULL DEFAULT '',
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS payouts (
+  id VARCHAR(40) PRIMARY KEY,
+  owner_id INT NOT NULL,
+  owner_name VARCHAR(160) NOT NULL,
+  period_label VARCHAR(80) NOT NULL,
+  gross_amount INT NOT NULL DEFAULT 0,
+  commission_rate INT NOT NULL DEFAULT 5,
+  commission_amount INT NOT NULL DEFAULT 0,
+  net_amount INT NOT NULL DEFAULT 0,
+  status ENUM('pending','transferred') NOT NULL DEFAULT 'pending',
+  note VARCHAR(255) NOT NULL DEFAULT '',
+  transferred_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_payout_owner (owner_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS system_settings (
+  skey VARCHAR(80) PRIMARY KEY,
+  svalue TEXT NULL,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ===================== DỮ LIỆU MẪU =====================

@@ -124,4 +124,140 @@ run_api([
         q('UPDATE users SET password_hash = ? WHERE id = ?', [password_hash($new, PASSWORD_DEFAULT), $u['id']]);
         return true;
     },
+
+    // ---------------- Lịch cố định của tôi ----------------
+    'recurring_list' => function () {
+        $u = current_user();
+        if (!$u) return [];
+        $phone = preg_replace('/\D/', '', $u['phone']);
+        $rows = $phone
+            ? q_all("SELECT * FROM recurring_bookings WHERE customer_id = ? OR REPLACE(customer_phone, ' ', '') = ? ORDER BY created_at DESC", [$u['id'], $phone])
+            : q_all('SELECT * FROM recurring_bookings WHERE customer_id = ? ORDER BY created_at DESC', [$u['id']]);
+        return array_map(fn($r) => [
+            'id' => $r['id'], 'courtId' => $r['court_id'], 'courtName' => $r['court_name'],
+            'weekdays' => jd($r['weekdays']), 'startSlot' => $r['start_slot'],
+            'durationMinutes' => (int) $r['duration_minutes'], 'startDate' => $r['start_date'],
+            'endDate' => $r['end_date'], 'pricePerSession' => (int) $r['price_per_session'],
+            'status' => $r['status'], 'note' => $r['note'], 'createdAt' => iso($r['created_at']),
+        ], $rows);
+    },
+
+    'recurring_create' => function () {
+        $u = api_require_login();
+        $court = find_court(in_str('courtId')) ?: fail('Vui lòng chọn sân hợp lệ.');
+        $weekdays = array_values(array_unique(array_filter(array_map('intval', in_arr('weekdays')), fn($d) => $d >= 1 && $d <= 7)));
+        sort($weekdays);
+        if (!$weekdays) fail('Vui lòng chọn ít nhất 1 ngày trong tuần.');
+        $startSlot = in_str('startSlot') ?: '18:00';
+        $duration = in_int('durationMinutes', 60);
+        if (!in_array($duration, [60, 90, 120], true)) $duration = 60;
+        $startDate = in_str('startDate') ?: date('Y-m-d');
+        $endDate = in_str('endDate') ?: date('Y-m-d', strtotime('+30 days'));
+        if ($endDate < $startDate) fail('Ngày kết thúc phải từ ngày bắt đầu trở đi.');
+        $hours = $duration / 60;
+        $price = (int) round($court['pricePerHour'] * $hours);
+        $id = uid('rec-');
+        q('INSERT INTO recurring_bookings (id, court_id, court_name, owner_id, customer_id, customer_name, customer_phone, weekdays, start_slot, duration_minutes, start_date, end_date, price_per_session, status, note) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            [$id, $court['id'], $court['name'], $court['ownerId'], $u['id'], $u['full_name'] ?: $u['email'], $u['phone'], j($weekdays), $startSlot, $duration, $startDate, $endDate, $price, 'active', mb_substr(in_str('note'), 0, 400)]);
+        if ($court['ownerId']) {
+            push_notification((int) $court['ownerId'], 'Yêu cầu lịch cố định mới', ($u['full_name'] ?: $u['email']) . ' đăng ký lịch cố định tại ' . $court['name'] . ' lúc ' . $startSlot, 'booking', '/chu-san?tab=bookings');
+        }
+        push_notification((int) $u['id'], 'Đã tạo lịch cố định thành công', 'Lịch cố định tại ' . $court['name'] . ' (' . $startSlot . ') đã được lưu và gửi tới chủ sân.', 'booking', '/tai-khoan?tab=recurring');
+        return ['id' => $id];
+    },
+
+    'recurring_status' => function () {
+        $u = api_require_login();
+        $id = in_str('id');
+        $status = in_str('status');
+        if (!in_array($status, ['active', 'paused', 'cancelled'], true)) fail('Trạng thái không hợp lệ.');
+        $row = q_one('SELECT * FROM recurring_bookings WHERE id = ? AND customer_id = ?', [$id, $u['id']]) ?: fail('Không tìm thấy lịch cố định.');
+        q('UPDATE recurring_bookings SET status = ? WHERE id = ?', [$status, $row['id']]);
+        return true;
+    },
+
+    // ---------------- Ví voucher ----------------
+    'vouchers' => function () {
+        $u = current_user();
+        if (!$u) return [];
+        $rows = q_all('SELECT * FROM user_vouchers WHERE user_id = ? ORDER BY created_at DESC', [$u['id']]);
+        return array_map(fn($r) => [
+            'id' => $r['id'], 'code' => $r['code'], 'title' => $r['title'], 'description' => $r['description'],
+            'discountType' => $r['discount_type'], 'discountValue' => (int) $r['discount_value'],
+            'minOrder' => (int) $r['min_order'], 'source' => $r['source'], 'status' => $r['status'],
+            'expiresAt' => $r['expires_at'], 'createdAt' => iso($r['created_at']),
+        ], $rows);
+    },
+
+    'voucher_save' => function () {
+        $u = api_require_login();
+        $code = strtoupper(trim(in_str('code')));
+        if (!$code) fail('Mã voucher không hợp lệ.');
+        $title = in_str('title') ?: ('Mã ưu đãi ' . $code);
+        $desc = mb_substr(in_str('description'), 0, 290);
+        $dtype = in_array(in_str('discountType'), ['percent', 'amount', 'gift'], true) ? in_str('discountType') : 'percent';
+        $dval = in_int('discountValue');
+        $minOrder = in_int('minOrder');
+        $source = in_array(in_str('source'), ['promo', 'wheel', 'system'], true) ? in_str('source') : 'promo';
+        $expires = in_str('expiresAt') ?: date('Y-m-d', strtotime('+30 days'));
+        q('INSERT INTO user_vouchers (id, user_id, code, title, description, discount_type, discount_value, min_order, source, status, expires_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+           ON DUPLICATE KEY UPDATE title = VALUES(title), description = VALUES(description), expires_at = VALUES(expires_at), status = "available"',
+            [uid('uv-'), $u['id'], $code, $title, $desc, $dtype, $dval, $minOrder, $source, 'available', $expires]);
+        return true;
+    },
+
+    'wheel_spin' => function () {
+        $u = api_require_login();
+        $cooldown = 48 * 3600;
+        $last = q_one('SELECT * FROM wheel_spins WHERE user_id = ? ORDER BY spun_at DESC LIMIT 1', [$u['id']]);
+        if ($last) {
+            $nextTs = strtotime($last['spun_at']) + $cooldown;
+            if ($nextTs > time()) {
+                $rem = $nextTs - time();
+                $h = floor($rem / 3600);
+                $m = floor(($rem % 3600) / 60);
+                fail("Bạn vừa quay lượt gần nhất. Vui lòng quay lại sau {$h} giờ {$m} phút.", 429);
+            }
+        }
+        $code = strtoupper(trim(in_str('code')));
+        if (!$code) fail('Mã phần thưởng không hợp lệ.');
+        $title = in_str('title') ?: ('Mã ưu đãi ' . $code);
+        $desc = mb_substr(in_str('description'), 0, 290);
+        $dtype = in_array(in_str('discountType'), ['percent', 'amount', 'gift'], true) ? in_str('discountType') : 'percent';
+        $dval = in_int('discountValue');
+        $expires = date('Y-m-d', strtotime('+30 days'));
+        q('INSERT INTO wheel_spins (id, user_id, prize_code, prize_title, prize_desc) VALUES (?,?,?,?,?)',
+            [uid('ws-'), $u['id'], $code, $title, $desc]);
+        q('INSERT INTO user_vouchers (id, user_id, code, title, description, discount_type, discount_value, min_order, source, status, expires_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+           ON DUPLICATE KEY UPDATE title = VALUES(title), description = VALUES(description), expires_at = VALUES(expires_at), status = "available"',
+            [uid('uv-'), $u['id'], $code, $title, $desc, $dtype, $dval, 0, 'wheel', 'available', $expires]);
+        return [
+            'nextSpinAt' => (time() + $cooldown) * 1000,
+            'code' => $code,
+            'title' => $title,
+            'desc' => $desc,
+        ];
+    },
+
+    // ---------------- Thông báo ----------------
+    'notifications' => function () {
+        $u = current_user();
+        if (!$u) return [];
+        $rows = q_all('SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 50', [$u['id']]);
+        return array_map(fn($r) => [
+            'id' => $r['id'], 'title' => $r['title'], 'body' => $r['body'], 'type' => $r['type'],
+            'link' => $r['link'], 'isRead' => (bool) $r['is_read'], 'createdAt' => iso($r['created_at']),
+        ], $rows);
+    },
+
+    'notification_read' => function () {
+        $u = api_require_login();
+        $id = in_str('id');
+        if ($id === 'all') {
+            q('UPDATE notifications SET is_read = 1 WHERE user_id = ?', [$u['id']]);
+        } else {
+            q('UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?', [$id, $u['id']]);
+        }
+        return true;
+    },
 ]);

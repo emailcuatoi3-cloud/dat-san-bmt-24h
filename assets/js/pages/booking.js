@@ -521,7 +521,7 @@ function renderStep3() {
         <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-accent-100 text-accent-700">
           <i class="ri-close-circle-line text-3xl" aria-hidden="true"></i>
         </div>
-        <h2 class="mt-4 font-heading text-xl font-extrabold text-foreground-950">Đơn đặt sân đã bị hủy</h2>
+        <h2 class="mt-4 font-heading text-xl font-extrabold text-foreground-950">${b.approvedAt ? 'Thanh toán thất bại — Đơn đã bị hủy' : 'Đơn đặt sân đã bị hủy'}</h2>
         <p class="mt-2 max-w-md mx-auto text-sm leading-relaxed text-foreground-600">
           ${esc(b.cancelReason || b.rejectReason || 'Đã hết thời gian 5 phút chuyển cọc hoặc chủ sân đã từ chối yêu cầu.')}
         </p>

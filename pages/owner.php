@@ -4,37 +4,50 @@
  * PHP dựng khung (thanh bên + đầu trang), nội dung từng tab do assets/js/pages/owner.js vẽ từ API api/owner.php.
  */
 $u = current_user();
+// Cấu trúc thanh bên bám sát 9 nhóm của Sitemap Chủ sân
 $groups = [
-    ['Bảng điều khiển', [['overview', 'Tổng quan', 'ri-dashboard-3-line']]],
-    ['Vận hành sân', [
+    ['Vận hành', [
+        ['overview', 'Tổng quan', 'ri-dashboard-3-line'],
+        ['courts', 'Quản lý sân', 'ri-football-line'],
         ['bookings', 'Đơn đặt sân', 'ri-calendar-check-line'],
-        ['courts', 'Sân của tôi', 'ri-football-line'],
-        ['schedule', 'Lịch & khung giờ', 'ri-time-line'],
-        ['reviews', 'Đánh giá', 'ri-star-smile-line'],
-        ['invoices', 'Hóa đơn', 'ri-bill-line'],
+        ['payments', 'Thanh toán', 'ri-bill-line'],
     ]],
     ['Kinh doanh', [
-        ['reports', 'Báo cáo doanh thu', 'ri-bar-chart-2-line'],
-        ['customers', 'Khách hàng', 'ri-group-line'],
-        ['services', 'Dịch vụ bán kèm', 'ri-cup-line'],
+        ['services', 'Dịch vụ', 'ri-cup-line'],
         ['promotions', 'Khuyến mãi', 'ri-coupon-3-line'],
-        ['deposits', 'Tiền cọc', 'ri-safe-2-line'],
+        ['customers', 'Khách hàng & đánh giá', 'ri-group-line'],
+    ]],
+    ['Hệ thống cơ sở', [
+        ['settings', 'Cài đặt', 'ri-settings-3-line'],
+        ['account', 'Tài khoản', 'ri-user-settings-line'],
     ]],
 ];
 $meta = [
-    'overview' => ['Tổng quan', 'Theo dõi đơn đặt sân, doanh thu và tình hình hoạt động của các sân trong ngày.'],
-    'bookings' => ['Đơn đặt sân', 'Duyệt yêu cầu mới, theo dõi đơn đã xác nhận và tra cứu lịch sử đơn của khách.'],
-    'invoices' => ['Hóa đơn', 'Mỗi lượt chơi hoàn thành tự sinh một hóa đơn. In, gửi cho khách và theo dõi khoản còn phải thu.'],
-    'courts' => ['Sân của tôi', 'Cập nhật thông tin, giá thuê và trạng thái hiển thị của từng sân trên trang tìm sân.'],
-    'reviews' => ['Đánh giá của khách', 'Đọc cảm nhận của khách về từng sân và phản hồi công khai để giữ uy tín cho cơ sở của bạn.'],
-    'schedule' => ['Lịch & khung giờ', 'Thiết lập giờ mở cửa, khóa khung giờ bảo trì và điều chỉnh giá theo từng khung giờ.'],
-    'reports' => ['Báo cáo doanh thu', 'Doanh thu, tỷ lệ lấp đầy và hiệu quả từng sân theo tuần, tháng, quý — xuất Excel để đối chiếu.'],
-    'customers' => ['Khách hàng', 'Danh sách khách đã từng đặt sân, số lượt chơi, tổng chi tiêu và lịch sử đặt của từng người.'],
-    'services' => ['Dịch vụ bán kèm', 'Quản lý nước uống, dụng cụ cho thuê và đồ ăn nhẹ kèm giá bán, tồn kho để cộng vào hóa đơn.'],
-    'promotions' => ['Khuyến mãi', 'Tạo mã giảm theo % hoặc số tiền, giới hạn ngày và khung giờ áp dụng, theo dõi hiệu quả từng mã.'],
-    'deposits' => ['Tiền cọc', 'Theo dõi tiền cọc khách đã chuyển, phần còn phải thu tại sân và các khoản cần hoàn khi huỷ.'],
+    'overview' => ['Tổng quan', 'Đơn hôm nay, doanh thu, yêu cầu chờ xử lý, thống kê khung giờ và thống kê doanh thu.'],
+    'courts' => ['Quản lý sân', 'Danh sách sân, chi tiết sân, thêm sân mới, bảng giá & khung giờ và khóa sân bảo trì.'],
+    'bookings' => ['Đơn đặt sân', 'Lịch sân trực quan, danh sách đơn đặt, lịch cố định hằng tuần và tạo đơn tại quầy.'],
+    'payments' => ['Thanh toán', 'Hóa đơn & chi tiết hóa đơn, lịch sử thanh toán tiền cọc và quản lý yêu cầu hoàn tiền.'],
+    'services' => ['Dịch vụ', 'Quản lý dịch vụ bán kèm, nhập kho và theo dõi tồn kho nước uống, dụng cụ.'],
+    'promotions' => ['Khuyến mãi', 'Tạo mã giảm giá và thiết lập chương trình ưu đãi giờ vàng thu hút khách.'],
+    'customers' => ['Khách hàng & đánh giá', 'Danh sách khách hàng, phản hồi đánh giá công khai và tiếp nhận khiếu nại.'],
+    'settings' => ['Cài đặt', 'Chính sách đặt, cọc, hủy; nhân viên & phân quyền; cấu hình thông báo.'],
+    'account' => ['Tài khoản', 'Hồ sơ chủ sân, tài khoản ngân hàng nhận tiền VietQR, đổi mật khẩu và đăng xuất.'],
 ];
-$tab = isset($meta[$_GET['tab'] ?? '']) ? $_GET['tab'] : 'overview';
+// Giữ tương thích với các đường dẫn tab cũ
+$tabAliases = [
+    'schedule' => ['courts', 'schedule'],
+    'invoices' => ['payments', 'invoices'],
+    'deposits' => ['payments', 'refunds'],
+    'reports' => ['overview', 'reports'],
+    'reviews' => ['customers', 'reviews'],
+];
+$rawTab = $_GET['tab'] ?? 'overview';
+$subTab = $_GET['sub'] ?? '';
+if (isset($tabAliases[$rawTab])) {
+    [$tab, $subTab] = $tabAliases[$rawTab];
+} else {
+    $tab = isset($meta[$rawTab]) ? $rawTab : 'overview';
+}
 $business = $u['business_name'] ?: $u['full_name'];
 
 render_page([
@@ -43,7 +56,7 @@ render_page([
     'bodyClass' => 'bg-background-100',
     'script' => 'pages/owner.js',
     'data' => [
-        'tab' => $tab, 'meta' => $meta, 'business' => $business,
+        'tab' => $tab, 'sub' => $subTab, 'meta' => $meta, 'business' => $business,
         'rejectReasons' => OWNER_REJECT_REASONS, 'otherReason' => CANCEL_OTHER_REASON,
         'areas' => court_areas(), 'facilityImages' => FACILITY_IMAGES,
     ],

@@ -22,10 +22,33 @@ render_page([
     'title' => 'Đăng ký chủ sân - ' . SITE_NAME,
     'script' => 'pages/owner-request.js',
 ], function () use ($u, $req, $canSubmit) {
-    page_hero([['Trang chủ', '/'], ['Đăng ký chủ sân']], 'Đăng ký trở thành chủ sân',
-        'Gửi thông tin sân của bạn cho quản trị viên Đặt Sân BMT 24H. Khi được duyệt, tài khoản sẽ mở kênh chủ sân để thêm sân và nhận đơn online.');
+    page_hero([['Trang chủ', '/'], ['Dành cho chủ sân']], 'Dành cho chủ sân đối tác',
+        'Giới thiệu lợi ích hợp tác cùng Đặt Sân BMT 24H và gửi biểu mẫu đăng ký mở kênh quản lý sân chuyên nghiệp.');
     $input = 'w-full rounded-md border border-background-300 bg-white px-3 py-2.5 text-sm text-foreground-950 placeholder:text-foreground-400 focus:border-primary-400 focus:outline-none';
+    $partnerBenefits = [
+        ['ri-calendar-check-line', 'Lấp đầy khung giờ trống', 'Tiếp cận hàng nghìn người chơi tại Buôn Ma Thuột, đẩy mạnh đặt sân khung sáng – chiều bằng ưu đãi giờ vàng.'],
+        ['ri-shield-check-line', 'Chống trùng lịch & bùng kèo', 'Hệ thống khóa giờ tự động, yêu cầu đặt cọc 30% qua VietQR ngay sau khi chủ sân duyệt đơn.'],
+        ['ri-bar-chart-2-line', 'Quản lý doanh thu & kho dịch vụ', 'Theo dõi hóa đơn, tồn kho nước uống/dụng cụ, lịch cố định và báo cáo doanh thu xuất Excel chỉ trong 1 màn hình.'],
+        ['ri-customer-service-2-line', 'Miễn phí khởi tạo kênh sân', 'Hỗ trợ thiết lập bảng giá, hình ảnh sân và đào tạo nhân viên vận hành hoàn toàn miễn phí.'],
+    ];
     ?>
+<div class="w-full px-4 pt-8 md:px-8">
+  <div class="mx-auto w-full max-w-[1100px]">
+    <div class="mb-6">
+      <span class="inline-flex items-center gap-1.5 rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-700"><i class="ri-award-line"></i>Giới thiệu lợi ích đối tác</span>
+      <h2 class="mt-2 font-heading text-xl font-extrabold text-foreground-950">Vì sao hơn 30 chủ sân tại BMT chọn đồng hành cùng chúng tôi?</h2>
+    </div>
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <?php foreach ($partnerBenefits as $pb): ?>
+        <div class="rounded-lg border border-background-200 bg-white p-4">
+          <span class="flex h-10 w-10 items-center justify-center rounded-md bg-primary-500 text-white"><i class="<?= $pb[0] ?> text-lg"></i></span>
+          <h3 class="mt-3 font-heading text-sm font-bold text-foreground-950"><?= $pb[1] ?></h3>
+          <p class="mt-1.5 text-xs leading-relaxed text-foreground-600"><?= $pb[2] ?></p>
+        </div>
+      <?php endforeach; ?>
+    </div>
+  </div>
+</div>
 <div class="w-full px-4 py-8 md:px-8 md:py-10">
   <div class="mx-auto grid w-full max-w-[1100px] grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_340px]">
     <div class="min-w-0 space-y-5">

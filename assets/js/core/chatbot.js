@@ -1,24 +1,36 @@
 /**
  * Trợ lý tư vấn (trả lời theo kịch bản từ khóa) — nút nổi góc phải dưới trên mọi trang.
  */
-import { api, esc, url, formatVnd } from './ui.js';
+import { APP, api, esc, url, formatVnd } from './ui.js';
 import { HOTLINE } from '../lib/payment.js';
 
 const root = document.getElementById('chatbot-root');
-if (root) {
-  const QUICK = ['Xem giá sân', 'Sân trống tối nay', 'Cách đặt sân', 'Chính sách hủy', 'Gặp nhân viên'];
+const aiCfg = APP.ai || {};
+if (root && aiCfg.enabled !== false) {
+  const QUICK = Array.isArray(aiCfg.quickReplies) && aiCfg.quickReplies.length
+    ? aiCfg.quickReplies
+    : ['Xem giá sân', 'Sân trống tối nay', 'Cách đặt sân', 'Chính sách hủy', 'Vòng quay ưu đãi'];
+  const botName = aiCfg.botName || 'Trợ lý AI BMT 24H';
+  const customQa = Array.isArray(aiCfg.customQa) ? aiCfg.customQa : [];
   const st = {
     open: false,
     typing: false,
-    messages: [{ from: 'bot', text: 'Chào bạn, mình là trợ lý của Đặt Sân BMT 24H. Bạn cần hỏi về giá sân, khung giờ trống hay cách đặt sân?' }],
+    messages: [{ from: 'bot', text: aiCfg.greeting || 'Chào bạn, mình là trợ lý của Đặt Sân BMT 24H. Bạn cần hỏi về giá sân, khung giờ trống hay cách đặt sân?' }],
   };
   let courts = null; // nạp khi cần
 
-  const normalize = (v) => v.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').toLowerCase().trim();
+  const normalize = (v) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').toLowerCase().trim();
 
   async function reply(raw) {
     const t = normalize(raw);
     if (!t) return { text: 'Bạn muốn hỏi mình điều gì về sân bóng đá hoặc cầu lông tại Buôn Ma Thuột?' };
+    // Kiểm tra kịch bản hỏi-đáp do Quản trị viên cấu hình trước
+    for (const qa of customQa) {
+      const kws = String(qa.keywords || '').split(',').map((k) => normalize(k)).filter(Boolean);
+      if (kws.length && kws.some((k) => t.includes(k))) {
+        return { text: String(qa.answer || '') };
+      }
+    }
     if (t.includes('gia') || t.includes('bao nhieu') || t.includes('phi'))
       return {
         text: 'Giá thuê tại Buôn Ma Thuột dao động 150.000đ - 350.000đ/giờ với sân bóng đá (sân 5 rẻ hơn sân 7, 11) và 65.000đ - 130.000đ/giờ với sân cầu lông. Giá đã niêm yết theo từng sân, khung 17:00 - 21:00 có thể phụ thu 10%.',
@@ -53,7 +65,9 @@ if (root) {
     if (!courts) courts = await api('booking', 'tonight', {}, 'GET').catch(() => []);
     const cheapest = [...courts].sort((a, b) => a.pricePerHour - b.pricePerHour)[0];
     return {
-      text: `Mình chưa chắc đã hiểu đúng câu này. Bạn có thể hỏi về giá, giờ mở cửa, chính sách hủy, thuê bóng/vợt hoặc sân trống tối nay.${cheapest ? ` Ví dụ: sân rẻ nhất hiện là ${cheapest.name} với ${formatVnd(cheapest.pricePerHour)}/giờ.` : ''}`,
+      text: aiCfg.fallbackReply
+        ? `${aiCfg.fallbackReply}${cheapest ? ` Ví dụ: sân rẻ nhất hiện là ${cheapest.name} (${formatVnd(cheapest.pricePerHour)}/giờ).` : ''}`
+        : `Mình chưa chắc đã hiểu đúng câu này. Bạn có thể hỏi về giá, giờ mở cửa, chính sách hủy, thuê bóng/vợt hoặc sân trống tối nay.${cheapest ? ` Ví dụ: sân rẻ nhất hiện là ${cheapest.name} với ${formatVnd(cheapest.pricePerHour)}/giờ.` : ''}`,
       links: [[`Gọi hotline ${HOTLINE}`, '/lien-he']],
     };
   }
@@ -73,7 +87,7 @@ if (root) {
         ? `<section aria-label="Trợ lý tư vấn đặt sân" class="fixed bottom-4 right-4 z-[95] flex h-[520px] max-h-[calc(100vh-6rem)] w-[calc(100vw-2rem)] max-w-[370px] flex-col overflow-hidden rounded-xl border border-background-200 bg-background-100 shadow-2xl animate-fade-up">
         <header class="flex items-center gap-3 border-b border-background-200 bg-background-50 px-4 py-3">
           <span class="flex h-9 w-9 items-center justify-center rounded-full bg-primary-500 text-white"><i class="ri-customer-service-2-line text-lg" aria-hidden="true"></i></span>
-          <div class="min-w-0 flex-1"><p class="truncate font-heading text-sm font-bold text-foreground-950">Trợ lý Đặt Sân BMT</p><p class="flex items-center gap-1.5 text-[11px] text-foreground-500"><span class="h-1.5 w-1.5 rounded-full bg-primary-500"></span>Trả lời tự động 24/7</p></div>
+          <div class="min-w-0 flex-1"><p class="truncate font-heading text-sm font-bold text-foreground-950">${esc(botName)}</p><p class="flex items-center gap-1.5 text-[11px] text-foreground-500"><span class="h-1.5 w-1.5 rounded-full bg-primary-500"></span>Trả lời tự động 24/7</p></div>
           <button type="button" data-chat-toggle aria-label="Đóng cửa sổ tư vấn" class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-foreground-500 transition-colors hover:bg-background-200 hover:text-foreground-900"><i class="ri-close-line text-lg" aria-hidden="true"></i></button>
         </header>
         <div data-chat-scroll class="flex-1 space-y-3 overflow-y-auto px-3.5 py-3.5">${st.messages.map(messageHtml).join('')}${
@@ -116,6 +130,10 @@ if (root) {
   root.addEventListener('submit', (e) => {
     e.preventDefault();
     send(e.target.q.value);
+  });
+  window.addEventListener('bmt24h-open-chatbot', () => {
+    st.open = true;
+    render();
   });
   render();
 }

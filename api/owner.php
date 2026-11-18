@@ -412,4 +412,196 @@ run_api([
         q('DELETE FROM promotions WHERE id = ? AND owner_id = ?', [in_str('id'), $OWNER['id']]);
         return true;
     },
+
+    // ---------------- Lịch cố định ----------------
+    'recurring_list' => function () {
+        $ids = my_court_ids();
+        if (!$ids) return [];
+        $rows = q_all('SELECT * FROM recurring_bookings WHERE court_id IN (' . in_list($ids) . ') ORDER BY created_at DESC', $ids);
+        return array_map(fn($r) => [
+            'id' => $r['id'], 'courtId' => $r['court_id'], 'courtName' => $r['court_name'],
+            'customerName' => $r['customer_name'], 'customerPhone' => $r['customer_phone'],
+            'weekdays' => jd($r['weekdays']), 'startSlot' => $r['start_slot'],
+            'durationMinutes' => (int) $r['duration_minutes'], 'startDate' => $r['start_date'],
+            'endDate' => $r['end_date'], 'pricePerSession' => (int) $r['price_per_session'],
+            'status' => $r['status'], 'note' => $r['note'], 'createdAt' => iso($r['created_at']),
+        ], $rows);
+    },
+
+    'recurring_save' => function () {
+        global $OWNER;
+        $court = map_court(my_court(in_str('courtId')));
+        $name = in_str('customerName');
+        if (mb_strlen($name) < 2) fail('Vui lòng nhập tên khách hàng / đội bóng.');
+        $weekdays = array_values(array_unique(array_filter(array_map('intval', in_arr('weekdays')), fn($d) => $d >= 1 && $d <= 7)));
+        sort($weekdays);
+        if (!$weekdays) fail('Vui lòng chọn ít nhất 1 thứ trong tuần.');
+        $startSlot = in_str('startSlot') ?: '18:00';
+        $duration = in_int('durationMinutes', 60);
+        $startDate = in_str('startDate') ?: date('Y-m-d');
+        $endDate = in_str('endDate') ?: date('Y-m-d', strtotime('+30 days'));
+        $price = in_int('pricePerSession') ?: (int) round($court['pricePerHour'] * ($duration / 60));
+        $id = in_str('id');
+        if ($id) {
+            q('UPDATE recurring_bookings SET court_id=?, court_name=?, customer_name=?, customer_phone=?, weekdays=?, start_slot=?, duration_minutes=?, start_date=?, end_date=?, price_per_session=?, note=? WHERE id=? AND owner_id=?',
+                [$court['id'], $court['name'], $name, in_str('customerPhone'), j($weekdays), $startSlot, $duration, $startDate, $endDate, $price, in_str('note'), $id, $OWNER['id']]);
+        } else {
+            q('INSERT INTO recurring_bookings (id, court_id, court_name, owner_id, customer_id, customer_name, customer_phone, weekdays, start_slot, duration_minutes, start_date, end_date, price_per_session, status, note) VALUES (?,?,?,?,NULL,?,?,?,?,?,?,?,?,?,?)',
+                [uid('rec-'), $court['id'], $court['name'], $OWNER['id'], $name, in_str('customerPhone'), j($weekdays), $startSlot, $duration, $startDate, $endDate, $price, 'active', in_str('note')]);
+        }
+        return true;
+    },
+
+    'recurring_status' => function () {
+        $ids = my_court_ids();
+        if (!$ids) fail('Bạn chưa có sân nào để quản lý lịch cố định.');
+        $status = in_str('status');
+        if (!in_array($status, ['active', 'paused', 'cancelled'], true)) fail('Trạng thái không hợp lệ.');
+        $row = q_one('SELECT id FROM recurring_bookings WHERE id = ? AND court_id IN (' . in_list($ids) . ')', array_merge([in_str('id')], $ids));
+        if (!$row) fail('Không tìm thấy lịch cố định thuộc sân của bạn.');
+        q('UPDATE recurring_bookings SET status = ? WHERE id = ?', [$status, $row['id']]);
+        return true;
+    },
+
+    // ---------------- Nhập kho & Tồn kho ----------------
+    'inventory_logs' => function () {
+        global $OWNER;
+        $rows = q_all('SELECT * FROM inventory_logs WHERE owner_id = ? ORDER BY created_at DESC LIMIT 80', [$OWNER['id']]);
+        return array_map(fn($r) => [
+            'id' => $r['id'], 'serviceId' => $r['service_id'], 'serviceName' => $r['service_name'],
+            'type' => $r['type'], 'quantity' => (int) $r['quantity'], 'unitCost' => (int) $r['unit_cost'],
+            'note' => $r['note'], 'createdAt' => iso($r['created_at']),
+        ], $rows);
+    },
+
+    'inventory_adjust' => function () {
+        global $OWNER;
+        $svc = q_one('SELECT * FROM owner_services WHERE id = ? AND owner_id = ?', [in_str('serviceId'), $OWNER['id']]) ?: fail('Không tìm thấy dịch vụ.');
+        $type = in_array(in_str('type'), ['import', 'export', 'adjust'], true) ? in_str('type') : 'import';
+        $qty = max(1, in_int('quantity'));
+        $cost = max(0, in_int('unitCost'));
+        $newStock = $type === 'import' ? ((int) $svc['stock'] + $qty) : ($type === 'export' ? max(0, (int) $svc['stock'] - $qty) : $qty);
+        q('UPDATE owner_services SET stock = ? WHERE id = ?', [$newStock, $svc['id']]);
+        q('INSERT INTO inventory_logs (id, owner_id, service_id, service_name, type, quantity, unit_cost, note) VALUES (?,?,?,?,?,?,?,?)',
+            [uid('inv-'), $OWNER['id'], $svc['id'], $svc['name'], $type, $qty, $cost, mb_substr(in_str('note'), 0, 250)]);
+        return ['stock' => $newStock];
+    },
+
+    // ---------------- Khiếu nại (chỉ thuộc sân / đơn của chủ sân đang đăng nhập) ----------------
+    'complaints' => function () {
+        $ids = my_court_ids();
+        if (!$ids) return [];
+        $courts = array_column(q_all('SELECT name FROM courts WHERE id IN (' . in_list($ids) . ')', $ids), 'name');
+        $bookingRefs = q_all('SELECT id, code FROM bookings WHERE court_id IN (' . in_list($ids) . ')', $ids);
+        $bIds = array_column($bookingRefs, 'id');
+        $bCodes = array_column($bookingRefs, 'code');
+        $rows = q_all('SELECT * FROM reports ORDER BY created_at DESC LIMIT 80');
+        $filtered = array_filter($rows, function ($r) use ($ids, $courts, $bIds, $bCodes) {
+            if (in_array($r['target_id'], $ids, true) || in_array($r['target_id'], $bIds, true) || in_array($r['target_id'], $bCodes, true)) return true;
+            foreach ($courts as $cn) {
+                if ($cn && stripos($r['target_label'], $cn) !== false) return true;
+            }
+            return false;
+        });
+        return array_values(array_map(fn($r) => [
+            'id' => $r['id'], 'targetType' => $r['target_type'], 'targetLabel' => $r['target_label'],
+            'reporterName' => $r['reporter_name'], 'reporterContact' => $r['reporter_contact'],
+            'reason' => $r['reason'], 'detail' => (string) $r['detail'], 'severity' => $r['severity'],
+            'status' => $r['status'], 'resolutionNote' => $r['resolution_note'], 'createdAt' => iso($r['created_at']),
+        ], $filtered));
+    },
+
+    'complaint_reply' => function () {
+        $ids = my_court_ids();
+        if (!$ids) fail('Bạn chưa có sân nào để xử lý khiếu nại.');
+        $id = in_str('id');
+        $r = q_one('SELECT * FROM reports WHERE id = ?', [$id]) ?: fail('Không tìm thấy khiếu nại.');
+        $courts = array_column(q_all('SELECT name FROM courts WHERE id IN (' . in_list($ids) . ')', $ids), 'name');
+        $bookingRefs = q_all('SELECT id, code FROM bookings WHERE court_id IN (' . in_list($ids) . ')', $ids);
+        $allowed = in_array($r['target_id'], $ids, true)
+            || in_array($r['target_id'], array_column($bookingRefs, 'id'), true)
+            || in_array($r['target_id'], array_column($bookingRefs, 'code'), true);
+        if (!$allowed) {
+            foreach ($courts as $cn) if ($cn && stripos($r['target_label'], $cn) !== false) { $allowed = true; break; }
+        }
+        if (!$allowed) fail('Khiếu nại này không thuộc sân bạn quản lý.');
+        $note = trim(in_str('note'));
+        if (mb_strlen($note) < 3) fail('Vui lòng nhập nội dung phản hồi xử lý.');
+        q("UPDATE reports SET status = 'reviewing', resolution_note = ? WHERE id = ?", [mb_substr($note, 0, 500), $id]);
+        return true;
+    },
+
+    // ---------------- Cài đặt, Nhân viên & Tài khoản nhận tiền ----------------
+    'settings_get' => function () {
+        global $OWNER;
+        $row = q_one('SELECT * FROM owner_settings WHERE owner_id = ?', [$OWNER['id']]);
+        return [
+            'depositRate' => (int) ($row['deposit_rate'] ?? 30),
+            'cancelCutoffHours' => (int) ($row['cancel_cutoff_hours'] ?? 4),
+            'holdMinutes' => (int) ($row['hold_minutes'] ?? 5),
+            'autoApprove' => (bool) ($row['auto_approve'] ?? 0),
+            'policyNote' => (string) ($row['policy_note'] ?? ''),
+            'notifyNewBooking' => (bool) ($row['notify_new_booking'] ?? 1),
+            'notifyCancel' => (bool) ($row['notify_cancel'] ?? 1),
+            'notifyReview' => (bool) ($row['notify_review'] ?? 1),
+            'bankName' => (string) ($row['bank_name'] ?? ''),
+            'bankAccount' => (string) ($row['bank_account'] ?? ''),
+            'bankHolder' => (string) ($row['bank_holder'] ?? ''),
+        ];
+    },
+
+    'settings_save' => function () {
+        global $OWNER;
+        $cur = q_one('SELECT * FROM owner_settings WHERE owner_id = ?', [$OWNER['id']]) ?: [];
+        $in = input();
+        $vals = [
+            $OWNER['id'],
+            isset($in['depositRate']) ? max(0, min(100, (int) $in['depositRate'])) : (int) ($cur['deposit_rate'] ?? 30),
+            isset($in['cancelCutoffHours']) ? max(1, min(72, (int) $in['cancelCutoffHours'])) : (int) ($cur['cancel_cutoff_hours'] ?? 4),
+            isset($in['holdMinutes']) ? max(1, min(60, (int) $in['holdMinutes'])) : (int) ($cur['hold_minutes'] ?? 5),
+            isset($in['autoApprove']) ? ((int) (bool) $in['autoApprove']) : (int) ($cur['auto_approve'] ?? 0),
+            isset($in['policyNote']) ? (string) $in['policyNote'] : (string) ($cur['policy_note'] ?? ''),
+            isset($in['notifyNewBooking']) ? ((int) (bool) $in['notifyNewBooking']) : (int) ($cur['notify_new_booking'] ?? 1),
+            isset($in['notifyCancel']) ? ((int) (bool) $in['notifyCancel']) : (int) ($cur['notify_cancel'] ?? 1),
+            isset($in['notifyReview']) ? ((int) (bool) $in['notifyReview']) : (int) ($cur['notify_review'] ?? 1),
+            isset($in['bankName']) ? trim((string) $in['bankName']) : (string) ($cur['bank_name'] ?? ''),
+            isset($in['bankAccount']) ? trim((string) $in['bankAccount']) : (string) ($cur['bank_account'] ?? ''),
+            isset($in['bankHolder']) ? strtoupper(trim((string) $in['bankHolder'])) : (string) ($cur['bank_holder'] ?? ''),
+        ];
+        q('INSERT INTO owner_settings (owner_id, deposit_rate, cancel_cutoff_hours, hold_minutes, auto_approve, policy_note, notify_new_booking, notify_cancel, notify_review, bank_name, bank_account, bank_holder)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+           ON DUPLICATE KEY UPDATE deposit_rate=VALUES(deposit_rate), cancel_cutoff_hours=VALUES(cancel_cutoff_hours), hold_minutes=VALUES(hold_minutes), auto_approve=VALUES(auto_approve), policy_note=VALUES(policy_note), notify_new_booking=VALUES(notify_new_booking), notify_cancel=VALUES(notify_cancel), notify_review=VALUES(notify_review), bank_name=VALUES(bank_name), bank_account=VALUES(bank_account), bank_holder=VALUES(bank_holder)', $vals);
+        return true;
+    },
+
+    'staff_list' => function () {
+        global $OWNER;
+        return array_map(fn($r) => [
+            'id' => $r['id'], 'fullName' => $r['full_name'], 'phone' => $r['phone'], 'email' => $r['email'],
+            'roleName' => $r['role_name'], 'permissions' => jd($r['permissions']), 'status' => $r['status'], 'createdAt' => iso($r['created_at']),
+        ], q_all('SELECT * FROM owner_staff WHERE owner_id = ? ORDER BY created_at DESC', [$OWNER['id']]));
+    },
+
+    'staff_save' => function () {
+        global $OWNER;
+        $name = in_str('fullName');
+        if (mb_strlen($name) < 2) fail('Vui lòng nhập họ tên nhân viên.');
+        $perms = array_values(array_intersect(in_arr('permissions'), ['bookings', 'courts', 'services', 'payments', 'reviews']));
+        $status = in_str('status') === 'inactive' ? 'inactive' : 'active';
+        $id = in_str('id');
+        if ($id) {
+            q('UPDATE owner_staff SET full_name=?, phone=?, email=?, role_name=?, permissions=?, status=? WHERE id=? AND owner_id=?',
+                [$name, in_str('phone'), in_str('email'), in_str('roleName') ?: 'Nhân viên', j($perms), $status, $id, $OWNER['id']]);
+        } else {
+            q('INSERT INTO owner_staff (id, owner_id, full_name, phone, email, role_name, permissions, status) VALUES (?,?,?,?,?,?,?,?)',
+                [uid('st-'), $OWNER['id'], $name, in_str('phone'), in_str('email'), in_str('roleName') ?: 'Nhân viên', j($perms), $status]);
+        }
+        return true;
+    },
+
+    'staff_delete' => function () {
+        global $OWNER;
+        q('DELETE FROM owner_staff WHERE id = ? AND owner_id = ?', [in_str('id'), $OWNER['id']]);
+        return true;
+    },
 ]);
