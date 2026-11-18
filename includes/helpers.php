@@ -37,6 +37,12 @@ function asset(string $path): string
     return url('/assets/' . ltrim($path, '/')) . '?v=' . $ver;
 }
 
+/** Đường dẫn logo chính của website */
+function site_logo(): string
+{
+    return asset('img/logo_new.png');
+}
+
 function redirect(string $path): void
 {
     header('Location: ' . (preg_match('#^https?://#', $path) ? $path : url($path)));

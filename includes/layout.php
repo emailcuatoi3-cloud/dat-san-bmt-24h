@@ -51,7 +51,9 @@ function render_head(array $opt): void
   <meta property="og:title" content="<?= e($title) ?>">
   <meta property="og:description" content="<?= e($desc) ?>">
   <meta property="og:locale" content="vi_VN">
-  <link rel="icon" href="<?= asset('img/favicon.svg') ?>" type="image/svg+xml">
+  <meta property="og:image" content="<?= site_logo() ?>">
+  <link rel="icon" href="<?= site_logo() ?>" type="image/png">
+  <link rel="apple-touch-icon" href="<?= site_logo() ?>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -200,7 +202,7 @@ function render_site_header(bool $tr): void
 <header id="site-header" <?= tcls($tr, 'bg-transparent border-b border-white/10', 'bg-background-50/80 backdrop-blur-md border-b border-background-200', 'fixed top-0 left-0 right-0 z-50 transition-all duration-300') ?> <?= $tr ? 'data-transparent="1"' : '' ?>>
   <div class="w-full px-4 md:px-6 xl:px-8 h-[72px] flex items-center justify-between gap-3 xl:gap-6">
     <a href="<?= url('/') ?>" class="flex items-center gap-2.5 shrink-0 group" aria-label="Đặt Sân BMT 24H - Trang chủ">
-      <span class="w-10 h-10 flex items-center justify-center rounded-lg bg-primary-500 text-white transition-colors group-hover:bg-primary-600"><i class="ri-football-line text-xl" aria-hidden="true"></i></span>
+      <img src="<?= site_logo() ?>" alt="Logo Đặt Sân BMT 24H" class="w-10 h-10 rounded-lg object-contain bg-white/10 p-0.5 transition-transform group-hover:scale-105">
       <span class="leading-tight">
         <span <?= tcls($tr, 'text-white', 'text-foreground-950', 'block font-heading text-[15px] font-extrabold tracking-tight') ?>>ĐẶT SÂN BMT</span>
         <span class="block text-[11px] font-semibold tracking-[0.18em] text-primary-500">24H</span>
@@ -411,8 +413,8 @@ function render_site_footer(): void
   <div class="w-full px-4 md:px-8 py-12 md:py-16">
     <div class="grid grid-cols-2 gap-x-6 gap-y-8 sm:gap-10 lg:grid-cols-4">
       <div class="col-span-2 sm:col-span-1">
-        <a href="<?= url('/') ?>" class="flex items-center gap-2.5 mb-4">
-          <span class="w-10 h-10 flex items-center justify-center rounded-lg bg-primary-500 text-white"><i class="ri-football-line text-xl" aria-hidden="true"></i></span>
+        <a href="<?= url('/') ?>" class="flex items-center gap-2.5 mb-4 group">
+          <img src="<?= site_logo() ?>" alt="Logo Đặt Sân BMT 24H" class="w-10 h-10 rounded-lg object-contain bg-white p-0.5 shadow-xs transition-transform group-hover:scale-105">
           <span class="leading-tight"><span class="block font-heading text-[15px] font-extrabold tracking-tight text-foreground-950">ĐẶT SÂN BMT</span><span class="block text-[11px] font-semibold tracking-[0.18em] text-primary-600">24H</span></span>
         </a>
         <p class="text-sm leading-relaxed text-foreground-600">Nền tảng đặt sân bóng đá và sân cầu lông trực tuyến tại Buôn Ma Thuột, Đắk Lắk. Kết nối người chơi với hơn 30 sân thể thao chất lượng trong vài thao tác.</p>
