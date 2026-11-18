@@ -1054,18 +1054,45 @@ function categoryForm(c = null, kind = 'sport') {
 
 async function renderCategories() {
   const list = await get('categories', 'categories');
-  actions().innerHTML = `<button type="button" id="cat-add" class="${BTN}"><i class="ri-add-line"></i>Thêm danh mục</button>`;
-  actions().querySelector('#cat-add').onclick = () => categoryForm();
-  const col = (kind, title) => `<section class="${CARD}">${sectionTitle(title, `<button type="button" data-add="${kind}" class="${BTN_SM}"><i class="ri-add-line"></i>Thêm</button>`)}<ul class="divide-y divide-background-200">${list.filter((c) => c.kind === kind).map((c) => `<li class="flex items-center gap-3 px-4 py-3 ${c.active ? '' : 'opacity-60'}"><span class="flex h-9 w-9 items-center justify-center rounded-md bg-primary-50 text-primary-600"><i class="${esc(c.icon)}"></i></span><div class="min-w-0 flex-1"><p class="text-sm font-semibold">${esc(c.name)} ${c.active ? '' : '<span class="text-[10px] text-foreground-500">(ẩn)</span>'}</p><p class="truncate text-xs text-foreground-500">${esc(c.description || c.slug)} · ${c.courtCount} sân</p></div><button type="button" data-edit="${c.id}" class="${BTN_SM}"><i class="ri-edit-line"></i></button><button type="button" data-del="${c.id}" class="${BTN_SM_DANGER}"><i class="ri-delete-bin-line"></i></button></li>`).join('') || '<li class="px-4 py-5 text-sm text-foreground-500">Chưa có danh mục.</li>'}</ul></section>`;
+  const isSuper = PAGE.access.roleKey === 'super_admin';
+  actions().innerHTML = isSuper ? `<button type="button" id="cat-add" class="${BTN}"><i class="ri-add-line"></i>Thêm danh mục</button>` : '';
+  if (isSuper && actions().querySelector('#cat-add')) actions().querySelector('#cat-add').onclick = () => categoryForm();
+
+  const col = (kind, title) => `<section class="${CARD}">
+    ${sectionTitle(title, isSuper ? `<button type="button" data-add="${kind}" class="${BTN_SM}"><i class="ri-add-line"></i>Thêm</button>` : '<span class="text-xs font-medium text-foreground-400">Chỉ xem (NV)</span>')}
+    <ul class="divide-y divide-background-200">${list.filter((c) => c.kind === kind).map((c) => `
+      <li class="flex items-center gap-3 px-4 py-3 ${c.active ? '' : 'opacity-60'}">
+        <span class="flex h-9 w-9 items-center justify-center rounded-md bg-primary-50 text-primary-600"><i class="${esc(c.icon)}"></i></span>
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-semibold">${esc(c.name)} ${c.active ? '' : '<span class="rounded bg-accent-50 px-1.5 py-0.5 text-[10px] font-semibold text-accent-700">(Đã ẩn)</span>'}</p>
+          <p class="truncate text-xs text-foreground-500">${esc(c.description || c.slug)} · ${c.courtCount} sân</p>
+        </div>
+        ${isSuper ? `
+          <div class="flex items-center gap-1">
+            <button type="button" data-toggle="${c.id}" class="${BTN_SM}" title="${c.active ? 'Ẩn danh mục' : 'Hiện danh mục'}">
+              <i class="${c.active ? 'ri-eye-off-line' : 'ri-eye-line'}"></i>${c.active ? 'Ẩn' : 'Hiện'}
+            </button>
+            <button type="button" data-edit="${c.id}" class="${BTN_SM}" title="Sửa danh mục"><i class="ri-edit-line"></i>Sửa</button>
+            <button type="button" data-del="${c.id}" class="${BTN_SM_DANGER}" title="Xóa danh mục"><i class="ri-delete-bin-line"></i></button>
+          </div>
+        ` : '<span class="text-xs text-foreground-400">Chỉ xem</span>'}
+      </li>`).join('') || '<li class="px-4 py-5 text-sm text-foreground-500">Chưa có danh mục.</li>'}</ul></section>`;
+
   main().innerHTML = `<div class="grid grid-cols-1 gap-5 lg:grid-cols-2">${col('sport', 'Môn thể thao')}${col('area', 'Khu vực')}</div>`;
   const root = main();
-  on(root, 'click', '[data-add]', (e, el) => categoryForm(null, el.dataset.add));
-  on(root, 'click', '[data-edit]', (e, el) => categoryForm(list.find((c) => c.id === el.dataset.edit)));
-  on(root, 'click', '[data-del]', async (e, el) => {
-    const c = list.find((x) => x.id === el.dataset.del);
-    if (await confirmBox({ title: `Xóa danh mục "${esc(c.name)}"?`, message: c.courtCount ? `Đang có ${c.courtCount} sân dùng danh mục này — sân vẫn giữ nguyên, chỉ bộ lọc bị mất.` : 'Danh mục sẽ bị xóa khỏi bộ lọc tìm sân.', confirmText: 'Xóa', danger: true }))
-      run(api('admin', 'category_delete', { id: c.id }), 'Đã xóa danh mục.', 'categories');
-  });
+  if (isSuper) {
+    on(root, 'click', '[data-add]', (e, el) => categoryForm(null, el.dataset.add));
+    on(root, 'click', '[data-edit]', (e, el) => categoryForm(list.find((c) => c.id === el.dataset.edit)));
+    on(root, 'click', '[data-toggle]', (e, el) => {
+      const c = list.find((x) => x.id === el.dataset.toggle);
+      run(api('admin', 'category_toggle', { id: c.id }), c.active ? 'Đã ẩn danh mục.' : 'Đã hiển thị danh mục.', 'categories');
+    });
+    on(root, 'click', '[data-del]', async (e, el) => {
+      const c = list.find((x) => x.id === el.dataset.del);
+      if (await confirmBox({ title: `Xóa danh mục "${esc(c.name)}"?`, message: c.courtCount ? `Đang có ${c.courtCount} sân dùng danh mục này — sân vẫn giữ nguyên, chỉ bộ lọc bị mất.` : 'Danh mục sẽ bị xóa khỏi bộ lọc tìm sân.', confirmText: 'Xóa', danger: true }))
+        run(api('admin', 'category_delete', { id: c.id }), 'Đã xóa danh mục.', 'categories');
+    });
+  }
 }
 
 // =====================================================================

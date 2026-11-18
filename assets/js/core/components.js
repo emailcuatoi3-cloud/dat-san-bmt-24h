@@ -38,7 +38,7 @@ export function bindFavoriteButtons(root) {
     if (result.ok) paintFavButton(btn, isFavorite(slug));
     if (notice) {
       notice.innerHTML = `<i class="ri-heart-3-line text-accent-600" aria-hidden="true"></i>${esc(message)}${
-        result.reason === 'signed-out' ? ` <a href="${url('/dang-nhap')}" class="font-semibold text-primary-600 hover:text-primary-700">Đăng nhập</a>` : ''
+        result.reason === 'signed-out' ? ` <a href="${url('/dang-nhap?redirect=' + encodeURIComponent(window.location.pathname + window.location.search))}" class="font-semibold text-primary-600 hover:text-primary-700">Đăng nhập</a>` : ''
       }`;
       notice.classList.remove('hidden');
       clearTimeout(notice._timer);

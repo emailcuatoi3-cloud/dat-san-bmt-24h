@@ -427,6 +427,54 @@ run_api([
         return true;
     },
 
+    'owner_create' => function () {
+        need('owners', 'accounts');
+        require_sudo();
+        $name = in_str('fullName');
+        $business = in_str('businessName');
+        $email = strtolower(in_str('email'));
+        $phone = preg_replace('/[^\d+]/', '', in_str('phone'));
+        $address = in_str('address');
+        $password = in_str('password') ?: '123456';
+        if (mb_strlen($name) < 2) fail('Vui lòng nhập họ tên chủ sân.');
+        if (mb_strlen($business) < 2) fail('Vui lòng nhập tên cơ sở / sân.');
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) fail('Email không hợp lệ.');
+        if (q_val('SELECT id FROM users WHERE email = ?', [$email])) fail('Email này đã được sử dụng.');
+        if (strlen($password) < 6) fail('Mật khẩu tối thiểu 6 ký tự.');
+
+        $hash = password_hash($password, PASSWORD_DEFAULT);
+        q('INSERT INTO users (email, password_hash, full_name, phone, address, role, business_name, status, favorites) VALUES (?,?,?,?,?,?,?,?,?)',
+            [$email, $hash, $name, $phone, $address, 'owner', $business, 'active', '[]']);
+        audit('accounts', 'Thêm chủ sân mới', $business . ' · ' . $email, 'Admin tạo trực tiếp', 'success');
+        return true;
+    },
+
+    'owner_edit' => function () {
+        need('owners', 'accounts');
+        require_sudo();
+        $id = in_int('id');
+        $u = q_one("SELECT * FROM users WHERE id = ? AND role = 'owner'", [$id]) ?: fail('Không tìm thấy chủ sân.');
+        $name = in_str('fullName');
+        $business = in_str('businessName');
+        $phone = preg_replace('/[^\d+]/', '', in_str('phone'));
+        $address = in_str('address');
+        if (mb_strlen($name) < 2) fail('Vui lòng nhập họ tên chủ sân.');
+        if (mb_strlen($business) < 2) fail('Vui lòng nhập tên cơ sở / sân.');
+
+        $email = strtolower(in_str('email'));
+        if ($email && $email !== $u['email']) {
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) fail('Email không hợp lệ.');
+            if (q_val('SELECT id FROM users WHERE email = ? AND id != ?', [$email, $id])) fail('Email này đã được sử dụng.');
+        } else {
+            $email = $u['email'];
+        }
+
+        q('UPDATE users SET full_name = ?, business_name = ?, phone = ?, address = ?, email = ? WHERE id = ?',
+            [$name, $business, $phone, $address, $email, $id]);
+        audit('accounts', 'Sửa thông tin chủ sân', $business . ' · ' . $email, 'Cập nhật thông tin cơ sở', 'info');
+        return true;
+    },
+
     // ---------------- Sân ----------------
     'courts' => function () {
         need('courts');
@@ -546,15 +594,21 @@ run_api([
     // ---------------- Đơn & hóa đơn ----------------
     'bookings' => function () {
         need('bookings');
+        auto_cancel_expired_holds();
         return all_bookings();
     },
 
     'booking_status' => function () {
         need('bookings');
+        auto_cancel_expired_holds();
         $b = q_one('SELECT * FROM bookings WHERE id = ?', [in_str('id')]) ?: fail('Không tìm thấy đơn.');
         $status = in_str('status');
         if (!in_array($status, ['confirmed', 'cancelled'], true)) fail('Trạng thái không hợp lệ.');
         $reason = $status === 'cancelled' ? (in_str('reason') ?: 'Quản trị viên từ chối đơn') : null;
+<<<<<<< HEAD
+=======
+        $now = date('Y-m-d H:i:s');
+>>>>>>> origin/an
 
         if ($status === 'confirmed') {
             $slots = jd($b['slots']);
@@ -564,10 +618,24 @@ run_api([
             if (!empty($unavailable)) {
                 fail('Không thể duyệt đơn vì khung giờ ' . implode(', ', $unavailable) . ' ngày ' . $b['booking_date'] . ' đã bị trùng lịch với đơn khác hoặc đang bị khóa.');
             }
+<<<<<<< HEAD
         }
 
         q('UPDATE bookings SET status = ?, reject_reason = ? WHERE id = ?', [$status, $reason, $b['id']]);
         approve_deposit($b, $status);
+=======
+            if ($b['source'] === 'online' && (int) $b['deposit_amount'] > 0 && $b['payment_status'] === 'unpaid') {
+                $holdExp = date('Y-m-d H:i:s', time() + HOLD_MINUTES * 60);
+                q('UPDATE bookings SET approved_at = ?, hold_expires_at = ?, status = ?, reject_reason = NULL WHERE id = ?', [$now, $holdExp, 'confirmed', $b['id']]);
+            } else {
+                q('UPDATE bookings SET approved_at = COALESCE(approved_at, ?), hold_expires_at = NULL, status = ?, reject_reason = NULL WHERE id = ?', [$now, 'confirmed', $b['id']]);
+                approve_deposit($b, $status);
+            }
+        } else {
+            q('UPDATE bookings SET status = ?, reject_reason = ? WHERE id = ?', [$status, $reason, $b['id']]);
+            approve_deposit($b, $status);
+        }
+>>>>>>> origin/an
         audit('bookings', $status === 'confirmed' ? 'Duyệt đơn đặt sân' : 'Từ chối đơn đặt sân', $b['code'] . ' · ' . $b['court_name'], (string) $reason, $status === 'confirmed' ? 'success' : 'warning');
         return map_booking(q_one(BOOKING_SELECT . ' WHERE b.id = ?', [$b['id']]));
     },
@@ -594,6 +662,7 @@ run_api([
 
     'category_save' => function () {
         need('categories');
+        if (admin_access()['roleKey'] !== 'super_admin') fail('Chỉ Quản trị hệ thống mới có quyền thêm/sửa danh mục. Nhân viên chỉ có quyền xem.');
         $name = in_str('name');
         if (mb_strlen($name) < 2) fail('Vui lòng nhập tên danh mục.');
         $kind = in_str('kind') === 'area' ? 'area' : 'sport';
@@ -608,8 +677,19 @@ run_api([
         return true;
     },
 
+    'category_toggle' => function () {
+        need('categories');
+        if (admin_access()['roleKey'] !== 'super_admin') fail('Chỉ Quản trị hệ thống mới có quyền ẩn/hiện danh mục. Nhân viên chỉ có quyền xem.');
+        $c = q_one('SELECT * FROM categories WHERE id = ?', [in_str('id')]) ?: fail('Không tìm thấy danh mục.');
+        $newActive = $c['active'] ? 0 : 1;
+        q('UPDATE categories SET active = ? WHERE id = ?', [$newActive, $c['id']]);
+        audit('categories', $newActive ? 'Hiện danh mục' : 'Ẩn danh mục', $c['name'], '', $newActive ? 'success' : 'warning');
+        return true;
+    },
+
     'category_delete' => function () {
         need('categories');
+        if (admin_access()['roleKey'] !== 'super_admin') fail('Chỉ Quản trị hệ thống mới có quyền xóa danh mục. Nhân viên chỉ có quyền xem.');
         $c = q_one('SELECT * FROM categories WHERE id = ?', [in_str('id')]) ?: fail('Không tìm thấy danh mục.');
         q('DELETE FROM categories WHERE id = ?', [$c['id']]);
         audit('categories', 'Xóa danh mục', $c['name'], '', 'danger');

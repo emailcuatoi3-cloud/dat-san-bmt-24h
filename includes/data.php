@@ -102,7 +102,7 @@ function session_ended(string $date, array $slots): bool
 
 function is_expired_hold(array $r): bool
 {
-    return $r['source'] === 'online' && $r['status'] === 'pending' && $r['payment_status'] === 'unpaid'
+    return $r['source'] === 'online' && in_array($r['status'], ['pending', 'confirmed'], true) && $r['payment_status'] === 'unpaid'
         && $r['hold_expires_at'] && strtotime($r['hold_expires_at']) <= time();
 }
 
@@ -120,6 +120,7 @@ function booking_payment_label(array $r): string
         case 'unpaid': return 'VietQR – chờ cọc ' . money($dep);
         case 'paid': return 'VietQR – đã thu đủ ' . money($total);
         case 'deposit_paid': return 'VietQR – đã nhận cọc ' . money($dep);
+        case 'refunded': return 'Đã hoàn cọc ' . money($dep ?: $total);
         default: return $dep > 0 ? 'VietQR – đã báo cọc ' . money($dep) : 'Thanh toán tại sân';
     }
 }
@@ -166,6 +167,7 @@ function map_booking(array $r): array
         'rejectReason' => $r['reject_reason'],
         'cancelReason' => $expired ? 'Hết thời gian giữ sân do chưa xác nhận tiền cọc.' : $r['cancel_reason'],
         'holdExpiresAt' => iso($r['hold_expires_at']),
+        'approvedAt' => iso($r['approved_at'] ?? null),
         'checkedInAt' => iso($r['checked_in_at']),
         'note' => (string) $r['note'],
         'createdAt' => iso($r['created_at']),
@@ -186,12 +188,20 @@ function auto_complete_bookings(): void
     if ($ids) q('UPDATE bookings SET status = \'completed\' WHERE id IN (' . in_list($ids) . ')', $ids);
 }
 
+function auto_cancel_expired_holds(): void
+{
+    q("UPDATE bookings SET status = 'cancelled', cancel_reason = 'Hết thời gian giữ chỗ (5 phút) do chưa thanh toán tiền cọc.'
+       WHERE source = 'online' AND status IN ('pending', 'confirmed') AND payment_status = 'unpaid'
+         AND hold_expires_at IS NOT NULL AND hold_expires_at <= NOW()");
+}
+
 /**
  * Khung giờ đã bị chiếm trong một ngày: đơn còn hiệu lực + lượt đang giữ sân chưa hết hạn.
  * Trả về [court_id => [slot, ...]].
  */
 function occupied_slots(string $date, string $excludeId = ''): array
 {
+    auto_cancel_expired_holds();
     $rows = q_all("SELECT id, court_id, slots, source, status, payment_status, hold_expires_at FROM bookings
                    WHERE booking_date = ? AND status IN ('pending','confirmed')", [$date]);
     $map = [];

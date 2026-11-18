@@ -202,7 +202,11 @@ function render_site_header(bool $tr): void
 <header id="site-header" <?= tcls($tr, 'bg-transparent border-b border-white/10', 'bg-background-50/80 backdrop-blur-md border-b border-background-200', 'fixed top-0 left-0 right-0 z-50 transition-all duration-300') ?> <?= $tr ? 'data-transparent="1"' : '' ?>>
   <div class="w-full px-4 md:px-6 xl:px-8 h-[72px] flex items-center justify-between gap-3 xl:gap-6">
     <a href="<?= url('/') ?>" class="flex items-center gap-2.5 shrink-0 group" aria-label="Đặt Sân BMT 24H - Trang chủ">
+<<<<<<< HEAD
       <img src="<?= site_logo() ?>" alt="Logo Đặt Sân BMT 24H" class="w-10 h-10 object-contain transition-transform group-hover:scale-105">
+=======
+      <img src="<?= site_logo() ?>" alt="Logo Đặt Sân BMT 24H" class="w-10 h-10 rounded-lg object-contain transition-transform group-hover:scale-105">
+>>>>>>> origin/an
       <span class="leading-tight">
         <span <?= tcls($tr, 'text-white', 'text-foreground-950', 'block font-heading text-[15px] font-extrabold tracking-tight') ?>>ĐẶT SÂN BMT</span>
         <span class="block text-[11px] font-semibold tracking-[0.18em] text-primary-500">24H</span>
@@ -307,7 +311,13 @@ function render_site_header(bool $tr): void
           </div>
         </div>
       <?php else: ?>
-        <a href="<?= url('/dang-nhap') ?>" <?= tcls($tr, 'text-white hover:bg-white/15', 'text-foreground-800 hover:bg-background-100', 'flex items-center gap-2 rounded-md py-1.5 px-2.5 transition-colors') ?>>
+        <?php
+        $curPath = current_path();
+        $authPages = ['/dang-nhap', '/dang-ky', '/dang-ky-chu-san', '/quen-mat-khau', '/dat-lai-mat-khau', '/dang-xuat'];
+        $curFull = !in_array($curPath, $authPages, true) ? $curPath . (!empty($_SERVER['QUERY_STRING']) ? '?' . $_SERVER['QUERY_STRING'] : '') : '';
+        $headerLoginUrl = url('/dang-nhap' . ($curFull && $curFull !== '/' ? '?redirect=' . urlencode($curFull) : ''));
+        ?>
+        <a href="<?= $headerLoginUrl ?>" <?= tcls($tr, 'text-white hover:bg-white/15', 'text-foreground-800 hover:bg-background-100', 'flex items-center gap-2 rounded-md py-1.5 px-2.5 transition-colors') ?>>
           <span class="flex h-7 w-7 items-center justify-center rounded-full bg-secondary-500 text-background-950"><i class="ri-user-line text-sm" aria-hidden="true"></i></span>
           <span class="whitespace-nowrap text-sm font-semibold">Đăng nhập</span>
         </a>
@@ -370,7 +380,7 @@ function render_site_header(bool $tr): void
           <a href="<?= url('/tai-khoan') ?>" class="flex items-center gap-2.5 rounded-md bg-background-100 px-3 py-2.5 text-sm font-semibold text-foreground-900"><i class="ri-user-line text-base text-primary-600" aria-hidden="true"></i>Tài khoản của tôi</a>
         <?php endif; ?>
         <a href="<?= url('/dat-san') ?>" class="w-full text-center whitespace-nowrap rounded-md bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white">Đặt sân</a>
-        <?php if (!$u): ?><a href="<?= url('/dang-nhap') ?>" class="py-1 text-center text-xs font-medium text-foreground-500">Đăng nhập / Đăng ký</a><?php endif; ?>
+        <?php if (!$u): ?><a href="<?= $headerLoginUrl ?>" class="py-1 text-center text-xs font-medium text-foreground-500">Đăng nhập / Đăng ký</a><?php endif; ?>
       </div>
     </nav>
   </div>
@@ -414,7 +424,11 @@ function render_site_footer(): void
     <div class="grid grid-cols-2 gap-x-6 gap-y-8 sm:gap-10 lg:grid-cols-4">
       <div class="col-span-2 sm:col-span-1">
         <a href="<?= url('/') ?>" class="flex items-center gap-2.5 mb-4 group">
+<<<<<<< HEAD
           <img src="<?= site_logo() ?>" alt="Logo Đặt Sân BMT 24H" class="w-10 h-10 object-contain transition-transform group-hover:scale-105">
+=======
+          <img src="<?= site_logo() ?>" alt="Logo Đặt Sân BMT 24H" class="w-10 h-10 rounded-lg object-contain transition-transform group-hover:scale-105">
+>>>>>>> origin/an
           <span class="leading-tight"><span class="block font-heading text-[15px] font-extrabold tracking-tight text-foreground-950">ĐẶT SÂN BMT</span><span class="block text-[11px] font-semibold tracking-[0.18em] text-primary-600">24H</span></span>
         </a>
         <p class="text-sm leading-relaxed text-foreground-600">Nền tảng đặt sân bóng đá và sân cầu lông trực tuyến tại Buôn Ma Thuột, Đắk Lắk. Kết nối người chơi với hơn 30 sân thể thao chất lượng trong vài thao tác.</p>

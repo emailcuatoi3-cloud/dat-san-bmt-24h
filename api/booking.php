@@ -178,12 +178,12 @@ run_api([
 
         q('INSERT INTO bookings (id, code, source, court_id, court_name, sport, area, image, customer_id, customer_name, customer_phone, customer_email,
              booking_date, start_slot, duration_minutes, slots, unit_price, base_total, discount_amount, promo_code, total_price, deposit_amount, extras,
-             payment_method, payment_status, status, hold_expires_at, note)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [
+             payment_method, payment_status, status, approved_at, hold_expires_at, note)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [
             $id, $bookingCode, 'online', $court['id'], $court['name'], $court['sport'], $court['area'], $court['image'], $u['id'] ?? null,
             $name, $phone, $email ?: null, $date, $start, $duration, j($slots), $court['pricePerHour'], $subtotal, $discount, $promoCode,
             $total, $deposit, j(array_map(fn($x) => ['id' => $x, 'label' => EXTRA_SERVICES[$x][0], 'price' => EXTRA_SERVICES[$x][1]], $extraIds)),
-            $mode === 'full' ? 'vietqr-full' : 'vietqr-deposit', 'unpaid', 'pending', date('Y-m-d H:i:s', time() + HOLD_MINUTES * 60), $note ?: null,
+            $mode === 'full' ? 'vietqr-full' : 'vietqr-deposit', 'unpaid', 'pending', null, null, $note ?: null,
         ]);
         return booking_by_code($bookingCode);
     },
@@ -200,25 +200,38 @@ run_api([
 
     // Khách bấm "Tôi đã chuyển khoản": kiểm tra đơn, thời gian giữ sân và trùng lịch rồi ghi nhận báo cọc
     'claim' => function () {
+        auto_cancel_expired_holds();
         $b = q_one('SELECT * FROM bookings WHERE id = ?', [in_str('id')]);
         if (!$b) fail('Không tìm thấy đơn trong hệ thống nên chưa thể hiện vé. Vui lòng thử lại.');
-        if ($b['status'] === 'cancelled') fail('Đơn này đã bị hủy nên không thể hiện vé. Vui lòng đặt lại khung giờ khác.');
+        if ($b['status'] === 'cancelled') fail('Đơn này đã bị hủy nên không thể chuyển cọc. Vui lòng đặt lại khung giờ khác.');
+        if (!$b['approved_at']) fail('Đơn đặt sân đang chờ chủ sân duyệt. Khi chủ sân duyệt xong, hệ thống mới mở cổng nhận cọc.');
         if ($b['payment_status'] === 'unpaid' && $b['hold_expires_at'] && strtotime($b['hold_expires_at']) <= time()) {
-            fail('Đã hết thời gian giữ sân. Vui lòng chọn lại khung giờ khác.');
+            fail('Đã hết thời gian 5 phút chuyển cọc. Đơn đã tự động hủy.');
         }
         $clash = array_values(array_intersect(jd($b['slots']), taken_slots($b['court_id'], $b['booking_date'], $b['id'])));
         if ($clash) fail('Khung giờ ' . implode(', ', $clash) . ' vừa được người khác đặt. Vui lòng chọn khung giờ khác.');
-        q("UPDATE bookings SET payment_status = 'deposit_claimed' WHERE id = ? AND payment_status = 'unpaid'", [$b['id']]);
+        $u = current_user();
+        if (!$b['customer_id'] && $u) {
+            q("UPDATE bookings SET customer_id = ?, payment_status = 'deposit_claimed' WHERE id = ? AND payment_status = 'unpaid'", [$u['id'], $b['id']]);
+        } else {
+            q("UPDATE bookings SET payment_status = 'deposit_claimed' WHERE id = ? AND payment_status = 'unpaid'", [$b['id']]);
+        }
         return ['autoConfirmSeconds' => AUTO_CONFIRM_SECONDS];
     },
 
-    // Sau thời gian đối soát, hệ thống tự xác nhận cọc và mở vé
+    // Sau thời gian đối soát, hệ thống ghi nhận cọc thành công, hoàn tất giữ sân và kích hoạt vé
     'auto_confirm' => function () {
         $b = q_one('SELECT * FROM bookings WHERE id = ?', [in_str('id')]);
         if (!$b || $b['payment_status'] === 'unpaid') fail('Không tìm thấy đơn để xác nhận tiền cọc. Vui lòng tải lại trang và thử lại.');
         if ($b['payment_status'] === 'deposit_claimed') {
             $full = $b['payment_method'] === 'vietqr-full' || (int) $b['deposit_amount'] >= (int) $b['total_price'];
-            q("UPDATE bookings SET payment_status = ?, status = 'confirmed' WHERE id = ?", [$full ? 'paid' : 'deposit_paid', $b['id']]);
+            $u = current_user();
+            // Đã nhận cọc và chủ sân đã duyệt trước đó -> Hoàn tất giữ sân chính thức (status = 'confirmed')
+            if (!$b['customer_id'] && $u) {
+                q("UPDATE bookings SET customer_id = ?, payment_status = ?, status = 'confirmed' WHERE id = ?", [$u['id'], $full ? 'paid' : 'deposit_paid', $b['id']]);
+            } else {
+                q("UPDATE bookings SET payment_status = ?, status = 'confirmed' WHERE id = ?", [$full ? 'paid' : 'deposit_paid', $b['id']]);
+            }
         }
         return booking_by_code($b['code']);
     },
@@ -231,6 +244,7 @@ run_api([
 
     // Xem 1 đơn theo mã vé
     'get' => function () {
+        auto_cancel_expired_holds();
         $b = booking_by_code(strtoupper(trim($_GET['code'] ?? in_str('code'))));
         if (!$b) fail('Không tìm thấy đơn với mã này.');
         return $b;

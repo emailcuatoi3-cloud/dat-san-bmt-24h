@@ -2,7 +2,11 @@
  * Module: Controller luồng Đặt sân 3 bước (Mã Minh Hoan - PK04409)
  * - Quản lý state đặt sân, tải slot bận theo ngày và vẽ lưới giờ kèm giá động
  * - Validate form thông tin, kiểm tra điều kiện voucher và tính tổng tiền real-time
+<<<<<<< HEAD
  * - Điều khiển đồng hồ giữ chỗ 10 phút, đối soát thanh toán VietQR và render vé QR
+=======
+ * - Điều khiển luồng duyệt đơn & đồng hồ giữ chỗ 5 phút, đối soát thanh toán VietQR và render vé QR
+>>>>>>> origin/an
  */
 
 import { $, $$, PAGE, APP, api, esc, url, cx, formatVnd, copyText } from '../core/ui.js';
@@ -42,6 +46,94 @@ const S = {
   busy: false,
 };
 let holdTimer = 0;
+
+const DRAFT_KEY = 'datsan_booking_draft';
+
+function saveDraft() {
+  try {
+    sessionStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({
+        step: S.step,
+        courtSlug: S.courtSlug,
+        date: S.date,
+        duration: S.duration,
+        startSlot: S.startSlot,
+        form: S.form,
+        extras: S.extras,
+        agree: S.agree,
+        promoCode: S.promoCode,
+        applied: S.applied,
+        depositMode: S.depositMode,
+        booking: S.booking,
+        savedAt: Date.now(),
+      })
+    );
+  } catch (e) {}
+}
+
+function clearDraft() {
+  try {
+    sessionStorage.removeItem(DRAFT_KEY);
+  } catch (e) {}
+}
+
+function restoreDraft() {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+    if (!raw) return false;
+    const draft = JSON.parse(raw);
+    if (!draft || typeof draft !== 'object') return false;
+    // Hết hạn sau 30 phút
+    if (Date.now() - (draft.savedAt || 0) > 30 * 60 * 1000) {
+      clearDraft();
+      return false;
+    }
+    // Nếu URL preset slug khác court đã lưu thì không phục hồi
+    if (preset.slug && draft.courtSlug && preset.slug !== draft.courtSlug) {
+      return false;
+    }
+    if (draft.courtSlug && courts.some((c) => c.slug === draft.courtSlug)) {
+      S.courtSlug = draft.courtSlug;
+    }
+    if (draft.date && draft.date >= todayIso) S.date = draft.date;
+    if (draft.duration && [60, 90, 120].includes(draft.duration)) S.duration = draft.duration;
+    if (draft.startSlot) S.startSlot = draft.startSlot;
+    if (Array.isArray(draft.extras)) S.extras = draft.extras;
+    if (draft.agree !== undefined) S.agree = draft.agree;
+    if (draft.promoCode) S.promoCode = draft.promoCode;
+    if (draft.applied) S.applied = draft.applied;
+    if (draft.depositMode) S.depositMode = draft.depositMode;
+
+    // Ưu tiên thông tin của tài khoản nếu vừa mới đăng nhập thành công
+    S.form = { ...(draft.form || {}), ...(PAGE.contact || {}) };
+
+    // Bước 3: Đang chờ duyệt hoặc chuyển cọc
+    if (draft.step === 3 && draft.booking) {
+      if (!draft.booking.approvedAt) {
+        S.booking = draft.booking;
+        S.step = 3;
+        return true;
+      }
+      const remaining = remainingHoldSeconds(draft.booking.holdExpiresAt);
+      if (remaining > 0) {
+        S.booking = draft.booking;
+        S.step = 3;
+        return true;
+      } else {
+        S.step = 2;
+        S.error = 'Thời gian 5 phút chuyển cọc trước đó đã hết hạn. Vui lòng gửi lại yêu cầu đặt sân nhé.';
+        return true;
+      }
+    }
+
+    if (draft.step === 2 && S.courtSlug && S.startSlot) {
+      S.step = 2;
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
 
 const court = () => courts.find((c) => c.slug === S.courtSlug);
 const extrasTotal = () => S.extras.reduce((s, id) => s + (extraServices.find((x) => x.id === id)?.price || 0), 0);
@@ -86,7 +178,7 @@ function slotState(slot) {
 
 // ======================= KHUNG CHUNG =======================
 function renderSteps() {
-  const steps = ['Chọn sân & giờ', 'Thông tin', 'Cọc & nhận vé'];
+  const steps = ['Chọn sân & giờ', 'Thông tin', 'Duyệt & Chuyển cọc'];
   $('#steps').innerHTML = `<div class="rounded-lg border border-background-200 bg-white p-4 md:p-5">
     <div class="flex items-center gap-2.5 md:hidden">
       <span class="whitespace-nowrap text-xs font-semibold text-primary-600">Bước ${S.step}/3</span>
@@ -122,7 +214,7 @@ function renderNav() {
         : `<a href="${url('/tim-san')}" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md border border-background-300 px-4 py-2.5 text-sm font-semibold text-foreground-800 transition-colors hover:border-primary-400 hover:text-primary-700"><i class="ri-arrow-left-line" aria-hidden="true"></i>Xem danh sách sân</a>`
     }
     <button type="button" data-next ${S.busy ? 'disabled' : ''} class="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md bg-accent-500 px-5 py-3 text-sm font-bold text-background-950 transition-colors hover:bg-accent-600 disabled:cursor-not-allowed disabled:opacity-60">
-      ${S.busy ? '<i class="ri-loader-4-line animate-spin text-base" aria-hidden="true"></i>' : ''}${S.step === 2 ? 'Giữ sân &amp; thanh toán cọc' : 'Tiếp tục'}<i class="ri-arrow-right-line" aria-hidden="true"></i></button></div>`;
+      ${S.busy ? '<i class="ri-loader-4-line animate-spin text-base" aria-hidden="true"></i>' : ''}${S.step === 2 ? 'Gửi yêu cầu đặt sân' : 'Tiếp tục'}<i class="ri-arrow-right-line" aria-hidden="true"></i></button></div>`;
 }
 
 function renderSummary() {
@@ -134,6 +226,9 @@ function renderSummary() {
   }
   const band = S.startSlot ? priceBandAt(c, S.startSlot) : null;
   const row = (dt, dd, cls = '') => `<div class="flex items-start justify-between gap-3 ${cls}"><dt class="text-foreground-500">${dt}</dt><dd class="text-right font-medium text-foreground-950">${dd}</dd></div>`;
+  const tPrice = total();
+  const depPrice = calcDeposit(tPrice);
+  const remPrice = Math.max(0, tPrice - depPrice);
   $('#summary').innerHTML = `<div class="rounded-lg border border-background-200 bg-white p-5">
     <h2 class="font-heading text-base font-bold text-foreground-950">Tóm tắt đơn</h2>
     <div class="mt-4 flex gap-3">
@@ -145,12 +240,32 @@ function renderSummary() {
       ${row('Khung giờ', S.startSlot ? formatTimeRange(S.startSlot, S.duration) : 'Chưa chọn')}
       ${row('Thời lượng', `${S.duration} phút`)}
       ${row('Khung giá', band ? `${esc(band.shortLabel)}<span class="block text-[11px] font-normal text-foreground-500">${band.start} - ${band.end} · ${formatVnd(band.price)}/giờ</span>` : 'Chưa chọn giờ')}
-      ${row('Tiền sân', S.startSlot ? formatVnd(courtPrice()) : '—')}
       ${extrasTotal() > 0 ? row('Dịch vụ thêm', formatVnd(extrasTotal())) : ''}
       ${discount() > 0 ? `<div class="flex items-center justify-between gap-3"><dt class="flex items-center gap-1 text-foreground-500"><i class="ri-coupon-3-line text-primary-600" aria-hidden="true"></i>Mã ${esc(S.applied.promotion.code)}</dt><dd class="font-semibold text-accent-700">-${formatVnd(discount())}</dd></div>` : ''}
     </dl>
-    <div class="mt-4 flex items-end justify-between gap-3 rounded-md bg-accent-50 px-3.5 py-3"><span class="text-sm font-semibold text-accent-900">Tổng cộng</span><span class="font-heading text-xl font-extrabold text-accent-900">${S.startSlot ? formatVnd(total()) : '—'}</span></div>
-    <p class="mt-2 text-[11px] leading-relaxed text-foreground-500">${S.startSlot ? `Cọc ${formatVnd(calcDeposit(total()))} (30%) để giữ sân trong ${HOLD_MINUTES} phút, phần còn lại trả tại sân.` : 'Chọn khung giờ để xem giá chính xác của lượt chơi.'}</p>
+    <div class="mt-4 rounded-lg border border-background-200 bg-background-50 p-4">
+      <div class="flex items-center justify-between text-sm">
+        <span class="font-medium text-foreground-600">Tổng tiền sân:</span>
+        <span class="font-heading text-base font-bold text-foreground-950">${S.startSlot ? formatVnd(tPrice) : '—'}</span>
+      </div>
+      <div class="mt-2.5 flex items-center justify-between border-t border-background-200 pt-2.5 text-sm">
+        <div>
+          <span class="font-semibold text-primary-700 dark:text-primary-300">Tiền cọc (30%):</span>
+          <span class="block text-[10px] text-foreground-500">Chuyển sau khi chủ sân duyệt</span>
+        </div>
+        <span class="font-heading text-lg font-bold text-primary-600 dark:text-primary-400">${S.startSlot ? formatVnd(depPrice) : '—'}</span>
+      </div>
+      ${S.startSlot ? `
+        <div class="mt-2 flex items-center justify-between border-t border-dashed border-background-200 pt-2 text-xs text-foreground-600">
+          <span>Còn lại thanh toán tại sân:</span>
+          <span class="font-medium text-foreground-800">${formatVnd(remPrice)}</span>
+        </div>
+      ` : ''}
+    </div>
+    <div class="mt-3 rounded-md bg-primary-50/60 p-2.5 text-[11px] leading-relaxed text-foreground-600 dark:bg-primary-950/30">
+      <i class="ri-information-line mr-1 text-primary-600" aria-hidden="true"></i>
+      ${S.startSlot ? `Sau khi gửi yêu cầu, chủ sân sẽ duyệt lịch. Khi chủ sân duyệt, bạn có <b>5 phút</b> để chuyển cọc giữ chỗ. Quá 5 phút chưa cọc, sân sẽ tự động hủy.` : 'Chọn khung giờ để xem chi tiết tiền sân và tiền cọc.'}
+    </div>
   </div>`;
 }
 
@@ -294,9 +409,16 @@ function inputCls(key) {
 
 function renderStep2() {
   const f = S.form;
+  const loggedIn = !!PAGE.contact;
   $('#step-body').innerHTML = `
     <h2 class="font-heading text-lg font-bold text-foreground-950">Thông tin người đặt</h2>
     <p class="mt-1 text-sm text-foreground-600">Chỉ cần họ tên và số điện thoại. Không cần tạo tài khoản vẫn đặt được sân.</p>
+    ${!loggedIn ? `
+      <div class="mt-3 flex items-center justify-between gap-3 rounded-md border border-primary-200 bg-primary-50 px-3.5 py-2.5 text-xs text-primary-900">
+        <span class="flex items-center gap-2"><i class="ri-user-line text-sm text-primary-600" aria-hidden="true"></i>Đã có tài khoản? Đăng nhập để tự động điền thông tin và lưu lịch sử đặt sân.</span>
+        <a href="${url('/dang-nhap?redirect=' + encodeURIComponent(window.location.pathname + window.location.search))}" data-login-now class="font-bold text-primary-700 underline hover:text-primary-800">Đăng nhập</a>
+      </div>
+    ` : ''}
     <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
       <div class="min-w-0"><label for="b-name" class="mb-1.5 block text-sm font-medium text-foreground-800">Họ và tên <span class="text-accent-600">*</span></label><input id="b-name" data-form="name" type="text" maxlength="50" value="${esc(f.name)}" placeholder="Nguyễn Minh Quân" class="${inputCls('name')}">${fieldError('name')}</div>
       <div class="min-w-0"><label for="b-phone" class="mb-1.5 block text-sm font-medium text-foreground-800">Số điện thoại <span class="text-accent-600">*</span></label><input id="b-phone" data-form="phone" type="tel" inputmode="numeric" maxlength="12" value="${esc(f.phone)}" placeholder="0912345678" class="${inputCls('phone')}">${fieldError('phone') || '<p class="mt-1 text-xs text-foreground-400">10 số, bắt đầu bằng 0. Chủ sân gọi xác nhận theo số này.</p>'}</div>
@@ -359,60 +481,232 @@ async function revalidatePromo() {
 }
 
 // ======================= BƯỚC 3 =======================
+let waitingApprovalPoll = 0;
+
+function startWaitingApprovalPoll() {
+  clearInterval(waitingApprovalPoll);
+  waitingApprovalPoll = setInterval(async () => {
+    if (S.step !== 3 || !S.booking) return clearInterval(waitingApprovalPoll);
+    try {
+      const latest = await api('booking', 'get', { code: S.booking.code }, 'GET');
+      if (latest && (latest.approvedAt || latest.status !== 'pending')) {
+        clearInterval(waitingApprovalPoll);
+        S.booking = latest;
+        saveDraft();
+        if (latest.status === 'cancelled') {
+          renderStep3();
+        } else if (latest.paymentStatus === 'unpaid') {
+          // Chủ sân đã duyệt, mở cổng nhận cọc và đếm ngược 5 phút
+          renderStep3();
+          startHoldTimer();
+        } else {
+          showTicket(latest);
+        }
+      }
+    } catch (e) {}
+  }, 3000);
+}
+
 function renderStep3() {
   const c = court();
   const b = S.booking;
-  const payAmount = b.depositAmount;
+  if (!b) return;
+
+  if ((b.status === 'confirmed' || b.status === 'completed') && b.paymentStatus !== 'unpaid') {
+    return showTicket(b);
+  }
+
+  // Đơn bị hủy (quá 5 phút chưa cọc hoặc chủ sân từ chối)
+  if (b.status === 'cancelled') {
+    clearInterval(holdTimer);
+    clearInterval(waitingApprovalPoll);
+    $('#step-body').innerHTML = `
+      <div class="rounded-lg border border-accent-200 bg-white p-6 text-center">
+        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-accent-100 text-accent-700">
+          <i class="ri-close-circle-line text-3xl" aria-hidden="true"></i>
+        </div>
+        <h2 class="mt-4 font-heading text-xl font-extrabold text-foreground-950">Đơn đặt sân đã bị hủy</h2>
+        <p class="mt-2 max-w-md mx-auto text-sm leading-relaxed text-foreground-600">
+          ${esc(b.cancelReason || b.rejectReason || 'Đã hết thời gian 5 phút chuyển cọc hoặc chủ sân đã từ chối yêu cầu.')}
+        </p>
+        <div class="mt-6 flex flex-col gap-2.5 sm:flex-row sm:justify-center">
+          <button type="button" data-rebook class="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary-500 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-600"><i class="ri-refresh-line" aria-hidden="true"></i>Chọn khung giờ khác</button>
+          <a href="${url('/tim-san')}" class="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-background-300 px-4 py-2.5 text-sm font-semibold text-foreground-800 transition-colors hover:border-primary-400 hover:text-primary-700">Xem danh sách sân</a>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // GIAI ĐOẠN 3A: Chờ chủ sân duyệt đơn trước (chưa nhận cọc)
+  if (!b.approvedAt) {
+    clearInterval(holdTimer);
+    $('#step-body').innerHTML = `
+      <div class="rounded-lg border border-background-200 bg-white p-6 text-center">
+        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-accent-50 text-accent-600">
+          <i class="ri-time-line text-3xl animate-pulse" aria-hidden="true"></i>
+        </div>
+        <h2 class="mt-4 font-heading text-xl font-extrabold text-foreground-950">Yêu cầu đặt sân đã gửi — Đang chờ chủ sân duyệt</h2>
+        <p class="mt-2 max-w-md mx-auto text-sm leading-relaxed text-foreground-600">
+          Chủ sân đang kiểm tra và duyệt lịch đặt sân. Ngay khi chủ sân duyệt, hệ thống sẽ mở mã VietQR để bạn chuyển cọc trong vòng <b>5 phút</b>.
+        </p>
+
+        <div class="mt-5 rounded-lg border border-accent-200 bg-accent-50/70 p-3.5 text-xs text-accent-900 max-w-md mx-auto flex items-center justify-center gap-2">
+          <i class="ri-loader-4-line animate-spin text-base text-accent-700" aria-hidden="true"></i>
+          <span>Hệ thống đang kết nối với chủ sân... Màn hình sẽ tự động mở mã chuyển cọc ngay khi được duyệt.</span>
+        </div>
+
+        <div class="mt-5 max-w-md mx-auto rounded-lg border border-background-200 bg-background-50 p-4 text-left text-sm space-y-2.5">
+          <div class="flex items-center justify-between"><span class="text-xs text-foreground-500">Mã đơn</span><span class="font-mono font-bold text-primary-700">${esc(b.code)}</span></div>
+          <div class="flex items-center justify-between"><span class="text-xs text-foreground-500">Sân</span><span class="font-semibold text-foreground-950">${esc(c.name)}</span></div>
+          <div class="flex items-center justify-between"><span class="text-xs text-foreground-500">Khung giờ</span><span class="font-semibold text-foreground-950">${formatTimeRange(b.startSlot, b.durationMinutes)} · ${formatLongDate(b.date)}</span></div>
+          <div class="flex items-center justify-between border-t border-background-200 pt-2"><span class="text-xs text-foreground-500">Tổng tiền sân</span><span class="font-bold text-foreground-950">${formatVnd(b.totalPrice)}</span></div>
+          <div class="flex items-center justify-between"><span class="text-xs font-semibold text-primary-700">Tiền cọc cần chuyển (30%)</span><span class="font-heading text-base font-bold text-primary-600">${formatVnd(calcDeposit(b.totalPrice))}</span></div>
+        </div>
+
+        <div class="mt-6 flex flex-col gap-2.5 sm:flex-row sm:justify-center">
+          <button type="button" data-cancel-hold class="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-background-300 px-4 py-2.5 text-sm font-semibold text-foreground-800 transition-colors hover:border-accent-400 hover:text-accent-700"><i class="ri-close-line" aria-hidden="true"></i>Hủy yêu cầu đặt sân</button>
+          <a href="tel:${HOTLINE.replace(/\D/g, '')}" class="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-primary-300 bg-primary-50 px-4 py-2.5 text-sm font-semibold text-primary-800 transition-colors hover:bg-primary-100"><i class="ri-phone-line" aria-hidden="true"></i>Hotline chủ sân: ${HOTLINE}</a>
+        </div>
+      </div>
+    `;
+    startWaitingApprovalPoll();
+    return;
+  }
+
+  // GIAI ĐOẠN 3B: Chủ sân đã duyệt -> Mở cổng cọc VietQR (đếm ngược 5 phút)
+  clearInterval(waitingApprovalPoll);
+  const isFull = S.depositMode === 'full' || b.paymentMethod === 'vietqr-full';
+  const payAmount = isFull ? b.totalPrice : calcDeposit(b.totalPrice);
+  const remainingAtCourt = Math.max(0, b.totalPrice - payAmount);
   const secondsLeft = remainingHoldSeconds(b.holdExpiresAt);
   const expired = secondsLeft <= 0;
   const extras = extrasTotal();
   const row = (dt, dd) => `<div class="flex items-start justify-between gap-4 px-4 py-3 text-sm"><dt class="text-foreground-500">${dt}</dt><dd class="text-right font-medium text-foreground-950">${dd}</dd></div>`;
+
   $('#step-body').innerHTML = `
-    <h2 class="font-heading text-lg font-bold text-foreground-950">Xác nhận và chuyển khoản cọc</h2>
-    <p class="mt-1 text-sm text-foreground-600">Sân đang được giữ cho bạn. Quét mã VietQR bằng app ngân hàng, phần còn lại trả tại sân.</p>
-    ${S.error ? `<div class="mt-4 flex items-start gap-2.5 rounded-md border border-accent-200 bg-accent-50 px-3.5 py-3"><i class="ri-error-warning-line mt-0.5 text-accent-700" aria-hidden="true"></i><p class="text-sm text-accent-900">${esc(S.error)}</p></div>` : ''}
-    <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_300px]">
-      <div class="min-w-0">
-        <dl class="divide-y divide-background-200 rounded-lg border border-background-200">
-          ${row('Sân', `<span class="font-semibold">${esc(c.name)}</span><span class="block text-xs font-normal text-foreground-500">${esc(c.address)}</span>`)}
-          ${row('Ngày chơi', formatLongDate(b.date))}
-          ${row('Khung giờ', `${formatTimeRange(b.startSlot, b.durationMinutes)} (${b.durationMinutes} phút)`)}
-          ${row('Tiền sân', formatVnd(b.baseTotal - extras))}
-          ${extras > 0 ? row('Dịch vụ thêm', formatVnd(extras)) : ''}
-          ${b.discount > 0 ? `<div class="flex items-start justify-between gap-4 px-4 py-3 text-sm"><dt class="flex items-center gap-1 text-foreground-500"><i class="ri-coupon-3-line text-primary-600" aria-hidden="true"></i>Mã giảm giá ${esc(b.promoCode)}</dt><dd class="text-right font-semibold text-accent-700">-${formatVnd(b.discount)}</dd></div>` : ''}
-          <div class="flex items-center justify-between gap-4 bg-background-50 px-4 py-3.5"><dt class="text-sm font-semibold text-foreground-900">Tổng cộng</dt><dd class="font-heading text-xl font-extrabold text-accent-600">${formatVnd(b.totalPrice)}</dd></div>
-        </dl>
-        <div class="mt-4"><p class="mb-2 text-sm font-medium text-foreground-800">Bạn muốn thanh toán</p>
-          <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2">${[
-            ['deposit', `Cọc 30% – ${formatVnd(calcDeposit(b.totalPrice))}`, 'Phần còn lại trả tại sân'],
-            ['full', `Trả đủ – ${formatVnd(b.totalPrice)}`, 'Không cần trả thêm khi ra sân'],
-          ]
-            .map(([v, label, note]) => {
-              const on = S.depositMode === v;
-              return `<button type="button" data-mode="${v}" class="cursor-pointer rounded-md border px-3.5 py-3 text-left transition-colors ${on ? 'border-accent-400 bg-accent-50' : 'border-background-300 bg-white hover:border-accent-300'}"><span class="flex items-center gap-2 text-sm font-semibold text-foreground-950"><span class="flex h-4 w-4 items-center justify-center rounded-full border ${on ? 'border-accent-500 bg-accent-500' : 'border-background-400 bg-white'}">${on ? '<span class="h-1.5 w-1.5 rounded-full bg-background-950"></span>' : ''}</span>${label}</span><span class="mt-1 block pl-6 text-xs text-foreground-500">${note}</span></button>`;
-            })
-            .join('')}</div></div>
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h2 class="flex items-center gap-2 font-heading text-lg font-bold text-foreground-950">
+          <i class="ri-checkbox-circle-fill text-primary-600 text-xl" aria-hidden="true"></i>Chủ sân đã duyệt — Chuyển khoản cọc
+        </h2>
+        <p class="mt-1 text-sm text-foreground-600">Vui lòng chuyển cọc trong vòng <b>5 phút</b> để hoàn tất giữ sân. Quá 5 phút chưa cọc, hệ thống sẽ tự động hủy sân.</p>
       </div>
+      <span data-countdown class="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold ${expired ? 'bg-accent-100 text-accent-900 border border-accent-300' : 'bg-accent-50 text-accent-900 border border-accent-300 animate-pulse'}">
+        <i class="ri-time-line" aria-hidden="true"></i>${expired ? 'Đã hết giờ chuyển cọc' : `Thời gian cọc còn lại: ${formatCountdown(secondsLeft)}`}
+      </span>
+    </div>
+
+    ${expired ? `
+      <div class="mt-4 flex items-start gap-2.5 rounded-md border border-accent-300 bg-accent-50 p-4 text-xs leading-relaxed text-accent-950">
+        <i class="ri-error-warning-line mt-0.5 text-base text-accent-700" aria-hidden="true"></i>
+        <div>
+          <p class="font-bold text-accent-900">Đã hết thời gian 5 phút chuyển cọc</p>
+          <p class="mt-0.5 text-accent-800">Đơn đặt sân đã tự động bị hủy để nhả khung giờ cho khách khác. Bạn vui lòng chọn lại khung giờ nhé.</p>
+        </div>
+      </div>
+    ` : ''}
+
+    ${S.error ? `<div class="mt-4 flex items-start gap-2.5 rounded-md border border-accent-200 bg-accent-50 px-3.5 py-3"><i class="ri-error-warning-line mt-0.5 text-accent-700" aria-hidden="true"></i><p class="text-sm text-accent-900">${esc(S.error)}</p></div>` : ''}
+
+    <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_310px]">
       <div class="min-w-0">
-        <div class="rounded-lg border border-background-200 bg-white p-4">
-          <div class="flex items-center justify-between gap-2"><p class="font-heading text-sm font-bold text-foreground-950">Mã VietQR</p><span data-countdown class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${expired ? 'bg-accent-100 text-accent-900' : 'bg-primary-50 text-primary-800'}"><i class="ri-time-line" aria-hidden="true"></i>${expired ? 'Đã hết giữ sân' : `Giữ sân ${formatCountdown(secondsLeft)}`}</span></div>
-          <div class="mt-3 flex h-[220px] w-full items-center justify-center overflow-hidden rounded-md border border-background-200 bg-background-50"><img src="${buildVietQrUrl(payAmount, b.code)}" alt="Mã VietQR thanh toán ${formatVnd(payAmount)} cho đơn ${esc(b.code)}" class="h-full w-full object-contain ${expired ? 'opacity-40' : ''}"></div>
-          <div class="mt-3 space-y-1.5 text-xs">
-            <div class="flex items-center justify-between gap-2"><span class="text-foreground-500">Ngân hàng</span><span class="font-semibold text-foreground-900">${esc(bankAccount.bankName)}</span></div>
-            <div class="flex items-center justify-between gap-2"><span class="text-foreground-500">Số tài khoản</span><button type="button" data-copy="${esc(bankAccount.accountNumber)}" class="flex cursor-pointer items-center gap-1.5 whitespace-nowrap font-semibold text-foreground-900 hover:text-primary-600">${esc(bankAccount.accountNumber)}<i class="ri-file-copy-line" aria-hidden="true"></i></button></div>
-            <div class="flex items-center justify-between gap-2"><span class="text-foreground-500">Chủ tài khoản</span><span class="font-semibold text-foreground-900">${esc(bankAccount.accountName)}</span></div>
-            <div class="flex items-center justify-between gap-2"><span class="text-foreground-500">Số tiền</span><span class="font-semibold text-accent-600">${formatVnd(payAmount)}</span></div>
-            <div class="flex items-center justify-between gap-2"><span class="text-foreground-500">Nội dung</span><button type="button" data-copy="${esc(b.code)}" class="flex cursor-pointer items-center gap-1.5 whitespace-nowrap font-semibold text-foreground-900 hover:text-primary-600">${esc(b.code)}<i class="ri-file-copy-line" aria-hidden="true"></i></button></div>
+        <dl class="divide-y divide-background-200 rounded-lg border border-background-200 bg-white">
+          ${row('Sân', `<span class="font-semibold text-foreground-950">${esc(c.name)}</span><span class="block text-xs font-normal text-foreground-500">${esc(c.address)}</span>`)}
+          ${row('Ngày chơi', `<span class="font-semibold text-foreground-950">${formatLongDate(b.date)}</span>`)}
+          ${row('Khung giờ', `<span class="font-semibold text-foreground-950">${formatTimeRange(b.startSlot, b.durationMinutes)} (${b.durationMinutes} phút)</span>`)}
+          ${row('Tiền sân', `<span class="font-medium text-foreground-900">${formatVnd(b.baseTotal - extras)}</span>`)}
+          ${extras > 0 ? row('Dịch vụ thêm', `<span class="font-medium text-foreground-900">${formatVnd(extras)}</span>`) : ''}
+          ${b.discount > 0 ? `<div class="flex items-start justify-between gap-4 px-4 py-3 text-sm"><dt class="flex items-center gap-1 text-foreground-500"><i class="ri-coupon-3-line text-primary-600" aria-hidden="true"></i>Mã giảm giá ${esc(b.promoCode)}</dt><dd class="text-right font-semibold text-accent-700">-${formatVnd(b.discount)}</dd></div>` : ''}
+          
+          <div class="flex items-center justify-between gap-4 bg-background-50 px-4 py-3 text-sm">
+            <dt class="font-semibold text-foreground-700">Tổng tiền sân</dt>
+            <dd class="font-heading text-base font-bold text-foreground-950">${formatVnd(b.totalPrice)}</dd>
+          </div>
+
+          <div class="flex items-center justify-between gap-4 border-t-2 border-primary-500 bg-primary-50/80 px-4 py-3.5 dark:bg-primary-950/40">
+            <dt>
+              <span class="block font-bold text-primary-900 dark:text-primary-200">
+                ${isFull ? 'Thanh toán toàn bộ (100%)' : 'Tiền cọc cần chuyển ngay (30%)'}
+              </span>
+              <span class="block text-[11px] text-primary-700 dark:text-primary-300">
+                Chủ sân đã duyệt đơn. Chuyển cọc để hoàn tất giữ sân.
+              </span>
+            </dt>
+            <dd class="text-right font-heading text-2xl font-black text-primary-600 dark:text-primary-400">
+              ${formatVnd(payAmount)}
+            </dd>
+          </div>
+
+          ${!isFull ? `
+            <div class="flex items-center justify-between gap-4 bg-background-50/80 px-4 py-2.5 text-xs text-foreground-600">
+              <dt>Còn lại thanh toán tại sân</dt>
+              <dd class="font-bold text-foreground-900">${formatVnd(remainingAtCourt)} <span class="font-normal text-foreground-500">(trả khi nhận sân)</span></dd>
+            </div>
+          ` : ''}
+        </dl>
+
+        <div class="mt-4">
+          <p class="mb-2 text-sm font-semibold text-foreground-900">Phương thức thanh toán cọc</p>
+          <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            <button type="button" data-mode="deposit" class="cursor-pointer rounded-lg border-2 p-3 text-left transition-all ${!isFull ? 'border-primary-500 bg-primary-50/70 ring-1 ring-primary-500/20 dark:bg-primary-950/40' : 'border-background-300 bg-white hover:border-primary-300'}">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold uppercase tracking-wider text-primary-700 dark:text-primary-300">Cọc 30%</span>
+                <span class="font-heading text-base font-extrabold text-primary-600 dark:text-primary-400">${formatVnd(calcDeposit(b.totalPrice))}</span>
+              </div>
+              <p class="mt-1 text-xs text-foreground-600">Còn lại <b class="text-foreground-900">${formatVnd(b.totalPrice - calcDeposit(b.totalPrice))}</b> trả tại sân</p>
+            </button>
+            <button type="button" data-mode="full" class="cursor-pointer rounded-lg border-2 p-3 text-left transition-all ${isFull ? 'border-primary-500 bg-primary-50/70 ring-1 ring-primary-500/20 dark:bg-primary-950/40' : 'border-background-300 bg-white hover:border-primary-300'}">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold uppercase tracking-wider text-primary-700 dark:text-primary-300">Trả đủ 100%</span>
+                <span class="font-heading text-base font-extrabold text-primary-600 dark:text-primary-400">${formatVnd(b.totalPrice)}</span>
+              </div>
+              <p class="mt-1 text-xs text-foreground-600">Thanh toán đủ, không cần trả thêm khi ra sân</p>
+            </button>
           </div>
         </div>
-        <div class="mt-3 rounded-md bg-secondary-50 px-3.5 py-3 text-[11px] leading-relaxed text-secondary-900">Chuyển đúng số tiền và nội dung để hệ thống nhận diện đơn. Sau khi bấm “Tôi đã chuyển khoản”, hệ thống tự đối soát trong khoảng ${AUTO_CONFIRM_SECONDS} giây rồi xác nhận cọc và mở vé QR ngay.</div>
+      </div>
+
+      <div class="min-w-0">
+        <div class="rounded-lg border border-background-200 bg-white p-4">
+          <div class="flex items-center justify-between gap-2">
+            <p class="font-heading text-sm font-bold text-foreground-950">Mã VietQR</p>
+            <span class="text-xs font-semibold text-primary-700">Chủ sân đã duyệt</span>
+          </div>
+
+          <!-- Highlight rõ ràng số tiền chuyển khoản -->
+          <div class="mt-3 rounded-lg border border-primary-200 bg-primary-50/90 p-2.5 text-center dark:border-primary-800 dark:bg-primary-950/50">
+            <span class="text-[11px] font-medium text-foreground-600">Số tiền cần chuyển:</span>
+            <div class="font-heading text-2xl font-black text-primary-600 dark:text-primary-400">${formatVnd(payAmount)}</div>
+          </div>
+
+          <div class="mt-2.5 flex h-[210px] w-full items-center justify-center overflow-hidden rounded-md border border-background-200 bg-background-50 p-1">
+            <img src="${buildVietQrUrl(payAmount, b.code)}" alt="Mã VietQR thanh toán ${formatVnd(payAmount)} cho đơn ${esc(b.code)}" class="h-full w-full object-contain ${expired ? 'opacity-40' : ''}">
+          </div>
+
+          <div class="mt-3 space-y-1.5 text-xs">
+            <div class="flex items-center justify-between gap-2"><span class="text-foreground-500">Ngân hàng</span><span class="font-semibold text-foreground-900">${esc(bankAccount.bankName)}</span></div>
+            <div class="flex items-center justify-between gap-2"><span class="text-foreground-500">Số tài khoản</span><button type="button" data-copy="${esc(bankAccount.accountNumber)}" class="flex cursor-pointer items-center gap-1.5 whitespace-nowrap font-mono font-bold text-foreground-900 hover:text-primary-600">${esc(bankAccount.accountNumber)}<i class="ri-file-copy-line" aria-hidden="true"></i></button></div>
+            <div class="flex items-center justify-between gap-2"><span class="text-foreground-500">Chủ tài khoản</span><span class="font-semibold text-foreground-900">${esc(bankAccount.accountName)}</span></div>
+            <div class="flex items-center justify-between gap-2"><span class="text-foreground-500">Số tiền</span><span class="font-bold text-primary-600 dark:text-primary-400">${formatVnd(payAmount)}</span></div>
+            <div class="flex items-center justify-between gap-2"><span class="text-foreground-500">Nội dung CK</span><button type="button" data-copy="${esc(b.code)}" class="flex cursor-pointer items-center gap-1.5 whitespace-nowrap font-mono font-bold text-primary-600 hover:text-primary-700">${esc(b.code)}<i class="ri-file-copy-line" aria-hidden="true"></i></button></div>
+          </div>
+          ${!PAGE.contact ? `
+            <div class="mt-3 border-t border-background-200 pt-2.5 text-center text-xs text-foreground-600">
+              Đã có tài khoản? <a href="${url('/dang-nhap?redirect=' + encodeURIComponent(window.location.pathname + window.location.search))}" data-login-now class="font-bold text-primary-600 underline hover:text-primary-700">Đăng nhập</a> để gắn vé vào tài khoản.
+            </div>
+          ` : ''}
+        </div>
+        <div class="mt-3 rounded-md bg-secondary-50 px-3.5 py-3 text-[11px] leading-relaxed text-secondary-900">Sau khi chuyển khoản, bạn bấm <b>“Tôi đã chuyển khoản”</b>. Hệ thống tự động xác nhận và mở vé QR check-in ngay.</div>
       </div>
     </div>
     <div class="mt-5 flex flex-col gap-2.5 border-t border-background-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
       <button type="button" data-cancel-hold class="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-background-300 px-4 py-2.5 text-sm font-semibold text-foreground-800 transition-colors hover:border-accent-400 hover:text-accent-700"><i class="ri-close-line" aria-hidden="true"></i>Hủy giữ sân</button>
-      <button type="button" data-confirm ${expired || S.busy ? 'disabled' : ''} class="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md bg-accent-500 px-5 py-3 text-sm font-bold text-background-950 transition-colors hover:bg-accent-600 disabled:cursor-not-allowed disabled:opacity-50"><i class="${S.busy ? 'ri-loader-4-line animate-spin' : 'ri-check-double-line'} text-base" aria-hidden="true"></i>${expired ? 'Đã hết thời gian giữ sân' : S.busy ? 'Đang xác nhận tiền cọc…' : 'Tôi đã chuyển khoản'}</button>
+      <button type="button" data-confirm ${expired || S.busy ? 'disabled' : ''} class="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md bg-accent-500 px-5 py-3 text-sm font-bold text-background-950 transition-colors hover:bg-accent-600 disabled:cursor-not-allowed disabled:opacity-50"><i class="${S.busy ? 'ri-loader-4-line animate-spin' : 'ri-check-double-line'} text-base" aria-hidden="true"></i>${expired ? 'Đã hết thời gian chuyển cọc' : S.busy ? 'Đang xác nhận tiền cọc…' : 'Tôi đã chuyển khoản'}</button>
     </div>
     <p class="mt-3 text-center text-xs text-foreground-500">Cần hỗ trợ? Gọi <a href="tel:${HOTLINE.replace(/\D/g, '')}" class="font-semibold text-primary-600 hover:text-primary-700">${HOTLINE}</a></p>`;
+
+  startHoldTimer();
 }
 
 function startHoldTimer() {
@@ -421,7 +715,7 @@ function startHoldTimer() {
     if (S.step !== 3 || !S.booking) return clearInterval(holdTimer);
     const left = remainingHoldSeconds(S.booking.holdExpiresAt);
     const badge = $('[data-countdown]');
-    if (badge) badge.innerHTML = `<i class="ri-time-line" aria-hidden="true"></i>${left <= 0 ? 'Đã hết giữ sân' : `Giữ sân ${formatCountdown(left)}`}`;
+    if (badge) badge.innerHTML = `<i class="ri-time-line" aria-hidden="true"></i>${left <= 0 ? 'Đã hết giờ chuyển cọc' : `Thời gian cọc còn lại: ${formatCountdown(left)}`}`;
     if (left <= 0) {
       clearInterval(holdTimer);
       renderStep3();
@@ -473,9 +767,14 @@ async function confirmDeposit() {
 }
 
 // ======================= VÉ ĐIỆN TỬ =======================
+let ticketPollInterval = 0;
+
 function showTicket(b) {
+  clearDraft();
   clearInterval(holdTimer);
-  const confirmed = b.status === 'confirmed' || b.status === 'completed' || ['paid', 'deposit_paid'].includes(b.paymentStatus);
+  clearInterval(ticketPollInterval);
+  const confirmed = b.status === 'confirmed' || b.status === 'completed';
+  const isPending = b.status === 'pending';
   const deposit = b.paymentStatus === 'paid' ? b.totalPrice : b.depositAmount;
   const deadline = formatCancelDeadline(b.date, b.startSlot) || `Trước giờ chơi ${CANCEL_CUTOFF_HOURS} giờ`;
   const canCancel = isBeforeCancelCutoff(b.date, [b.startSlot]);
@@ -486,28 +785,75 @@ function showTicket(b) {
   view.innerHTML = `<div class="w-full px-4 py-10 md:px-8 md:py-14"><div class="mx-auto w-full max-w-2xl">
     <div class="rounded-lg border border-background-200 bg-white p-6 md:p-8">
       <div class="flex flex-col items-center text-center">
-        <span class="flex h-16 w-16 items-center justify-center rounded-full ${confirmed ? 'bg-primary-50 text-primary-600' : 'bg-accent-50 text-accent-600'}"><i class="${confirmed ? 'ri-checkbox-circle-fill' : 'ri-time-line'} text-4xl" aria-hidden="true"></i></span>
-        <h1 class="mt-4 font-heading text-2xl font-extrabold text-foreground-950">${confirmed ? 'Đã giữ sân cho bạn!' : 'Đã gửi yêu cầu đặt sân'}</h1>
-        <p class="mt-2 max-w-md text-sm leading-relaxed text-foreground-600">${confirmed ? 'Hệ thống đã tự động đối soát và xác nhận khoản cọc của bạn. Vé điện tử bên dưới là căn cứ check-in tại sân — bạn chỉ cần trả phần còn lại khi ra sân.' : 'Hệ thống đang đối soát khoản cọc của bạn. Vé QR sẽ mở ngay khi xác nhận xong — bạn không cần chờ tại đây, mở lại trang này lúc nào cũng xem được.'}</p>
+        <span class="flex h-16 w-16 items-center justify-center rounded-full ${confirmed ? 'bg-primary-50 text-primary-600' : 'bg-accent-50 text-accent-600'}">
+          <i class="${confirmed ? 'ri-checkbox-circle-fill' : 'ri-time-line animate-pulse'} text-4xl" aria-hidden="true"></i>
+        </span>
+        <h1 class="mt-4 font-heading text-2xl font-extrabold text-foreground-950">
+          ${confirmed ? 'Đã giữ sân thành công cho bạn!' : 'Đã nhận cọc — Đang chờ chủ sân duyệt'}
+        </h1>
+        <p class="mt-2 max-w-md text-sm leading-relaxed text-foreground-600">
+          ${confirmed
+            ? 'Chủ sân đã xác nhận và duyệt đơn đặt sân của bạn. Vé điện tử bên dưới là căn cứ check-in tại sân — bạn chỉ cần trả phần còn lại khi ra sân.'
+            : 'Hệ thống đã ghi nhận khoản cọc của bạn và gửi yêu cầu tới chủ sân. Khi chủ sân duyệt đơn, thông báo giữ sân chính thức và vé QR check-in sẽ được kích hoạt tại đây.'}
+        </p>
       </div>
-      <div class="mt-6 rounded-xl border border-dashed border-primary-300 bg-primary-50/40 p-5">
+
+      ${isPending ? `
+        <div class="mt-5 flex items-start gap-3 rounded-lg border border-accent-300 bg-accent-50/70 p-4 text-xs leading-relaxed text-accent-950">
+          <i class="ri-loader-4-line mt-0.5 animate-spin text-base text-accent-700" aria-hidden="true"></i>
+          <div class="min-w-0">
+            <p class="font-bold text-accent-900">Yêu cầu giữ sân đang chờ chủ sân duyệt</p>
+            <p class="mt-0.5 text-accent-800/90">Trang này sẽ tự động chuyển sang thông báo <b>"Đã giữ sân thành công"</b> ngay khi chủ sân bấm duyệt. Bạn có thể giữ trang này hoặc lưu lại mã đơn để kiểm tra.</p>
+          </div>
+        </div>
+      ` : ''}
+
+      <div class="mt-5 rounded-xl border border-dashed border-primary-300 bg-primary-50/40 p-5 dark:border-primary-800 dark:bg-primary-950/30">
         <div class="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
-          ${confirmed ? `<div class="h-[180px] w-[180px] shrink-0 overflow-hidden rounded-md border border-background-200 bg-white p-2"><img src="${ticketQrUrl(b)}" alt="Mã QR vé đặt sân ${esc(b.code)}" class="h-full w-full object-contain"></div>` : `<div class="flex h-[180px] w-[180px] shrink-0 flex-col items-center justify-center gap-2 rounded-md border border-dashed border-accent-300 bg-white px-4 text-center"><i class="ri-qr-scan-2-line text-3xl text-accent-500" aria-hidden="true"></i><p class="text-[11px] leading-relaxed text-foreground-600">Mã QR mở ngay khi hệ thống xác nhận tiền cọc</p></div>`}
+          ${confirmed
+            ? `<div class="h-[180px] w-[180px] shrink-0 overflow-hidden rounded-md border border-background-200 bg-white p-2"><img src="${ticketQrUrl(b)}" alt="Mã QR vé đặt sân ${esc(b.code)}" class="h-full w-full object-contain"></div>`
+            : `<div class="flex h-[180px] w-[180px] shrink-0 flex-col items-center justify-center gap-2 rounded-md border border-dashed border-accent-300 bg-white p-4 text-center dark:bg-background-100">
+                <i class="ri-time-line text-3xl text-accent-600 animate-pulse" aria-hidden="true"></i>
+                <p class="text-xs font-bold text-accent-900">Chờ chủ sân duyệt</p>
+                <p class="text-[10px] leading-relaxed text-foreground-500">Mã QR check-in mở ngay khi chủ sân duyệt đơn</p>
+               </div>`
+          }
           <div class="min-w-0 flex-1">
             <p class="text-xs font-medium text-foreground-500">Mã vé điện tử</p>
-            <p class="mt-1 font-heading text-xl font-extrabold tracking-wide text-primary-900">${esc(b.code)}</p>
-            <span class="mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${confirmed ? 'bg-primary-100 text-primary-800' : 'bg-accent-100 text-accent-900'}"><i class="${confirmed ? 'ri-checkbox-circle-fill' : 'ri-time-fill'}" aria-hidden="true"></i>${confirmed ? 'Đã xác nhận cọc – vé đã mở' : 'Chờ xác nhận tiền cọc'}</span>
-            <dl class="mt-3 space-y-2 text-sm"><div><dt class="text-xs text-foreground-500">Sân</dt><dd class="font-semibold text-foreground-950">${esc(b.courtName)}</dd></div><div><dt class="text-xs text-foreground-500">Thời gian</dt><dd class="font-semibold text-foreground-950">${formatTimeRange(b.startSlot, b.durationMinutes)} · ${formatLongDate(b.date)}</dd></div></dl>
+            <p class="mt-1 font-heading text-xl font-extrabold tracking-wide text-primary-900 dark:text-primary-300">${esc(b.code)}</p>
+            <span class="mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${confirmed ? 'bg-primary-100 text-primary-800' : 'bg-accent-100 text-accent-900 border border-accent-300'}">
+              <i class="${confirmed ? 'ri-checkbox-circle-fill' : 'ri-time-fill'}" aria-hidden="true"></i>
+              ${confirmed ? 'Chủ sân đã duyệt – Sân đã giữ' : 'Chờ chủ sân duyệt đơn'}
+            </span>
+            <dl class="mt-3 space-y-2 text-sm">
+              <div><dt class="text-xs text-foreground-500">Sân</dt><dd class="font-semibold text-foreground-950">${esc(b.courtName)}</dd></div>
+              <div><dt class="text-xs text-foreground-500">Thời gian</dt><dd class="font-semibold text-foreground-950">${formatTimeRange(b.startSlot, b.durationMinutes)} · ${formatLongDate(b.date)}</dd></div>
+            </dl>
           </div>
         </div>
       </div>
-      <div class="mt-4 rounded-lg border border-background-200 bg-background-50 p-4"><dl class="space-y-3 text-sm">
-        <div class="flex items-start justify-between gap-4"><dt class="text-foreground-500">Địa chỉ</dt><dd class="max-w-[62%] text-right text-foreground-800">${esc(b.address)}</dd></div>
-        <div class="flex items-start justify-between gap-4"><dt class="text-foreground-500">Người đặt</dt><dd class="text-right text-foreground-950">${esc(b.customerName)}<span class="block text-xs text-foreground-500">${esc(b.customerPhone)}</span></dd></div>
-        <div class="flex items-start justify-between gap-4"><dt class="text-foreground-500">Tổng tiền sân</dt><dd class="text-right font-semibold text-foreground-950">${formatVnd(b.totalPrice)}</dd></div>
-        <div class="flex items-start justify-between gap-4"><dt class="text-foreground-500">Tiền cọc</dt><dd class="text-right font-semibold text-accent-600">${formatVnd(deposit)}</dd></div>
-        <div class="flex items-start justify-between gap-4 border-t border-background-200 pt-3"><dt class="text-foreground-500">Còn lại tại sân</dt><dd class="text-right font-heading text-lg font-extrabold text-primary-600">${formatVnd(Math.max(0, b.totalPrice - deposit))}</dd></div>
-      </dl></div>
+
+      <!-- Bảng giá rõ ràng, tối ưu chi tiết -->
+      <div class="mt-4 rounded-lg border border-background-200 bg-background-50 p-4">
+        <dl class="space-y-3 text-sm">
+          <div class="flex items-start justify-between gap-4"><dt class="text-foreground-500">Địa chỉ sân</dt><dd class="max-w-[62%] text-right text-foreground-800">${esc(b.address)}</dd></div>
+          <div class="flex items-start justify-between gap-4"><dt class="text-foreground-500">Người đặt</dt><dd class="text-right text-foreground-950">${esc(b.customerName)}<span class="block text-xs text-foreground-500">${esc(b.customerPhone)}</span></dd></div>
+          <div class="flex items-start justify-between gap-4"><dt class="text-foreground-500">Tổng tiền sân</dt><dd class="text-right font-bold text-foreground-950">${formatVnd(b.totalPrice)}</dd></div>
+          <div class="flex items-start justify-between gap-4">
+            <dt class="text-foreground-500">Tiền cọc đã chuyển</dt>
+            <dd class="text-right font-bold text-accent-600">
+              ${formatVnd(deposit)} <span class="rounded bg-accent-100 px-1.5 py-0.5 text-[10px] font-semibold text-accent-800">Đã nhận cọc</span>
+            </dd>
+          </div>
+          <div class="flex items-start justify-between gap-4 border-t border-background-200 pt-3">
+            <dt class="font-semibold text-foreground-700">Còn lại thanh toán tại sân</dt>
+            <dd class="text-right font-heading text-lg font-black text-primary-600 dark:text-primary-400">
+              ${formatVnd(Math.max(0, b.totalPrice - deposit))}
+            </dd>
+          </div>
+        </dl>
+      </div>
+
       <div class="mt-4 rounded-lg border border-primary-200 bg-primary-50/60 p-4"><div class="flex items-start gap-3">
         <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-primary-600"><i class="ri-time-line text-xl" aria-hidden="true"></i></span>
         <div class="min-w-0 flex-1"><p class="text-xs font-semibold uppercase tracking-wide text-primary-700">Hạn hủy vé</p><p class="mt-1 font-heading text-base font-extrabold text-foreground-950">${esc(deadline)}</p><p class="mt-1 text-xs leading-relaxed text-foreground-600">Hủy trước mốc này được hoàn 100% tiền cọc. Sau mốc, nút hủy sẽ khóa — bạn gọi ${HOTLINE} để chủ sân hỗ trợ.</p>
@@ -530,6 +876,18 @@ function showTicket(b) {
     </div>
     <p class="mt-5 text-center text-xs text-foreground-500">Cần hỗ trợ? Gọi <a href="tel:${HOTLINE.replace(/\D/g, '')}" class="font-semibold text-primary-600 hover:text-primary-700">${HOTLINE}</a> hoặc gửi yêu cầu tại trang <a href="${url('/lien-he')}" class="font-semibold text-primary-600 hover:text-primary-700">Liên hệ</a>.</p>
   </div></div>`;
+
+  if (isPending) {
+    ticketPollInterval = setInterval(async () => {
+      try {
+        const latest = await api('booking', 'get', { code: b.code });
+        if (latest && latest.status !== 'pending') {
+          clearInterval(ticketPollInterval);
+          showTicket(latest);
+        }
+      } catch (e) {}
+    }, 4000);
+  }
   const data = ticketData(b);
   view.querySelector('[data-download]')?.addEventListener('click', async (event) => {
     const btn = event.currentTarget;
@@ -568,6 +926,7 @@ async function goNext() {
     if (S.error) return renderError();
     S.step = 2;
     renderAll();
+    saveDraft();
     window.scrollTo({ top: 0, behavior: 'smooth' });
     if (S.promoCode && !S.applied) applyPromo(true);
     return;
@@ -607,6 +966,7 @@ async function goNext() {
     S.busy = false;
     renderAll();
     startHoldTimer();
+    saveDraft();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   } catch (error) {
     S.busy = false;
@@ -626,6 +986,7 @@ function goBack() {
   }
   S.step = Math.max(1, S.step - 1);
   renderAll();
+  saveDraft();
   if (S.step === 1) loadAvailability();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -708,13 +1069,27 @@ app.addEventListener('click', async (event) => {
     return;
   }
   if (el('[data-confirm]')) return confirmDeposit();
+  if (el('[data-rebook]')) {
+    S.booking = null;
+    S.error = '';
+    S.step = 1;
+    clearDraft();
+    clearInterval(holdTimer);
+    clearInterval(waitingApprovalPoll);
+    renderAll();
+    loadAvailability();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
   if (el('[data-cancel-hold]')) {
     if (S.booking) await api('booking', 'cancel_hold', { id: S.booking.id }).catch(() => {});
     S.booking = null;
     S.error = '';
     S.step = 2;
     clearInterval(holdTimer);
+    clearInterval(waitingApprovalPoll);
     renderAll();
+    saveDraft();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 });
@@ -728,12 +1103,14 @@ app.addEventListener('input', (event) => {
   if (t.dataset.form) {
     S.form[t.dataset.form] = t.value;
     if (t.dataset.form === 'note') $('[data-note-count]').textContent = `${t.value.length}/500`;
+    saveDraft();
     return;
   }
   if (t.id === 'promo-input') {
     t.value = t.value.toUpperCase();
     S.promoCode = t.value;
     S.promoError = '';
+    saveDraft();
   }
 });
 
@@ -751,17 +1128,34 @@ app.addEventListener('change', (event) => {
     label.classList.toggle('bg-primary-50', t.checked);
     label.classList.toggle('border-background-300', !t.checked);
     label.classList.toggle('bg-white', !t.checked);
+    saveDraft();
     return revalidatePromo();
   }
   if (t.dataset.agree !== undefined) {
     S.agree = t.checked;
     S.error = '';
+    saveDraft();
     renderError();
+  }
+});
+
+document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-login-now]') || e.target.closest('header a[href*="dang-nhap"]')) {
+    saveDraft();
   }
 });
 
 // Cứ 30 giây vẽ lại lưới giờ để khóa các khung vừa trôi qua
 setInterval(() => S.step === 1 && renderSlots(), 30000);
 
+const restored = restoreDraft();
 renderAll();
-loadAvailability();
+if (S.step === 1) {
+  loadAvailability();
+} else if (S.step === 3 && S.booking) {
+  if (S.booking.approvedAt && S.booking.paymentStatus === 'unpaid') {
+    startHoldTimer();
+  } else if (!S.booking.approvedAt) {
+    startWaitingApprovalPoll();
+  }
+}

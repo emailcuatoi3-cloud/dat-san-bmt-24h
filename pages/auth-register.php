@@ -1,10 +1,11 @@
 <?php
 require __DIR__ . '/_auth_layout.php';
-if (current_user()) redirect('/tai-khoan');
+$redirectTarget = get_auth_redirect_target();
+if (current_user()) redirect($redirectTarget);
 $ownerPage = !empty($OWNER_PAGE); // true khi mở từ /dang-ky-chu-san
 $role = $ownerPage || in_array($_GET['vai-tro'] ?? ($_GET['role'] ?? ''), ['owner', 'chu-san'], true) ? 'owner' : 'customer';
 
-render_page(['title' => ($ownerPage ? 'Đăng ký chủ sân - ' : 'Đăng ký - ') . SITE_NAME, 'layout' => 'bare', 'script' => 'pages/auth.js', 'data' => ['role' => $role]], function () use ($role, $ownerPage) {
+render_page(['title' => ($ownerPage ? 'Đăng ký chủ sân - ' : 'Đăng ký - ') . SITE_NAME, 'layout' => 'bare', 'script' => 'pages/auth.js', 'data' => ['role' => $role, 'redirect' => $redirectTarget]], function () use ($role, $ownerPage, $redirectTarget) {
     auth_layout(
         $ownerPage ? 'Đăng ký chủ sân' : 'Tạo tài khoản',
         $ownerPage
@@ -58,8 +59,8 @@ render_page(['title' => ($ownerPage ? 'Đăng ký chủ sân - ' : 'Đăng ký -
 <?php
         },
         $ownerPage
-            ? 'Đã có tài khoản chủ sân? <a href="' . url('/dang-nhap') . '" class="font-semibold text-primary-600 hover:text-primary-700">Đăng nhập</a><br><span class="mt-1 inline-block text-xs">Bạn là người chơi? <a href="' . url('/dang-ky') . '" class="font-semibold text-primary-600 hover:text-primary-700">Đăng ký tài khoản khách</a></span>'
-            : 'Đã có tài khoản? <a href="' . url('/dang-nhap') . '" class="font-semibold text-primary-600 hover:text-primary-700">Đăng nhập</a>',
+            ? 'Đã có tài khoản chủ sân? <a href="' . url('/dang-nhap?redirect=/chu-san') . '" class="font-semibold text-primary-600 hover:text-primary-700">Đăng nhập</a><br><span class="mt-1 inline-block text-xs">Bạn là người chơi? <a href="' . url('/dang-ky' . ($redirectTarget && $redirectTarget !== '/' ? '?redirect=' . urlencode($redirectTarget) : '')) . '" class="font-semibold text-primary-600 hover:text-primary-700">Đăng ký tài khoản khách</a></span>'
+            : 'Đã có tài khoản? <a href="' . url('/dang-nhap' . ($redirectTarget && $redirectTarget !== '/' ? '?redirect=' . urlencode($redirectTarget) : '')) . '" class="font-semibold text-primary-600 hover:text-primary-700">Đăng nhập</a>',
         $ownerPage ? [
             'Đưa sân của bạn lên Đặt Sân BMT 24H',
             'Nhận đơn đặt sân online 24/7, quản lý lịch, tiền cọc và doanh thu trong một kênh dành riêng cho chủ sân.',

@@ -32,6 +32,7 @@ function my_booking(string $id): array
 
 function my_bookings(): array
 {
+    auto_cancel_expired_holds();
     auto_complete_bookings();
     $ids = my_court_ids();
     if (!$ids) return [];
@@ -64,11 +65,16 @@ run_api([
 
     // ---------------- Đơn đặt sân ----------------
     'booking_status' => function () {
+        auto_cancel_expired_holds();
         $b = my_booking(in_str('id'));
         $status = in_str('status');
         if (!in_array($status, ['confirmed', 'cancelled', 'completed', 'pending'], true)) fail('Trạng thái không hợp lệ.');
         $reason = $status === 'cancelled' ? (mb_substr(in_str('reason'), 0, 250) ?: null) : null;
+<<<<<<< HEAD
 
+=======
+        $now = date('Y-m-d H:i:s');
+>>>>>>> origin/an
         if ($status === 'confirmed') {
             $slots = jd($b['slots']);
             $occ = occupied_slots($b['booking_date'], $b['id'])[$b['court_id']] ?? [];
@@ -77,9 +83,57 @@ run_api([
             if (!empty($unavailable)) {
                 fail('Không thể xác nhận đơn vì khung giờ ' . implode(', ', $unavailable) . ' ngày ' . $b['booking_date'] . ' đã bị trùng lịch với đơn khác hoặc đang bị khóa.');
             }
+<<<<<<< HEAD
         }
 
         q('UPDATE bookings SET status = ?, reject_reason = ? WHERE id = ?', [$status, $reason, $b['id']]);
+=======
+            if ($b['source'] === 'online' && (int)$b['deposit_amount'] > 0 && $b['payment_status'] === 'unpaid') {
+                // Khách đặt online chưa cọc: chủ sân duyệt đơn -> cấp 5 phút để khách chuyển cọc
+                $holdExp = date('Y-m-d H:i:s', time() + HOLD_MINUTES * 60);
+                q('UPDATE bookings SET approved_at = ?, hold_expires_at = ?, status = ? WHERE id = ?', [$now, $holdExp, 'confirmed', $b['id']]);
+            } else {
+                // Đã cọc hoặc đơn tại quầy / tiền mặt: xác nhận giữ sân thành công, không giới hạn cọc
+                q('UPDATE bookings SET approved_at = COALESCE(approved_at, ?), hold_expires_at = NULL, status = ? WHERE id = ?', [$now, 'confirmed', $b['id']]);
+            }
+        } else {
+            q('UPDATE bookings SET status = ?, reject_reason = ? WHERE id = ?', [$status, $reason, $b['id']]);
+        }
+        return map_booking(q_one(BOOKING_SELECT . ' WHERE b.id = ?', [$b['id']]));
+    },
+
+    'booking_reschedule' => function () {
+        auto_cancel_expired_holds();
+        $b = my_booking(in_str('id'));
+        if (in_array($b['status'], ['completed', 'cancelled'], true)) fail('Không thể đổi giờ cho đơn đã hoàn thành hoặc đã hủy.');
+        $court = map_court(my_court($b['court_id']));
+        $newDate = in_str('date');
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $newDate)) fail('Ngày chơi không hợp lệ.');
+        $slots = clean_list(input()['slots'] ?? []);
+        sort($slots);
+        if (!$slots) fail('Vui lòng chọn ít nhất 1 khung giờ.');
+
+        $occ = array_merge(occupied_slots($newDate, $b['id'])[$court['id']] ?? [], blocked_slots_map($newDate, [$court['id']])[$court['id'] . ':' . $newDate] ?? []);
+        if ($clash = array_values(array_intersect($slots, $occ))) fail('Khung giờ ' . implode(', ', $clash) . ' đã có người đặt hoặc đang khóa.');
+
+        $total = 0;
+        foreach ($slots as $s) {
+            $price = $court['pricePerHour'];
+            foreach ($court['priceBands'] as $pb) {
+                if ($s >= $pb['start'] && $s < $pb['end']) { $price = (int) $pb['price']; break; }
+            }
+            $total += $price;
+        }
+
+        $oldSlots = jd($b['slots']);
+        $oldInfo = $b['booking_date'] . ' (' . implode(', ', $oldSlots) . ')';
+        $newInfo = $newDate . ' (' . implode(', ', $slots) . ')';
+        $note = trim(($b['note'] ?: '') . "\n[Đổi lịch từ " . $oldInfo . " sang " . $newInfo . " vào " . date('d/m/Y H:i') . "]");
+
+        q('UPDATE bookings SET booking_date = ?, start_slot = ?, duration_minutes = ?, slots = ?, total_price = ?, note = ? WHERE id = ?',
+            [$newDate, $slots[0], count($slots) * 60, j($slots), $total, $note, $b['id']]);
+
+>>>>>>> origin/an
         return map_booking(q_one(BOOKING_SELECT . ' WHERE b.id = ?', [$b['id']]));
     },
 
@@ -276,7 +330,8 @@ run_api([
         q('INSERT INTO refunds (id, owner_id, booking_code, customer_name, court_name, amount, method, note) VALUES (?,?,?,?,?,?,?,?)',
             [uid('rf-'), $OWNER['id'], $b['code'], $b['customer_name'], $b['court_name'], $amount,
                 in_array(in_str('method'), ['cash', 'transfer', 'vietqr'], true) ? in_str('method') : 'cash', mb_substr(in_str('note'), 0, 250)]);
-        return true;
+        q("UPDATE bookings SET payment_status = 'refunded' WHERE id = ?", [$b['id']]);
+        return map_booking(q_one(BOOKING_SELECT . ' WHERE b.id = ?', [$b['id']]));
     },
 
     'refund_remove' => function () {

@@ -25,7 +25,8 @@ run_api([
         if ($u['status'] === 'suspended') fail('Tài khoản này đang bị tạm khóa. Vui lòng liên hệ quản trị viên để được hỗ trợ.');
         login_user((int) $u['id']);
         $redirect = in_str('redirect');
-        $target = ($redirect && $redirect[0] === '/' && strpos($redirect, '//') !== 0) ? $redirect : home_of_role($u['role']);
+        $target = get_auth_redirect_target($redirect !== '' ? $redirect : null);
+        unset($_SESSION['auth_redirect']);
         return ['redirect' => url($target), 'role' => $u['role']];
     },
 
@@ -52,7 +53,9 @@ run_api([
             create_owner_request(q_one('SELECT * FROM users WHERE id = ?', [$id]), input() + ['contactName' => $name]);
             return ['redirect' => url('/dang-ky-chu-san')];
         }
-        return ['redirect' => url(home_of_role('customer'))];
+        $target = get_auth_redirect_target(in_str('redirect') ?: null);
+        unset($_SESSION['auth_redirect']);
+        return ['redirect' => url($target)];
     },
 
     'logout' => function () {

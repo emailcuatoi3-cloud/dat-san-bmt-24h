@@ -25,7 +25,10 @@ async function setStatus(b, status, reason = '') {
   return updated;
 }
 
+let isApproving = false;
+
 export async function approveBooking(b) {
+  if (!b || isApproving) return;
   const conflict = detectBookingConflicts(b, S.bookings, S.blocked);
   if (conflict.hasConflict) {
     const lines = conflict.overlaps.map((o) => `<br>• <b>${esc(o.booking.code)}</b> – ${esc(o.booking.customerName)} (${o.slots.join(', ')}) · ${o.booking.status === 'pending' ? 'chờ duyệt' : 'đã xác nhận'}`).join('');
@@ -39,12 +42,15 @@ export async function approveBooking(b) {
     });
     if (!ok) return;
   }
+  isApproving = true;
   try {
-    await setStatus(b, 'confirmed');
-    toast(`Đã duyệt đơn ${b.code}.`);
+    const updated = await setStatus(b, 'confirmed');
+    toast(updated?.paymentStatus === 'unpaid' ? `Đã duyệt đơn ${b.code}. Khách có 5 phút để chuyển cọc giữ sân.` : `Đã duyệt đơn ${b.code}.`);
     rerender();
   } catch (e) {
     toast(e.message, 'error');
+  } finally {
+    isApproving = false;
   }
 }
 
@@ -94,10 +100,26 @@ export function openBookingDetail(b) {
   const row = (l, v) => `<div class="flex items-start justify-between gap-3 py-1.5 text-sm"><span class="text-foreground-500">${l}</span><span class="text-right font-medium text-foreground-900">${v}</span></div>`;
   const extras = (b.extras || []).map((x) => `${esc(x.label)} (${money(x.price)})`).join(', ');
   const btns = [];
-  if (b.status === 'pending') btns.push(`<button type="button" data-act="reject" class="${BTN_OUT}">Từ chối</button><button type="button" data-act="approve" class="${BTN}">Duyệt đơn</button>`);
+  if (b.status === 'pending') {
+    if (!b.approvedAt) {
+      btns.push(`<button type="button" data-act="reject" class="${BTN_OUT}">Từ chối</button><button type="button" data-act="approve" class="${BTN}">Duyệt đơn</button>`);
+    } else {
+      btns.push(`<button type="button" data-act="cancel" class="${BTN_OUT}">Hủy đơn</button><span class="text-xs text-primary-700 font-semibold self-center">Chờ khách cọc (5 phút)</span>`);
+    }
+  }
   if (b.status === 'confirmed') {
     btns.push(`<button type="button" data-act="cancel" class="${BTN_OUT}">Hủy đơn</button>`);
     if (!b.checkedInAt) btns.push(`<button type="button" data-act="checkin" class="${BTN}"><i class="ri-qr-scan-2-line"></i>Check-in</button>`);
+  }
+  if (['pending', 'confirmed'].includes(b.status)) {
+    btns.push(`<button type="button" data-act="reschedule" class="${BTN_OUT}"><i class="ri-calendar-event-line"></i>Đổi giờ</button>`);
+  }
+  if ((b.depositAmount > 0 || ['deposit_paid', 'paid', 'refunded'].includes(b.paymentStatus)) && (b.status === 'cancelled' || b.paymentStatus === 'refunded')) {
+    if (b.paymentStatus === 'refunded') {
+      btns.push(`<span class="inline-flex items-center gap-1 rounded bg-secondary-50 px-2.5 py-1 text-xs font-semibold text-secondary-800"><i class="ri-checkbox-circle-line"></i>Đã hoàn cọc</span>`);
+    } else {
+      btns.push(`<button type="button" data-act="refund" class="${BTN_OUT} border-accent-300 text-accent-700 hover:bg-accent-50"><i class="ri-refund-2-line"></i>Hoàn cọc</button>`);
+    }
   }
   const m = modal(
     `Đơn ${esc(b.code)}`,
@@ -126,6 +148,128 @@ export function openBookingDetail(b) {
     if (act === 'reject') rejectBooking(b);
     if (act === 'cancel') rejectBooking(b, true);
     if (act === 'checkin') checkIn(b);
+    if (act === 'reschedule') openRescheduleModal(b);
+    if (act === 'refund') openRefundModal(b);
+  });
+}
+
+export function openRescheduleModal(b) {
+  const court = courtById(b.courtId);
+  if (!court) return toast('Không tìm thấy thông tin sân.', 'error');
+  const m = modal(
+    `Đổi giờ đơn ${esc(b.code)}`,
+    `<form id="reschedule-form" class="space-y-4">
+      <div class="rounded-md border border-background-200 bg-background-50 p-3 text-xs leading-relaxed">
+        <p class="font-semibold text-foreground-950">${esc(b.courtName)} · Khách: ${esc(b.customerName)} (${esc(b.customerPhone || '—')})</p>
+        <p class="text-foreground-600 mt-1">Lịch hiện tại: <b class="text-accent-800">${longDate(b.date)} (${slotText(b)})</b></p>
+      </div>
+      <div>
+        <label class="${LABEL}">Chọn ngày chơi mới</label>
+        <input type="date" name="date" min="${TODAY}" value="${b.date >= TODAY ? b.date : TODAY}" class="${INPUT}">
+      </div>
+      <div>
+        <label class="${LABEL}">Khung giờ mới <span class="font-normal text-foreground-500">(chọn 1 hoặc nhiều giờ)</span></label>
+        <div data-slots class="grid grid-cols-4 gap-1.5 sm:grid-cols-6"></div>
+      </div>
+      <p data-total class="rounded-md bg-primary-50 px-3 py-2 text-sm font-semibold text-primary-800"></p>
+    </form>`,
+    `<button type="button" data-close class="${BTN_OUT}">Hủy</button><button type="button" data-ok class="${BTN}"><i class="ri-check-line"></i>Xác nhận đổi giờ</button>`,
+    'max-w-xl',
+  );
+  const form = m.el.querySelector('#reschedule-form');
+  let picked = new Set(b.slots || []);
+  const priceAt = (c, s) => (c.priceBands || []).find((pb) => s >= pb.start && s < pb.end)?.price || c.pricePerHour;
+  const drawSlots = () => {
+    const newDate = form.date.value;
+    const h = hoursForDate(court, newDate);
+    const busy = new Set([
+      ...S.bookings.filter((x) => x.id !== b.id && x.courtId === court.id && x.date === newDate && ['pending', 'confirmed'].includes(x.status)).flatMap((x) => x.slots),
+      ...(S.blocked[`${court.id}:${newDate}`] || []),
+    ]);
+    const slots = [];
+    if (!h.closed) for (let t = toMinutes(h.open); t + 60 <= toMinutes(h.close); t += 60) slots.push(minutesToTime(t));
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    picked = new Set([...picked].filter((s) => slots.includes(s) && !busy.has(s)));
+    m.el.querySelector('[data-slots]').innerHTML = slots.length
+      ? slots.map((s) => {
+          const dis = busy.has(s) || (newDate === TODAY && toMinutes(s) < nowMin - 30);
+          return `<button type="button" data-s="${s}" ${dis ? 'disabled' : ''} class="rounded-md border px-2 py-2 text-xs font-semibold ${dis ? 'cursor-not-allowed border-background-200 bg-background-100 text-foreground-400 line-through' : picked.has(s) ? 'border-primary-500 bg-primary-500 text-white' : 'border-background-300 bg-white text-foreground-800 hover:border-primary-400'}">${s}</button>`;
+        }).join('')
+      : '<p class="col-span-full text-sm text-accent-700">Sân nghỉ vào ngày này.</p>';
+    const total = [...picked].reduce((s, x) => s + priceAt(court, x), 0);
+    m.el.querySelector('[data-total]').textContent = picked.size ? `Khung giờ mới: ${picked.size} giờ · ${money(total)}` : 'Vui lòng chọn khung giờ';
+  };
+  form.addEventListener('change', drawSlots);
+  on(form, 'click', '[data-s]', (e, el) => {
+    picked.has(el.dataset.s) ? picked.delete(el.dataset.s) : picked.add(el.dataset.s);
+    drawSlots();
+  });
+  drawSlots();
+  m.el.querySelector('[data-ok]').addEventListener('click', async (e) => {
+    if (!picked.size) return toast('Vui lòng chọn ít nhất 1 khung giờ mới.', 'error');
+    setBusy(e.currentTarget, true, 'Đang cập nhật...');
+    try {
+      const updated = await api('owner', 'booking_reschedule', { id: b.id, date: form.date.value, slots: [...picked] });
+      const idx = S.bookings.findIndex((x) => x.id === b.id);
+      if (idx >= 0) S.bookings[idx] = updated;
+      m.close();
+      toast(`Đã đổi giờ đơn ${b.code} sang ${longDate(updated.date)} (${slotText(updated)}).`);
+      rerender();
+    } catch (err) {
+      setBusy(e.currentTarget, false);
+      toast(err.message, 'error');
+    }
+  });
+}
+
+export function openRefundModal(b) {
+  const dep = b.depositAmount || Math.round(b.totalPrice * 0.3);
+  const m = modal(
+    `Hoàn cọc đơn ${esc(b.code)}`,
+    `<form id="refund-form" class="space-y-3">
+      <div class="rounded-md border border-accent-200 bg-accent-50 p-3 text-xs leading-relaxed text-accent-950">
+        <p class="font-bold">Khách hàng: ${esc(b.customerName)} (${esc(b.customerPhone || '—')})</p>
+        <p class="mt-0.5">Sân: ${esc(b.courtName)} · Ngày: ${longDate(b.date)}</p>
+        <p class="mt-0.5">Tiền cọc ban đầu: <b class="text-accent-800">${money(dep)}</b></p>
+      </div>
+      <div>
+        <label class="${LABEL}">Số tiền hoàn lại cho khách (đ)</label>
+        <input type="number" name="amount" min="1000" step="5000" value="${dep}" class="${INPUT}">
+      </div>
+      <div>
+        <label class="${LABEL}">Phương thức hoàn tiền</label>
+        <select name="method" class="${INPUT}">
+          <option value="transfer">Chuyển khoản ngân hàng</option>
+          <option value="cash">Tiền mặt tại sân</option>
+          <option value="vietqr">VietQR / Ví điện tử</option>
+        </select>
+      </div>
+      <div>
+        <label class="${LABEL}">Ghi chú hoàn cọc</label>
+        <input name="note" class="${INPUT}" placeholder="Số TK khách, ngân hàng, mã tham chiếu...">
+      </div>
+    </form>`,
+    `<button type="button" data-close class="${BTN_OUT}">Hủy</button><button type="button" data-ok class="${BTN} !bg-accent-600 hover:!bg-accent-700"><i class="ri-check-line"></i>Xác nhận đã hoàn</button>`,
+    'max-w-md',
+  );
+  m.el.querySelector('[data-ok]').addEventListener('click', async (e) => {
+    const f = formData(m.el.querySelector('#refund-form'));
+    const amount = Number(f.amount);
+    if (!amount || amount <= 0) return toast('Số tiền hoàn phải lớn hơn 0.', 'error');
+    setBusy(e.currentTarget, true, 'Đang lưu...');
+    try {
+      const updated = await api('owner', 'refund_add', { bookingId: b.id, amount, method: f.method, note: f.note });
+      const idx = S.bookings.findIndex((x) => x.id === b.id);
+      if (idx >= 0 && updated) S.bookings[idx] = updated;
+      else b.paymentStatus = 'refunded';
+      m.close();
+      toast(`Đã ghi nhận hoàn ${money(amount)} cho đơn ${b.code}.`);
+      rerender();
+    } catch (err) {
+      setBusy(e.currentTarget, false);
+      toast(err.message, 'error');
+    }
   });
 }
 
@@ -203,13 +347,33 @@ const miniRow = (b, right = '') => `<div class="flex items-center justify-betwee
   </button>
   <div class="flex shrink-0 items-center gap-1.5">${right}</div></div>`;
 
-function bindBookingActions(root) {
+let bookingActionsBound = false;
+function bindBookingActions(root = main()) {
+  if (bookingActionsBound) return;
+  const target = document.getElementById('owner-main') || document.body;
+  if (!target) return;
+  bookingActionsBound = true;
   const find = (id) => S.bookings.find((b) => b.id === id);
-  on(root, 'click', '[data-detail]', (e, el) => openBookingDetail(find(el.dataset.detail)));
-  on(root, 'click', '[data-approve]', (e, el) => approveBooking(find(el.dataset.approve)));
-  on(root, 'click', '[data-reject]', (e, el) => rejectBooking(find(el.dataset.reject)));
-  on(root, 'click', '[data-cancel]', (e, el) => rejectBooking(find(el.dataset.cancel), true));
-  on(root, 'click', '[data-checkin]', (e, el) => checkIn(find(el.dataset.checkin)));
+  on(target, 'click', '[data-detail]', (e, el) => {
+    const b = find(el.dataset.detail);
+    if (b) openBookingDetail(b);
+  });
+  on(target, 'click', '[data-approve]', (e, el) => {
+    const b = find(el.dataset.approve);
+    if (b) approveBooking(b);
+  });
+  on(target, 'click', '[data-reject]', (e, el) => {
+    const b = find(el.dataset.reject);
+    if (b) rejectBooking(b);
+  });
+  on(target, 'click', '[data-cancel]', (e, el) => {
+    const b = find(el.dataset.cancel);
+    if (b) rejectBooking(b, true);
+  });
+  on(target, 'click', '[data-checkin]', (e, el) => {
+    const b = find(el.dataset.checkin);
+    if (b) checkIn(b);
+  });
 }
 
 // =====================================================================
@@ -235,7 +399,7 @@ function openHoursInRange(court, from, to) {
 export function renderOverview() {
   const live = S.bookings.filter(isActive);
   const today = live.filter((b) => b.date === TODAY);
-  const pending = S.bookings.filter((b) => b.status === 'pending');
+  const pending = S.bookings.filter((b) => b.status === 'pending' && !b.approvedAt);
   const month = TODAY.slice(0, 7);
   const revMonth = live.filter((b) => b.date.startsWith(month) && b.status !== 'pending').reduce((s, b) => s + b.totalPrice, 0);
   const revToday = today.filter((b) => b.status !== 'pending').reduce((s, b) => s + b.totalPrice, 0);
@@ -330,10 +494,16 @@ export function renderBookings() {
         <td class="px-4 py-3"><p class="font-semibold text-foreground-950">${esc(b.customerName)}</p><p class="text-xs text-foreground-500">${esc(b.customerPhone || '—')}</p></td>
         <td class="px-4 py-3"><p class="font-medium text-foreground-900">${esc(b.courtName)}</p><p class="text-xs text-foreground-500">${dateText(b.date)} · ${slotText(b)}</p>${conflicts.has(b.id) ? '<p class="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-accent-700"><i class="ri-error-warning-line"></i>Trùng lịch</p>' : ''}</td>
         <td class="px-4 py-3 text-right"><p class="font-semibold text-foreground-950">${money(b.totalPrice)}</p><p class="text-[11px] text-foreground-500">${esc(b.payment)}</p></td>
-        <td class="px-4 py-3">${statusBadge(b.status)}${b.checkedInAt ? '<p class="mt-1 text-[11px] font-semibold text-primary-700"><i class="ri-checkbox-circle-line"></i> Đã nhận sân</p>' : b.status === 'confirmed' && b.date <= TODAY ? '<p class="mt-1 text-[11px] text-foreground-500">Chưa check-in</p>' : ''}</td>
+        <td class="px-4 py-3">${
+          b.status === 'pending' && b.approvedAt && b.paymentStatus === 'unpaid'
+            ? `<span class="inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-semibold text-primary-700"><span class="h-1.5 w-1.5 rounded-full bg-primary-500 animate-pulse"></span>Đã duyệt (Chờ cọc 5p)</span>`
+            : statusBadge(b.status)
+        }${b.checkedInAt ? '<p class="mt-1 text-[11px] font-semibold text-primary-700"><i class="ri-checkbox-circle-line"></i> Đã nhận sân</p>' : b.status === 'confirmed' && b.date <= TODAY ? '<p class="mt-1 text-[11px] text-foreground-500">Chưa check-in</p>' : ''}</td>
         <td class="px-4 py-3"><div class="flex justify-end gap-1.5">${
           b.status === 'pending'
-            ? `<button type="button" data-reject="${b.id}" class="${BTN_SM}">Từ chối</button><button type="button" data-approve="${b.id}" class="${BTN_SM_PRI}">Duyệt</button>`
+            ? !b.approvedAt
+              ? `<button type="button" data-reject="${b.id}" class="${BTN_SM}">Từ chối</button><button type="button" data-approve="${b.id}" class="${BTN_SM_PRI}">Duyệt</button>`
+              : `<button type="button" data-cancel="${b.id}" class="${BTN_SM}">Hủy</button><button type="button" data-detail="${b.id}" class="${BTN_SM}">Chờ cọc</button>`
             : b.status === 'confirmed'
               ? `${!b.checkedInAt ? `<button type="button" data-checkin="${b.id}" class="${BTN_SM_PRI}">Check-in</button>` : ''}<button type="button" data-cancel="${b.id}" class="${BTN_SM}">Hủy</button>`
               : `<button type="button" data-detail="${b.id}" class="${BTN_SM}">Chi tiết</button>`

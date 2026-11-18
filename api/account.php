@@ -43,6 +43,7 @@ function owns_booking(array $b, array $codes): bool
 
 run_api([
     'bookings' => function () {
+        auto_cancel_expired_holds();
         auto_complete_bookings();
         [$where, $params] = my_scope(in_arr('codes'));
         $rows = q_all(BOOKING_SELECT . " WHERE b.source = 'online' AND $where ORDER BY b.booking_date DESC, b.created_at DESC", $params);

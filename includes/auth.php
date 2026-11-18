@@ -110,6 +110,60 @@ function activate_sudo(int $seconds = 900): void
     $_SESSION['admin_sudo_until'] = time() + $seconds;
 }
 
+<<<<<<< HEAD
+=======
+/**
+ * Lấy URL đích hợp lệ sau khi đăng nhập / đăng ký:
+ * Ưu tiên: tham số truyền vào -> $_GET['redirect'] -> HTTP_REFERER -> session -> mặc định '/' (trang chủ).
+ * Đảm bảo mọi vai trò khi login đều quay lại đúng trang người dùng đang xem dở (ví dụ trang đặt sân, thanh toán).
+ */
+function get_auth_redirect_target(?string $explicit = null): string
+{
+    $authPages = ['/dang-nhap', '/dang-ky', '/dang-ky-chu-san', '/quen-mat-khau', '/dat-lai-mat-khau', '/dang-xuat'];
+    $cleanPath = function (string $target) use ($authPages): ?string {
+        $target = trim($target);
+        if ($target === '' || $target[0] !== '/' || strpos($target, '//') === 0) return null;
+        $base = base_path();
+        if ($base && strpos($target, $base) === 0) {
+            $target = substr($target, strlen($base));
+            if ($target === '' || $target[0] !== '/') $target = '/' . $target;
+        }
+        $pathOnly = parse_url($target, PHP_URL_PATH) ?: '/';
+        if (in_array($pathOnly, $authPages, true)) return null;
+        return $target;
+    };
+
+    // 1. Tham số tường minh hoặc $_GET['redirect']
+    $cand = $explicit !== null ? $explicit : ($_GET['redirect'] ?? '');
+    if ($cand) {
+        $valid = $cleanPath($cand);
+        if ($valid !== null) return $valid;
+    }
+
+    // 2. Kiểm tra HTTP_REFERER nếu người dùng điều hướng từ trang nội bộ
+    $referer = $_SERVER['HTTP_REFERER'] ?? '';
+    if ($referer) {
+        $p = parse_url($referer);
+        $host = $_SERVER['HTTP_HOST'] ?? '';
+        if (empty($p['host']) || $p['host'] === $host) {
+            $refPath = $p['path'] ?? '/';
+            $refQuery = !empty($p['query']) ? '?' . $p['query'] : '';
+            $valid = $cleanPath($refPath . $refQuery);
+            if ($valid !== null) return $valid;
+        }
+    }
+
+    // 3. Kiểm tra session
+    if (!empty($_SESSION['auth_redirect'])) {
+        $valid = $cleanPath($_SESSION['auth_redirect']);
+        if ($valid !== null) return $valid;
+    }
+
+    // Mặc định về trang chủ (không ép về trang cá nhân hay trang quản trị)
+    return '/';
+}
+
+>>>>>>> origin/an
 /** Thông tin hồ sơ gọn để gửi cho JavaScript. */
 function public_profile(?array $u): ?array
 {
