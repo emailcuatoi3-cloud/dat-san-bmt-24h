@@ -15,7 +15,7 @@ function auth_layout(string $title, string $subtitle, callable $children, string
     <div class="auth-photo-veil absolute inset-0"></div>
     <div class="relative flex h-full flex-col justify-between p-10 xl:p-14">
       <a href="<?= url('/') ?>" class="flex items-center gap-2.5">
-        <img src="<?= site_logo() ?>" alt="Logo Đặt Sân BMT 24H" class="w-10 h-10 rounded-lg object-contain bg-white/10 p-0.5">
+        <img src="<?= site_logo() ?>" alt="Logo Đặt Sân BMT 24H" class="w-10 h-10 object-contain">
         <span class="leading-tight"><span class="block font-heading text-[15px] font-extrabold tracking-tight text-white">ĐẶT SÂN BMT</span><span class="block text-[11px] font-semibold tracking-[0.18em] text-accent-500">24H</span></span>
       </a>
       <div class="max-w-md">
