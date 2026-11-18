@@ -92,30 +92,43 @@ if (header && header.dataset.transparent === '1') {
 }
 paintLanguageButtons();
 
-// Menu "Khám phá" (định vị cố định để không bị cắt bởi thanh cuộn ngang)
-const exploreBtn = $('[data-explore-toggle]');
-const exploreMenu = $('#explore-menu');
-function closeExplore() {
-  if (!exploreMenu) return;
-  exploreMenu.classList.add('hidden');
-  exploreBtn && exploreBtn.setAttribute('aria-expanded', 'false');
+// Các menu thả xuống trên thanh điều hướng (Ưu đãi, Tiện ích, Giới thiệu)
+function closeNavDropdowns() {
+  $$('[data-nav-panel]').forEach((p) => p.classList.add('hidden'));
+  $$('[data-nav-toggle]').forEach((b) => b.setAttribute('aria-expanded', 'false'));
 }
-if (exploreBtn && exploreMenu) {
-  exploreBtn.addEventListener('click', (event) => {
+document.addEventListener('click', (event) => {
+  const btn = event.target.closest('[data-nav-toggle]');
+  if (btn) {
     event.stopPropagation();
-    if (!exploreMenu.classList.contains('hidden')) return closeExplore();
-    const rect = exploreBtn.getBoundingClientRect();
+    const id = btn.dataset.navToggle;
+    const panel = document.getElementById(id);
+    if (!panel) return;
+    const wasOpen = !panel.classList.contains('hidden');
+    closeNavDropdowns();
+    if (wasOpen) return;
+    const rect = btn.getBoundingClientRect();
     const panelWidth = 288;
     const maxLeft = window.innerWidth - panelWidth - 12;
     const left = Math.min(Math.max(12, rect.left + rect.width / 2 - panelWidth / 2), Math.max(12, maxLeft));
-    exploreMenu.style.top = `${rect.bottom + 10}px`;
-    exploreMenu.style.left = `${left}px`;
-    exploreMenu.classList.remove('hidden');
-    exploreBtn.setAttribute('aria-expanded', 'true');
-  });
-  window.addEventListener('scroll', closeExplore, { passive: true });
-  window.addEventListener('resize', closeExplore);
-}
+    panel.style.top = `${rect.bottom + 10}px`;
+    panel.style.left = `${left}px`;
+    panel.classList.remove('hidden');
+    btn.setAttribute('aria-expanded', 'true');
+    return;
+  }
+  const openBot = event.target.closest('[data-open-chatbot]');
+  if (openBot) {
+    event.preventDefault();
+    closeNavDropdowns();
+    const mm = $('#mobile-menu');
+    if (mm && !mm.classList.contains('hidden')) mm.classList.add('hidden');
+    window.dispatchEvent(new CustomEvent('bmt24h-open-chatbot'));
+    return;
+  }
+});
+window.addEventListener('scroll', closeNavDropdowns, { passive: true });
+window.addEventListener('resize', closeNavDropdowns);
 
 // Menu tài khoản và các dropdown đơn giản khác
 document.addEventListener('click', (event) => {
@@ -129,11 +142,11 @@ document.addEventListener('click', (event) => {
       menu.classList.add('hidden');
     }
   });
-  if (exploreMenu && !exploreMenu.contains(event.target) && !event.target.closest('[data-explore-toggle]')) closeExplore();
+  if (!event.target.closest('[data-nav-panel]') && !event.target.closest('[data-nav-toggle]')) closeNavDropdowns();
 });
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
-  closeExplore();
+  closeNavDropdowns();
   $$('[data-dropdown-menu]').forEach((menu) => menu.classList.add('hidden'));
 });
 

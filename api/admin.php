@@ -423,6 +423,22 @@ run_api([
             q("UPDATE users SET role = 'owner', business_name = ?, phone = IF(phone = '', ?, phone), address = IF(address = '', ?, address) WHERE id = ?",
                 [$r['business_name'], $r['phone'], $r['address'], $r['user_id']]);
         }
+        // Khi duyệt đăng ký chủ sân: tự động khởi tạo sân mà chủ sân đã đăng ký (gắn đúng owner_id)
+        if ($approve && !q_val('SELECT id FROM courts WHERE owner_id = ? AND name = ? AND deleted_at IS NULL', [$r['user_id'], $r['business_name']])) {
+            $sport = ($r['sports'] === 'badminton') ? 'badminton' : 'football';
+            $cid = 'oc-' . bin2hex(random_bytes(4));
+            $slug = slugify($r['business_name']) ?: $cid;
+            while (q_val('SELECT id FROM courts WHERE slug = ?', [$slug])) $slug .= '-' . random_int(2, 99);
+            $price = $sport === 'badminton' ? 80000 : 180000;
+            $peak = $sport === 'badminton' ? 100000 : 240000;
+            $bands = [
+                ['id' => 'morning', 'label' => 'Buổi sáng và chiều', 'shortLabel' => 'Sáng – chiều', 'start' => '05:00', 'end' => '17:00', 'price' => $price],
+                ['id' => 'evening', 'label' => 'Buổi tối', 'shortLabel' => 'Tối', 'start' => '17:00', 'end' => '23:00', 'price' => $peak, 'peak' => true],
+            ];
+            $img = $sport === 'badminton' ? CATEGORY_IMAGE_BADMINTON : CATEGORY_IMAGE_FOOTBALL;
+            q('INSERT INTO courts (id, slug, owner_id, name, sport, sport_label, area, address, price_per_hour, peak_price, price_bands, images, description, status, open_time, close_time, highlights, facilities, map_query) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                [$cid, $slug, $r['user_id'], $r['business_name'], $sport, sport_label($sport), 'Tân Lợi', $r['address'] ?: 'TP. Buôn Ma Thuột', $price, $peak, j($bands), j([$img]), $r['note'] ?: ('Cơ sở ' . $r['business_name'] . ' tại Buôn Ma Thuột.'), 'active', '05:00', '23:00', j(['Sân mới đăng ký', 'Đặt lịch online 24/7']), j(['Bãi giữ xe', 'Nước uống']), $r['address'] ?: 'TP. Buôn Ma Thuột']);
+        }
         audit('accounts', $approve ? 'Duyệt đăng ký chủ sân' : 'Từ chối đăng ký chủ sân', $r['business_name'] . ' · ' . $r['user_email'], $note, $approve ? 'success' : 'warning');
         return true;
     },
@@ -497,9 +513,10 @@ run_api([
         need('courts');
         $c = q_one('SELECT * FROM courts WHERE id = ?', [in_str('id')]) ?: fail('Không tìm thấy sân.');
         $status = in_str('status');
-        if (!in_array($status, ['active', 'maintenance', 'paused'], true)) fail('Trạng thái không hợp lệ.');
+        if (!in_array($status, ['active', 'pending', 'maintenance', 'paused'], true)) fail('Trạng thái không hợp lệ.');
         q('UPDATE courts SET status = ? WHERE id = ?', [$status, $c['id']]);
-        audit('courts', $status === 'active' ? 'Mở lại sân' : 'Tạm dừng sân', $c['name'], in_str('reason'), $status === 'active' ? 'success' : 'warning');
+        $actionLabel = $c['status'] === 'pending' && $status === 'active' ? 'Duyệt sân mới' : ($status === 'active' ? 'Mở lại sân' : 'Tạm dừng sân');
+        audit('courts', $actionLabel, $c['name'], in_str('reason'), $status === 'active' ? 'success' : 'warning');
         return true;
     },
 
@@ -548,7 +565,7 @@ run_api([
         $address = in_str('address') ?: 'Buôn Ma Thuột';
         $ownerId = in_int('ownerId') ?: null;
         $image = in_str('image') ?: 'https://images.unsplash.com/photo-1529900240041-22f114d18e40?w=1000';
-        $status = in_array(in_str('status'), ['active', 'maintenance', 'paused'], true) ? in_str('status') : 'active';
+        $status = in_array(in_str('status'), ['active', 'pending', 'maintenance', 'paused'], true) ? in_str('status') : 'active';
         $featured = in_int('featured') ? 1 : 0;
         $desc = in_str('description') ?: 'Sân thể thao chất lượng cao tại Buôn Ma Thuột.';
 
@@ -641,22 +658,28 @@ run_api([
     },
 
     'invoices' => function () {
-        need('invoices');
+        need('payments', 'invoices');
         return invoices_where('1');
     },
 
-    // ---------------- Danh mục ----------------
+    // ---------------- Danh mục (Loại sân, Tiện ích, Khu vực) ----------------
     'categories' => function () {
         need('categories');
         $counts = [];
-        foreach (q_all('SELECT sport, area FROM courts WHERE deleted_at IS NULL') as $c) {
+        foreach (q_all('SELECT sport, area, facilities FROM courts WHERE deleted_at IS NULL') as $c) {
             $counts['sport:' . $c['sport']] = ($counts['sport:' . $c['sport']] ?? 0) + 1;
             $counts['area:' . $c['area']] = ($counts['area:' . $c['area']] ?? 0) + 1;
+            foreach (jd($c['facilities']) as $fac) {
+                $k = 'amenity:' . mb_strtolower(trim((string) $fac));
+                $counts[$k] = ($counts[$k] ?? 0) + 1;
+            }
         }
         return array_map(fn($r) => [
             'id' => $r['id'], 'kind' => $r['kind'], 'name' => $r['name'], 'slug' => $r['slug'], 'description' => $r['description'], 'icon' => $r['icon'],
             'sortOrder' => (int) $r['sort_order'], 'active' => (bool) $r['active'],
-            'courtCount' => $counts[$r['kind'] . ':' . ($r['kind'] === 'sport' ? $r['slug'] : $r['name'])] ?? 0,
+            'courtCount' => $r['kind'] === 'amenity'
+                ? ($counts['amenity:' . mb_strtolower(trim($r['name']))] ?? 0)
+                : ($counts[$r['kind'] . ':' . ($r['kind'] === 'sport' ? $r['slug'] : $r['name'])] ?? 0),
         ], q_all('SELECT * FROM categories ORDER BY kind, sort_order, name'));
     },
 
@@ -665,7 +688,7 @@ run_api([
         if (admin_access()['roleKey'] !== 'super_admin') fail('Chỉ Quản trị hệ thống mới có quyền thêm/sửa danh mục. Nhân viên chỉ có quyền xem.');
         $name = in_str('name');
         if (mb_strlen($name) < 2) fail('Vui lòng nhập tên danh mục.');
-        $kind = in_str('kind') === 'area' ? 'area' : 'sport';
+        $kind = in_array(in_str('kind'), ['sport', 'area', 'amenity'], true) ? in_str('kind') : 'sport';
         $vals = [$kind, $name, in_str('slug') ?: slugify($name), in_str('description'), in_str('icon') ?: 'ri-price-tag-3-line', in_int('sortOrder'), (input()['active'] ?? true) ? 1 : 0];
         if ($id = in_str('id')) {
             q('UPDATE categories SET kind=?, name=?, slug=?, description=?, icon=?, sort_order=?, active=? WHERE id = ?', array_merge($vals, [$id]));
@@ -772,7 +795,7 @@ run_api([
 
     // ---------------- Khuyến mãi ----------------
     'promotions' => function () {
-        need('promotions');
+        need('content', 'promotions');
         $uses = q_all("SELECT code, promo_code, discount_amount, total_price, customer_name, court_name, booking_date, status, created_at FROM bookings WHERE promo_code IS NOT NULL ORDER BY created_at DESC");
         return [
             'promotions' => array_map('map_promotion', q_all('SELECT * FROM promotions ORDER BY updated_at DESC')),
@@ -782,7 +805,7 @@ run_api([
     },
 
     'promotion_status' => function () {
-        need('promotions');
+        need('content', 'promotions');
         $p = q_one('SELECT * FROM promotions WHERE id = ?', [in_str('id')]) ?: fail('Không tìm thấy mã.');
         $status = in_str('status') === 'paused' ? 'paused' : 'active';
         q('UPDATE promotions SET status = ? WHERE id = ?', [$status, $p['id']]);
@@ -792,9 +815,135 @@ run_api([
 
     // ---------------- Nhật ký ----------------
     'audit' => function () {
-        need('audit');
+        need('settings', 'audit');
         return array_map(fn($a) => ['id' => (int) $a['id'], 'actorName' => $a['actor_name'], 'actorRole' => $a['actor_role'], 'module' => $a['module'], 'action' => $a['action'],
             'targetLabel' => $a['target_label'], 'detail' => $a['detail'], 'level' => $a['level'], 'createdAt' => iso($a['created_at'])],
             q_all('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 500'));
+    },
+
+    // ---------------- Thanh toán & đối soát (Chuyển tiền chủ sân + Hoàn tiền) ----------------
+    'payouts' => function () {
+        need('payments');
+        $payouts = array_map(fn($r) => [
+            'id' => $r['id'], 'ownerId' => (int) $r['owner_id'], 'ownerName' => $r['owner_name'], 'periodLabel' => $r['period_label'],
+            'grossAmount' => (int) $r['gross_amount'], 'commissionRate' => (int) $r['commission_rate'],
+            'commissionAmount' => (int) $r['commission_amount'], 'netAmount' => (int) $r['net_amount'],
+            'status' => $r['status'], 'note' => $r['note'], 'transferredAt' => iso($r['transferred_at']), 'createdAt' => iso($r['created_at']),
+        ], q_all('SELECT * FROM payouts ORDER BY FIELD(status, "pending", "transferred"), created_at DESC'));
+        $owners = q_all("SELECT u.id, u.full_name, u.business_name, os.bank_name, os.bank_account, os.bank_holder,
+                            (SELECT COALESCE(SUM(b.total_price), 0) FROM bookings b JOIN courts c ON c.id = b.court_id WHERE c.owner_id = u.id AND b.status IN ('confirmed','completed') AND b.source = 'online') online_rev
+                         FROM users u LEFT JOIN owner_settings os ON os.owner_id = u.id WHERE u.role = 'owner' ORDER BY u.full_name");
+        return [
+            'payouts' => $payouts,
+            'owners' => array_map(fn($o) => [
+                'id' => (int) $o['id'], 'name' => $o['business_name'] ?: $o['full_name'],
+                'bankName' => (string) ($o['bank_name'] ?? ''), 'bankAccount' => (string) ($o['bank_account'] ?? ''), 'bankHolder' => (string) ($o['bank_holder'] ?? ''),
+                'onlineRevenue' => (int) $o['online_rev'],
+            ], $owners),
+        ];
+    },
+
+    'payout_create' => function () {
+        need('payments');
+        $ownerId = in_int('ownerId');
+        $owner = q_one("SELECT id, full_name, business_name FROM users WHERE id = ? AND role = 'owner'", [$ownerId]) ?: fail('Không tìm thấy chủ sân.');
+        $gross = max(0, in_int('grossAmount'));
+        if ($gross <= 0) fail('Doanh thu đối soát phải lớn hơn 0.');
+        $rate = max(0, min(50, in_int('commissionRate', 5)));
+        $comm = (int) round($gross * $rate / 100);
+        $net = max(0, $gross - $comm);
+        $period = in_str('periodLabel') ?: ('Tháng ' . date('m/Y'));
+        q('INSERT INTO payouts (id, owner_id, owner_name, period_label, gross_amount, commission_rate, commission_amount, net_amount, status, note) VALUES (?,?,?,?,?,?,?,?,"pending",?)',
+            [uid('po-'), $owner['id'], $owner['business_name'] ?: $owner['full_name'], $period, $gross, $rate, $comm, $net, mb_substr(in_str('note'), 0, 250)]);
+        audit('payments', 'Tạo phiếu đối soát chủ sân', ($owner['business_name'] ?: $owner['full_name']) . ' · ' . $period, 'Thực chuyển: ' . money($net), 'info');
+        return true;
+    },
+
+    'payout_transfer' => function () {
+        need('payments');
+        $p = q_one('SELECT * FROM payouts WHERE id = ?', [in_str('id')]) ?: fail('Không tìm thấy phiếu đối soát.');
+        q("UPDATE payouts SET status = 'transferred', transferred_at = NOW(), note = IF(? <> '', ?, note) WHERE id = ?", [in_str('note'), in_str('note'), $p['id']]);
+        push_notification((int) $p['owner_id'], 'Đã nhận tiền đối soát ' . $p['period_label'], 'Hệ thống đã chuyển khoản ' . money((int) $p['net_amount']) . ' về tài khoản ngân hàng của bạn.', 'payment', '/chu-san?tab=payments');
+        audit('payments', 'Xác nhận chuyển tiền chủ sân', $p['owner_name'] . ' · ' . $p['period_label'], money((int) $p['net_amount']), 'success');
+        return true;
+    },
+
+    'refunds_all' => function () {
+        need('payments');
+        $refunds = array_map(fn($r) => [
+            'id' => $r['id'], 'bookingCode' => $r['booking_code'], 'customerName' => $r['customer_name'], 'courtName' => $r['court_name'],
+            'amount' => (int) $r['amount'], 'method' => $r['method'], 'note' => $r['note'], 'createdAt' => iso($r['created_at']),
+        ], q_all('SELECT * FROM refunds ORDER BY created_at DESC LIMIT 100'));
+        $pendingRefunds = array_map('map_booking', q_all(BOOKING_SELECT . " WHERE b.status = 'cancelled' AND b.payment_status IN ('deposit_paid','paid') ORDER BY b.updated_at DESC LIMIT 50"));
+        return ['refunds' => $refunds, 'pending' => $pendingRefunds];
+    },
+
+    // ---------------- Báo cáo doanh thu ----------------
+    'reports_revenue' => function () {
+        need('reports', 'overview');
+        $days = in_array(in_int('days', 30), [7, 30, 90], true) ? in_int('days', 30) : 30;
+        $from = date('Y-m-d', strtotime('-' . ($days - 1) . ' days'));
+        $rows = q_all("SELECT b.*, c.owner_id, u.business_name, u.full_name owner_full FROM bookings b
+                       LEFT JOIN courts c ON c.id = b.court_id LEFT JOIN users u ON u.id = c.owner_id
+                       WHERE b.status IN ('confirmed','completed') AND b.booking_date >= ? ORDER BY b.booking_date ASC", [$from]);
+        $byDate = [];
+        $byOwner = [];
+        $byCourt = [];
+        $bySport = ['football' => 0, 'badminton' => 0];
+        $totalRev = 0;
+        foreach ($rows as $r) {
+            $amt = (int) $r['total_price'];
+            $totalRev += $amt;
+            $d = $r['booking_date'];
+            $byDate[$d] = ($byDate[$d] ?? 0) + $amt;
+            $sp = $r['sport'] === 'badminton' ? 'badminton' : 'football';
+            $bySport[$sp] += $amt;
+            $oname = $r['business_name'] ?: ($r['owner_full'] ?: 'Hệ thống');
+            if (!isset($byOwner[$oname])) $byOwner[$oname] = ['name' => $oname, 'bookings' => 0, 'revenue' => 0];
+            $byOwner[$oname]['bookings']++;
+            $byOwner[$oname]['revenue'] += $amt;
+            $cname = $r['court_name'];
+            if (!isset($byCourt[$cname])) $byCourt[$cname] = ['name' => $cname, 'sport' => $sp, 'bookings' => 0, 'revenue' => 0];
+            $byCourt[$cname]['bookings']++;
+            $byCourt[$cname]['revenue'] += $amt;
+        }
+        usort($byOwner, fn($a, $b) => $b['revenue'] <=> $a['revenue']);
+        usort($byCourt, fn($a, $b) => $b['revenue'] <=> $a['revenue']);
+        return [
+            'days' => $days, 'from' => $from, 'to' => date('Y-m-d'),
+            'totalRevenue' => $totalRev, 'totalBookings' => count($rows),
+            'avgOrder' => count($rows) ? (int) round($totalRev / count($rows)) : 0,
+            'byDate' => $byDate, 'bySport' => $bySport,
+            'byOwner' => array_values($byOwner), 'byCourt' => array_slice(array_values($byCourt), 0, 12),
+        ];
+    },
+
+    // ---------------- Quản lý AI & Cấu hình hệ thống ----------------
+    'settings_get' => function () {
+        need('settings', 'ai');
+        $cfg = system_settings_all();
+        $cfg['ai_quick_replies_list'] = jd($cfg['ai_quick_replies'] ?? '[]');
+        $cfg['ai_custom_qa_list'] = jd($cfg['ai_custom_qa'] ?? '[]');
+        return $cfg;
+    },
+
+    'settings_save' => function () {
+        need('settings', 'ai');
+        $in = input();
+        $allowed = ['site_name', 'hotline', 'support_email', 'site_address', 'bank_id', 'bank_name', 'bank_account', 'bank_holder',
+            'deposit_rate', 'hold_minutes', 'cancel_cutoff_hours', 'general_policy', 'ai_enabled', 'ai_bot_name', 'ai_greeting',
+            'ai_quick_replies', 'ai_fallback_reply', 'ai_custom_qa'];
+        $pairs = [];
+        foreach ($allowed as $k) {
+            if (array_key_exists($k, $in)) {
+                $pairs[$k] = is_array($in[$k]) ? j($in[$k]) : (string) $in[$k];
+            }
+        }
+        if ($pairs) {
+            system_settings_save($pairs);
+            $isAi = isset($pairs['ai_bot_name']) || isset($pairs['ai_enabled']) || isset($pairs['ai_custom_qa']);
+            audit($isAi ? 'ai' : 'settings', $isAi ? 'Cập nhật cấu hình Chatbot AI' : 'Cập nhật cấu hình hệ thống', implode(', ', array_keys($pairs)), '', 'success');
+        }
+        return true;
     },
 ]);

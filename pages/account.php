@@ -9,8 +9,9 @@
  * Đã đăng nhập: lấy đơn theo tài khoản + số điện thoại. Khách vãng lai: theo mã vé lưu trên thiết bị.
  */
 $u = current_user();
-$tabs = ['overview', 'upcoming', 'history', 'invoices', 'favorites', 'profile'];
-$tab = in_array($_GET['tab'] ?? '', $tabs, true) ? $_GET['tab'] : 'overview';
+$tabs = ['profile', 'password', 'history', 'recurring', 'favorites', 'vouchers', 'notifications', 'overview', 'upcoming', 'invoices'];
+$rawTab = $_GET['tab'] ?? 'history';
+$tab = in_array($rawTab, $tabs, true) ? $rawTab : 'history';
 
 render_page([
     'title' => 'Tài khoản của tôi - ' . SITE_NAME,
@@ -18,10 +19,17 @@ render_page([
     'data' => ['tab' => $tab, 'courts' => public_courts(), 'cancelReasons' => CANCEL_REASONS, 'cancelOther' => CANCEL_OTHER_REASON, 'accountImage' => ACCOUNT_IMAGE],
 ], function () use ($u) {
     $name = $u ? ($u['full_name'] ?: $u['email']) : 'Khách vãng lai';
-    page_hero([['Trang chủ', '/'], ['Tài khoản của tôi']], 'Tài khoản của tôi', 'Quản lý lịch đặt sân, theo dõi trạng thái đơn và cập nhật thông tin liên hệ của bạn.',
+    page_hero([['Trang chủ', '/'], ['Tài khoản của tôi']], 'Tài khoản của tôi', 'Quản lý hồ sơ cá nhân, lịch sử đặt sân, lịch cố định, sân yêu thích, ví voucher và thông báo.',
         function () { echo '<div id="hero-stats" class="flex flex-wrap items-center gap-2.5"></div>'; });
-    $nav = [['overview', 'Tổng quan', 'ri-dashboard-line'], ['upcoming', 'Đơn sắp tới', 'ri-calendar-event-line'], ['history', 'Lịch sử đặt sân', 'ri-history-line'],
-        ['invoices', 'Hóa đơn của tôi', 'ri-receipt-line'], ['favorites', 'Sân yêu thích', 'ri-heart-3-line'], ['profile', 'Thông tin cá nhân', 'ri-user-settings-line']];
+    $nav = [
+        ['profile', 'Hồ sơ cá nhân', 'ri-user-settings-line'],
+        ['password', 'Đổi mật khẩu', 'ri-lock-password-line'],
+        ['history', 'Lịch sử đặt sân', 'ri-history-line'],
+        ['recurring', 'Lịch cố định của tôi', 'ri-calendar-2-line'],
+        ['favorites', 'Sân yêu thích', 'ri-heart-3-line'],
+        ['vouchers', 'Ví voucher', 'ri-coupon-3-line'],
+        ['notifications', 'Thông báo', 'ri-notification-3-line'],
+    ];
     $roleLabel = ['customer' => 'Khách hàng', 'owner' => 'Chủ sân', 'admin' => 'Quản trị'][$u['role'] ?? ''] ?? 'Chưa đăng nhập';
     ?>
 <div class="w-full px-4 py-6 md:px-8 md:py-8">

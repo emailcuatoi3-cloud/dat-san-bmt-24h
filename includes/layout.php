@@ -20,16 +20,32 @@ function tcls(bool $transparent, string $t, string $s, string $base = ''): strin
 
 function app_config(): array
 {
+    $cfg = system_settings_all();
     return [
         'base' => base_path(),
         'user' => public_profile(current_user()),
-        'hotline' => HOTLINE,
-        'bank' => ['bin' => BANK_BIN, 'name' => BANK_NAME, 'account' => BANK_ACCOUNT, 'accountName' => BANK_ACCOUNT_NAME],
-        'depositRate' => DEPOSIT_RATE,
-        'holdMinutes' => HOLD_MINUTES,
+        'siteName' => $cfg['site_name'] ?: SITE_NAME,
+        'hotline' => $cfg['hotline'] ?: HOTLINE,
+        'supportEmail' => $cfg['support_email'] ?: SUPPORT_EMAIL,
+        'bank' => [
+            'bin' => $cfg['bank_id'] ?: BANK_BIN,
+            'name' => $cfg['bank_name'] ?: BANK_NAME,
+            'account' => $cfg['bank_account'] ?: BANK_ACCOUNT,
+            'accountName' => $cfg['bank_holder'] ?: BANK_ACCOUNT_NAME,
+        ],
+        'depositRate' => max(0.05, min(1.0, ((int) $cfg['deposit_rate'] ?: 30) / 100)),
+        'holdMinutes' => max(1, (int) ($cfg['hold_minutes'] ?: HOLD_MINUTES)),
         'autoConfirmSeconds' => AUTO_CONFIRM_SECONDS,
-        'cancelCutoffHours' => CANCEL_CUTOFF_HOURS,
+        'cancelCutoffHours' => max(1, (int) ($cfg['cancel_cutoff_hours'] ?: CANCEL_CUTOFF_HOURS)),
         'today' => date('Y-m-d'),
+        'ai' => [
+            'enabled' => ($cfg['ai_enabled'] ?? '1') === '1',
+            'botName' => $cfg['ai_bot_name'] ?: 'Trợ lý AI BMT 24H',
+            'greeting' => $cfg['ai_greeting'] ?: 'Chào bạn, mình là trợ lý của Đặt Sân BMT 24H.',
+            'quickReplies' => jd($cfg['ai_quick_replies'] ?? '[]'),
+            'fallbackReply' => $cfg['ai_fallback_reply'] ?: '',
+            'customQa' => jd($cfg['ai_custom_qa'] ?? '[]'),
+        ],
     ];
 }
 
@@ -59,6 +75,33 @@ function render_head(array $opt): void
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= asset('vendor/remixicon/remixicon.css') ?>">
   <link rel="stylesheet" href="<?= asset('css/app.css') ?>">
+  <style>
+    .hdr-search-form { display: none; }
+    .hdr-search-icon { display: flex; }
+    .hdr-wide-only { display: none; }
+    .hdr-compact-only { display: inline; }
+    .hdr-search-input { width: 84px; }
+    @media (min-width: 1240px) {
+      .hdr-search-form { display: block; }
+      .hdr-search-icon { display: none; }
+    }
+    @media (min-width: 1360px) {
+      .hdr-search-input { width: 112px; }
+      #site-header nav { justify-content: safe center; }
+    }
+    @media (min-width: 1500px) {
+      .hdr-wide-only { display: inline-block; }
+      .hdr-compact-only { display: none; }
+      .hdr-search-input { width: 126px; }
+      #site-header nav { justify-content: safe center; gap: 0.125rem; }
+      #site-header nav > a, #site-header nav > button { padding-left: 0.5rem; padding-right: 0.5rem; }
+    }
+    @media (min-width: 1680px) {
+      .hdr-search-input { width: 176px; }
+      #site-header nav { gap: 0.25rem; }
+      #site-header nav > a, #site-header nav > button { padding-left: 0.625rem; padding-right: 0.625rem; font-size: 0.875rem; }
+    }
+  </style>
   <script>
     // Áp dụng giao diện sáng/tối trước khi vẽ trang để không bị nháy màu.
     (function () {
@@ -173,33 +216,53 @@ function render_site_header(bool $tr): void
     $isOwner = $u && $u['role'] === 'owner';
     $isAdmin = $u && $u['role'] === 'admin';
     $favCount = $u ? count(jd($u['favorites'])) : 0;
+    $unreadNotif = $u ? (int) q_val('SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0', [$u['id']]) : 0;
     $initials = $u ? initials_of($u['full_name'], $u['email']) : '';
     $short = $u ? short_name_of($u['full_name'], $u['email']) : '';
 
-    $nav = [
-        ['/', 'Trang chủ', ''], ['/tim-san', 'Sân bóng đá', 'football'], ['/tim-san', 'Sân cầu lông', 'badminton'],
-        ['/gioi-thieu', 'Giới thiệu', ''], ['/lien-he', 'Liên hệ', ''],
+    // Cấu trúc điều hướng bám sát Sitemap Client
+    $navMain = [
+        ['/', 'Trang chủ', ''],
+        ['/tim-san', 'Sân bóng đá', 'football'],
+        ['/tim-san', 'Sân cầu lông', 'badminton'],
     ];
-    $explore = [
-        ['/ban-do', 'Bản đồ sân', 'ri-map-2-line', 'Xem toàn bộ sân quanh bạn trên bản đồ'],
-        ['/ngau-nhien', 'Ngẫu nhiên & chia đội', 'ri-shuffle-line', 'Bốc sân may mắn, chia đội công bằng'],
-        ['/uu-dai', 'Ưu đãi & mã giảm giá', 'ri-coupon-3-line', 'Mã giảm giá đang chạy từ các chủ sân'],
+    $promoMenu = [
+        ['/uu-dai', 'Mã giảm giá & ưu đãi giờ vàng', 'ri-coupon-3-line', 'Săn voucher giảm giá & ưu đãi khung giờ thấp điểm'],
+        ['/uu-dai#vong-quay', 'Vòng quay ưu đãi', 'ri-gift-line', 'Quay may mắn nhận mã giảm giá vào Ví voucher'],
+    ];
+    $toolsMenu = [
+        ['/ngau-nhien', 'Ngẫu nhiên & chia đội', 'ri-shuffle-line', 'Chia đội công bằng, ghép cặp và bốc sân may mắn'],
+        ['#ai-chat', 'Trợ lý AI', 'ri-robot-2-line', 'Hỏi đáp giá sân, lịch trống, chính sách 24/7'],
+        ['/ban-do', 'Bản đồ sân', 'ri-map-2-line', 'Xem toàn bộ sân quanh Buôn Ma Thuột trên bản đồ'],
+    ];
+    $aboutMenu = [
+        ['/gioi-thieu#ve-bmt', 'Về BMT 24H', 'ri-information-line', 'Câu chuyện, sứ mệnh và các cột mốc phát triển'],
+        ['/gioi-thieu#chinh-sach', 'Chính sách đặt, hủy, hoàn cọc', 'ri-shield-check-line', 'Quy định đặt cọc, giữ chỗ 5 phút và hoàn cọc'],
+        ['/gioi-thieu#faq', 'Câu hỏi thường gặp', 'ri-question-answer-line', 'Giải đáp nhanh thắc mắc của người chơi'],
     ];
     $isActive = function ($item) use ($path, $sport) {
+        if ($item[2] === 'all') return $path === '/tim-san' && $sport === '';
         if ($item[2]) return $path === '/tim-san' && $sport === $item[2];
         if ($item[0] === '/') return $path === '/';
         return strpos($path, $item[0]) === 0;
     };
     $navLink = function (bool $active) use ($tr) {
-        $base = 'shrink-0 whitespace-nowrap rounded-md px-2 py-2 text-[13px] font-medium transition-colors xl:px-3 xl:text-sm';
+        $base = 'shrink-0 whitespace-nowrap rounded-md px-1.5 py-2 text-[13px] font-medium transition-colors';
         return $active
             ? tcls($tr, 'bg-white/15 text-white', 'bg-primary-50 text-primary-700', $base)
             : tcls($tr, 'text-white/85 hover:bg-white/10 hover:text-white', 'text-foreground-600 hover:bg-background-100 hover:text-foreground-950', $base);
     };
-    $exploreActive = false;
-    foreach ($explore as $x) if (strpos($path, $x[0]) === 0) $exploreActive = true;
+    $promoActive = strpos($path, '/uu-dai') === 0;
+    $toolsActive = strpos($path, '/ngau-nhien') === 0 || strpos($path, '/ban-do') === 0;
+    $aboutActive = strpos($path, '/gioi-thieu') === 0;
+    $contactActive = strpos($path, '/lien-he') === 0;
     ?>
 <header id="site-header" <?= tcls($tr, 'bg-transparent border-b border-white/10', 'bg-background-50/80 backdrop-blur-md border-b border-background-200', 'fixed top-0 left-0 right-0 z-50 transition-all duration-300') ?> <?= $tr ? 'data-transparent="1"' : '' ?>>
+<<<<<<< HEAD
+  <div class="w-full px-3 xl:px-4 h-[72px] flex items-center justify-between gap-2">
+    <a href="<?= url('/') ?>" class="flex items-center gap-2 shrink-0 group" aria-label="Đặt Sân BMT 24H - Trang chủ">
+      <img src="<?= site_logo() ?>" alt="Logo Đặt Sân BMT 24H" class="w-9 h-9 rounded-lg object-contain transition-transform group-hover:scale-105">
+=======
   <div class="w-full px-4 md:px-6 xl:px-8 h-[72px] flex items-center justify-between gap-3 xl:gap-6">
     <a href="<?= url('/') ?>" class="flex items-center gap-2.5 shrink-0 group" aria-label="Đặt Sân BMT 24H - Trang chủ">
 <<<<<<< HEAD
@@ -207,70 +270,89 @@ function render_site_header(bool $tr): void
 =======
       <img src="<?= site_logo() ?>" alt="Logo Đặt Sân BMT 24H" class="w-10 h-10 rounded-lg object-contain transition-transform group-hover:scale-105">
 >>>>>>> origin/an
+>>>>>>> origin/Dev
       <span class="leading-tight">
-        <span <?= tcls($tr, 'text-white', 'text-foreground-950', 'block font-heading text-[15px] font-extrabold tracking-tight') ?>>ĐẶT SÂN BMT</span>
-        <span class="block text-[11px] font-semibold tracking-[0.18em] text-primary-500">24H</span>
+        <span <?= tcls($tr, 'text-white', 'text-foreground-950', 'block font-heading text-sm font-extrabold tracking-tight') ?>>ĐẶT SÂN BMT</span>
+        <span class="block text-[10px] font-semibold tracking-[0.18em] text-primary-500">24H</span>
       </span>
     </a>
 
-    <nav class="hidden min-w-0 flex-1 items-center justify-start gap-0.5 overflow-x-auto lg:flex xl:justify-center xl:gap-1" style="scrollbar-width:none" aria-label="Điều hướng chính">
-      <?php foreach ($nav as $item): ?>
-        <a href="<?= url($item[0] . ($item[2] ? '?sport=' . $item[2] : '')) ?>" <?= $navLink($isActive($item)) ?>><?= e($item[1]) ?></a>
+    <nav class="hidden min-w-0 flex-1 items-center justify-start gap-0.5 overflow-x-auto lg:flex" style="scrollbar-width:none" aria-label="Điều hướng chính">
+      <?php foreach ($navMain as $item): ?>
+        <a href="<?= url($item[0] . ($item[2] && $item[2] !== 'all' ? '?sport=' . $item[2] : '')) ?>" <?= $navLink($isActive($item)) ?>><?= e($item[1]) ?></a>
       <?php endforeach; ?>
-      <div class="relative">
-        <button type="button" data-explore-toggle aria-expanded="false" aria-haspopup="menu" <?= $navLink($exploreActive) ?>>
-          <span class="flex items-center gap-1">Khám phá <span class="flex h-4 w-4 items-center justify-center"><i class="ri-arrow-down-s-line" aria-hidden="true"></i></span></span>
-        </button>
-      </div>
-      <?php if ($isAdmin): ?>
-        <a href="<?= url('/quan-tri') ?>" title="Quản trị hệ thống" <?= strpos($path, '/quan-tri') === 0
-            ? 'class="ml-1 flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2 py-2 text-[13px] font-semibold transition-colors xl:px-3 xl:text-sm bg-accent-100 text-accent-800"'
-            : tcls($tr, 'text-white/90 hover:bg-white/10 hover:text-white', 'text-accent-700 hover:bg-accent-50', 'ml-1 flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2 py-2 text-[13px] font-semibold transition-colors xl:px-3 xl:text-sm') ?>>
-          <span class="flex h-4 w-4 items-center justify-center"><i class="ri-shield-user-line" aria-hidden="true"></i></span>Quản trị
-        </a>
-      <?php endif; ?>
+      <button type="button" data-nav-toggle="nav-promo-panel" aria-expanded="false" aria-haspopup="menu" <?= $navLink($promoActive) ?>>
+        <span class="flex items-center gap-0.5">Ưu đãi <i class="ri-arrow-down-s-line text-sm" aria-hidden="true"></i></span>
+      </button>
+      <button type="button" data-nav-toggle="nav-tools-panel" aria-expanded="false" aria-haspopup="menu" <?= $navLink($toolsActive) ?>>
+        <span class="flex items-center gap-0.5">Tiện ích <i class="ri-arrow-down-s-line text-sm" aria-hidden="true"></i></span>
+      </button>
+      <button type="button" data-nav-toggle="nav-about-panel" aria-expanded="false" aria-haspopup="menu" <?= $navLink($aboutActive) ?>>
+        <span class="flex items-center gap-0.5">Giới thiệu <i class="ri-arrow-down-s-line text-sm" aria-hidden="true"></i></span>
+      </button>
+      <a href="<?= url('/lien-he') ?>" <?= $navLink($contactActive) ?>>Liên hệ</a>
     </nav>
-    <div id="explore-menu" role="menu" class="fixed z-[60] hidden w-72 overflow-hidden rounded-lg border border-background-200 bg-background-50 p-1.5 shadow-xl">
-      <?php foreach ($explore as $x): ?>
-        <a href="<?= url($x[0]) ?>" role="menuitem" class="flex items-start gap-2.5 rounded-md px-2.5 py-2.5 transition-colors hover:bg-background-100">
-          <span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary-50 text-primary-600"><i class="<?= $x[2] ?> text-base" aria-hidden="true"></i></span>
-          <span class="min-w-0"><span class="block whitespace-nowrap text-sm font-semibold text-foreground-900"><?= e($x[1]) ?></span><span class="mt-0.5 block text-[11px] leading-snug text-foreground-500"><?= e($x[3]) ?></span></span>
-        </a>
+
+    <?php foreach ([['nav-promo-panel', $promoMenu], ['nav-tools-panel', $toolsMenu], ['nav-about-panel', $aboutMenu]] as [$pid, $mitems]): ?>
+    <div id="<?= $pid ?>" data-nav-panel role="menu" class="fixed z-[60] hidden w-72 overflow-hidden rounded-lg border border-background-200 bg-background-50 p-1.5 shadow-xl">
+      <?php foreach ($mitems as $x): ?>
+        <?php if ($x[0] === '#ai-chat'): ?>
+          <button type="button" data-open-chatbot role="menuitem" class="flex w-full cursor-pointer items-start gap-2.5 rounded-md px-2.5 py-2.5 text-left transition-colors hover:bg-background-100">
+            <span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary-50 text-primary-600"><i class="<?= $x[2] ?> text-base" aria-hidden="true"></i></span>
+            <span class="min-w-0"><span class="block whitespace-nowrap text-sm font-semibold text-foreground-900"><?= e($x[1]) ?></span><span class="mt-0.5 block text-[11px] leading-snug text-foreground-500"><?= e($x[3]) ?></span></span>
+          </button>
+        <?php else: ?>
+          <a href="<?= url($x[0]) ?>" role="menuitem" class="flex items-start gap-2.5 rounded-md px-2.5 py-2.5 transition-colors hover:bg-background-100">
+            <span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary-50 text-primary-600"><i class="<?= $x[2] ?> text-base" aria-hidden="true"></i></span>
+            <span class="min-w-0"><span class="block whitespace-nowrap text-sm font-semibold text-foreground-900"><?= e($x[1]) ?></span><span class="mt-0.5 block text-[11px] leading-snug text-foreground-500"><?= e($x[3]) ?></span></span>
+          </a>
+        <?php endif; ?>
       <?php endforeach; ?>
     </div>
+    <?php endforeach; ?>
 
-    <div class="hidden lg:flex items-center gap-1.5 xl:gap-2 shrink-0">
-      <?php $chip = 'flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-[13px] font-semibold transition-colors'; ?>
-      <?php if ($isOwner): ?>
+    <div class="hidden lg:flex items-center gap-1 shrink-0">
+      <?php $chip = 'flex shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-full border px-2 py-1.5 text-xs font-semibold transition-colors'; ?>
+      <?php if ($isAdmin): ?>
+        <a href="<?= url('/quan-tri') ?>" title="Quản trị hệ thống" <?= tcls($tr, 'border-white/40 text-white hover:border-white hover:bg-white/15', 'border-accent-300 bg-accent-50 text-accent-800 hover:border-accent-400 hover:bg-accent-100', $chip) ?>>
+          <i class="ri-shield-user-line text-sm" aria-hidden="true"></i>
+          <span>Quản trị</span>
+        </a>
+      <?php elseif ($isOwner): ?>
         <a href="<?= url('/chu-san') ?>" title="Kênh chủ sân" <?= tcls($tr, 'border-white/40 text-white hover:border-white hover:bg-white/15', 'border-primary-300 bg-primary-50 text-primary-800 hover:border-primary-400 hover:bg-primary-100', $chip) ?>>
-          <span class="flex h-4 w-4 items-center justify-center"><i class="ri-store-2-line" aria-hidden="true"></i></span>
-          <span class="hidden xl:inline">Kênh chủ sân</span><span class="xl:hidden">Kênh sân</span>
+          <i class="ri-store-2-line text-sm" aria-hidden="true"></i>
+          <span class="hdr-wide-only">Kênh chủ sân</span><span class="hdr-compact-only">Chủ sân</span>
         </a>
       <?php else: ?>
-        <a href="<?= url('/dang-ky-chu-san') ?>" title="Đăng ký tài khoản chủ sân" <?= tcls($tr, 'border-white/40 text-white hover:border-white hover:bg-white/15', 'border-accent-300 bg-accent-50 text-accent-800 hover:border-accent-400 hover:bg-accent-100', $chip) ?>>
-          <span class="flex h-4 w-4 items-center justify-center"><i class="ri-store-2-line" aria-hidden="true"></i></span>
-          <span class="hidden 2xl:inline">Đăng ký chủ sân</span><span class="2xl:hidden">Đăng ký sân</span>
+        <a href="<?= url('/dang-ky-chu-san') ?>" title="Dành cho chủ sân" <?= tcls($tr, 'border-white/40 text-white hover:border-white hover:bg-white/15', 'border-accent-300 bg-accent-50 text-accent-800 hover:border-accent-400 hover:bg-accent-100', $chip) ?>>
+          <i class="ri-store-2-line text-sm" aria-hidden="true"></i>
+          <span class="hdr-wide-only">Dành cho chủ sân</span><span class="hdr-compact-only">Chủ sân</span>
         </a>
       <?php endif; ?>
-      <form action="<?= url('/tim-san') ?>" method="get" role="search" class="hidden 2xl:block">
-        <div <?= tcls($tr, 'border-white/30 bg-white/10 focus-within:border-white/60', 'border-background-300 bg-background-100 focus-within:border-primary-400', 'flex items-center gap-2 rounded-full border px-3.5 py-2 transition-colors') ?>>
+      <form action="<?= url('/tim-san') ?>" method="get" role="search" class="hdr-search-form">
+        <div <?= tcls($tr, 'border-white/30 bg-white/10 focus-within:border-white/60', 'border-background-300 bg-background-100 focus-within:border-primary-400', 'flex items-center gap-1 rounded-full border px-2 py-1.5 transition-colors') ?>>
           <i <?= tcls($tr, 'text-white/70', 'text-primary-500', 'ri-search-line text-sm') ?> aria-hidden="true"></i>
-          <input type="search" name="q" value="<?= e($q) ?>" placeholder="Tìm sân..." aria-label="Tìm kiếm sân thể thao" <?= tcls($tr, 'text-white placeholder:text-white/60', 'text-foreground-950 placeholder:text-foreground-500', 'w-[120px] bg-transparent text-sm focus:outline-none 2xl:w-[170px]') ?>>
+          <input type="search" name="q" value="<?= e($q) ?>" placeholder="Tìm sân..." aria-label="Tìm kiếm sân thể thao" <?= tcls($tr, 'text-white placeholder:text-white/60', 'text-foreground-950 placeholder:text-foreground-500', 'hdr-search-input bg-transparent text-xs focus:outline-none') ?>>
         </div>
       </form>
-      <a href="<?= url('/tim-san') ?>" aria-label="Tìm sân" <?= tcls($tr, 'text-white hover:bg-white/15', 'text-foreground-600 hover:text-primary-600 hover:bg-background-100', 'flex 2xl:hidden w-9 h-9 items-center justify-center rounded-md transition-colors') ?>><i class="ri-search-line text-lg" aria-hidden="true"></i></a>
-      <span <?= tcls($tr, 'bg-white/25', 'bg-background-300', 'h-5 w-px') ?>></span>
-      <a href="<?= url('/tai-khoan?tab=favorites') ?>" title="Sân yêu thích" aria-label="Sân yêu thích" <?= tcls($tr, 'text-white hover:bg-white/15', 'text-foreground-600 hover:bg-background-100 hover:text-accent-600', 'relative flex h-9 w-9 cursor-pointer items-center justify-center rounded-md transition-colors') ?>>
+      <a href="<?= url('/tim-san') ?>" title="Tìm sân" aria-label="Tìm sân" <?= tcls($tr, 'text-white hover:bg-white/15', 'text-foreground-600 hover:text-primary-600 hover:bg-background-100', 'hdr-search-icon h-8 w-8 items-center justify-center rounded-md transition-colors') ?>><i class="ri-search-line text-lg" aria-hidden="true"></i></a>
+      <a href="<?= url('/tai-khoan?tab=favorites') ?>" title="Sân yêu thích" aria-label="Sân yêu thích" <?= tcls($tr, 'text-white hover:bg-white/15', 'text-foreground-600 hover:bg-background-100 hover:text-accent-600', 'relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors') ?>>
         <i class="ri-heart-3-line text-lg" aria-hidden="true"></i>
         <span data-fav-count class="absolute -right-0.5 -top-0.5 <?= $favCount ? 'flex' : 'hidden' ?> h-4 min-w-[16px] items-center justify-center rounded-full bg-accent-500 px-1 text-[10px] font-bold text-background-950"><?= $favCount > 9 ? '9+' : $favCount ?></span>
       </a>
+      <?php if ($u): ?>
+      <a href="<?= url('/tai-khoan?tab=notifications') ?>" title="Thông báo" aria-label="Thông báo" <?= tcls($tr, 'text-white hover:bg-white/15', 'text-foreground-600 hover:bg-background-100 hover:text-primary-600', 'relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors') ?>>
+        <i class="ri-notification-3-line text-lg" aria-hidden="true"></i>
+        <?php if ($unreadNotif): ?><span class="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary-500 px-1 text-[10px] font-bold text-white"><?= $unreadNotif > 9 ? '9+' : $unreadNotif ?></span><?php endif; ?>
+      </a>
+      <?php endif; ?>
       <?php render_language_toggle($tr); ?>
       <?php render_theme_toggle($tr); ?>
       <?php if ($u): ?>
         <div class="relative" data-dropdown>
-          <button type="button" data-dropdown-toggle aria-expanded="false" aria-haspopup="menu" <?= tcls($tr, 'text-white hover:bg-white/15', 'text-foreground-800 hover:bg-background-100', 'flex cursor-pointer items-center gap-2 rounded-md py-1.5 pl-1.5 pr-2.5 transition-colors') ?>>
+          <button type="button" data-dropdown-toggle aria-expanded="false" aria-haspopup="menu" title="<?= e($u['full_name'] ?: $short) ?>" <?= tcls($tr, 'text-white hover:bg-white/15', 'text-foreground-800 hover:bg-background-100', 'flex cursor-pointer items-center gap-1 rounded-md py-1 px-1.5 transition-colors') ?>>
             <span class="flex h-7 w-7 items-center justify-center rounded-full bg-primary-500 text-[11px] font-bold text-white"><?= e($initials) ?></span>
-            <span class="hidden max-w-[96px] truncate whitespace-nowrap text-sm font-semibold xl:block"><?= e($short) ?></span>
+            <span class="hdr-wide-only max-w-[96px] truncate whitespace-nowrap text-sm font-semibold"><?= e($short) ?></span>
             <i class="ri-arrow-down-s-line text-base" aria-hidden="true"></i>
           </button>
           <div data-dropdown-menu role="menu" class="absolute right-0 top-[calc(100%+10px)] hidden w-[272px] overflow-hidden rounded-xl border border-background-200 bg-background-50 shadow-xl">
@@ -283,10 +365,14 @@ function render_site_header(bool $tr): void
               <span class="ml-auto shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold <?= $isAdmin ? 'bg-accent-100 text-accent-800' : ($isOwner ? 'bg-primary-100 text-primary-800' : 'bg-secondary-200 text-secondary-900') ?>"><?= $isAdmin ? 'Quản trị' : ($isOwner ? 'Chủ sân' : 'Khách hàng') ?></span>
             </div>
             <div class="flex flex-col p-1.5">
-              <p class="px-2.5 pb-1 pt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-foreground-400">Cá nhân</p>
-              <a href="<?= url('/tai-khoan') ?>" role="menuitem" class="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-sm font-medium text-foreground-800 transition-colors hover:bg-background-100"><i class="ri-user-line text-base text-foreground-500" aria-hidden="true"></i>Tài khoản của tôi</a>
-              <a href="<?= url('/tai-khoan?tab=favorites') ?>" role="menuitem" class="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-sm font-medium text-foreground-800 transition-colors hover:bg-background-100"><i class="ri-heart-3-line text-base text-accent-600" aria-hidden="true"></i>Sân yêu thích<?php if ($favCount): ?><span class="ml-auto rounded-full bg-accent-500 px-1.5 py-0.5 text-[10px] font-bold text-background-950"><?= $favCount ?></span><?php endif; ?></a>
-              <a href="<?= url('/uu-dai') ?>" role="menuitem" class="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-sm font-medium text-foreground-800 transition-colors hover:bg-background-100"><i class="ri-coupon-3-line text-base text-primary-600" aria-hidden="true"></i>Ưu đãi &amp; mã giảm giá</a>
+              <p class="px-2.5 pb-1 pt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-foreground-400">Tài khoản của tôi</p>
+              <a href="<?= url('/tai-khoan?tab=profile') ?>" role="menuitem" class="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-sm font-medium text-foreground-800 transition-colors hover:bg-background-100"><i class="ri-user-line text-base text-foreground-500" aria-hidden="true"></i>Hồ sơ cá nhân</a>
+              <a href="<?= url('/tai-khoan?tab=history') ?>" role="menuitem" class="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-sm font-medium text-foreground-800 transition-colors hover:bg-background-100"><i class="ri-history-line text-base text-primary-600" aria-hidden="true"></i>Lịch sử đặt sân</a>
+              <a href="<?= url('/tai-khoan?tab=recurring') ?>" role="menuitem" class="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-sm font-medium text-foreground-800 transition-colors hover:bg-background-100"><i class="ri-calendar-2-line text-base text-secondary-600" aria-hidden="true"></i>Lịch cố định của tôi</a>
+              <a href="<?= url('/tai-khoan?tab=favorites') ?>" role="menuitem" class="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-sm font-medium text-foreground-800 transition-colors hover:bg-background-100"><i class="ri-heart-3-line text-base text-accent-600" aria-hidden="true"></i>Sân yêu thích<?php if ($favCount): ?><span class="ml-auto rounded-full bg-accent-500 px-1.5 py-0.5 text-[10px] font-bold text-background-950"><?= $favCount ?></span><?php endif; ?></a>
+              <a href="<?= url('/tai-khoan?tab=vouchers') ?>" role="menuitem" class="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-sm font-medium text-foreground-800 transition-colors hover:bg-background-100"><i class="ri-coupon-3-line text-base text-primary-600" aria-hidden="true"></i>Ví voucher</a>
+              <a href="<?= url('/tai-khoan?tab=notifications') ?>" role="menuitem" class="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-sm font-medium text-foreground-800 transition-colors hover:bg-background-100"><i class="ri-notification-3-line text-base text-foreground-500" aria-hidden="true"></i>Thông báo<?php if ($unreadNotif): ?><span class="ml-auto rounded-full bg-primary-500 px-1.5 py-0.5 text-[10px] font-bold text-white"><?= $unreadNotif ?></span><?php endif; ?></a>
+              <a href="<?= url('/tai-khoan?tab=password') ?>" role="menuitem" class="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-sm font-medium text-foreground-800 transition-colors hover:bg-background-100"><i class="ri-lock-password-line text-base text-foreground-500" aria-hidden="true"></i>Đổi mật khẩu</a>
             </div>
             <?php if ($isOwner || $isAdmin): ?>
               <div class="flex flex-col gap-1 border-t border-background-200 p-1.5">
@@ -322,7 +408,7 @@ function render_site_header(bool $tr): void
           <span class="whitespace-nowrap text-sm font-semibold">Đăng nhập</span>
         </a>
       <?php endif; ?>
-      <a href="<?= url('/dat-san') ?>" class="whitespace-nowrap rounded-md bg-primary-500 px-3.5 xl:px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-600">Đặt sân</a>
+      <a href="<?= url('/dat-san') ?>" class="whitespace-nowrap rounded-md bg-primary-500 px-3 py-2 text-[13px] xl:text-sm font-semibold text-white transition-colors hover:bg-primary-600">Đặt sân</a>
     </div>
 
     <button type="button" data-mobile-toggle aria-label="Mở menu" aria-expanded="false" <?= tcls($tr, 'text-white hover:bg-white/15', 'text-foreground-800 hover:bg-background-100', 'lg:hidden w-10 h-10 flex items-center justify-center rounded-md transition-colors') ?>>
@@ -339,17 +425,27 @@ function render_site_header(bool $tr): void
           <button type="submit" class="shrink-0 whitespace-nowrap rounded-full bg-primary-500 px-4 py-1.5 text-xs font-bold text-white transition-colors hover:bg-primary-600">Tìm</button>
         </div>
       </form>
-      <?php if (!$isOwner): ?>
+      <?php if (!$isOwner && !$isAdmin): ?>
         <a href="<?= url('/dang-ky-chu-san') ?>" class="mt-1 flex items-center justify-between rounded-full border border-accent-300 bg-accent-50 px-3 py-2.5 text-sm font-semibold text-accent-800 hover:bg-accent-100">
-          <span class="flex items-center gap-2.5"><i class="ri-store-2-line text-base text-accent-600" aria-hidden="true"></i>Đăng ký chủ sân</span><i class="ri-arrow-right-s-line text-accent-500" aria-hidden="true"></i>
+          <span class="flex items-center gap-2.5"><i class="ri-store-2-line text-base text-accent-600" aria-hidden="true"></i>Dành cho chủ sân</span><i class="ri-arrow-right-s-line text-accent-500" aria-hidden="true"></i>
         </a>
       <?php endif; ?>
-      <?php foreach ($nav as $item): ?>
-        <a href="<?= url($item[0] . ($item[2] ? '?sport=' . $item[2] : '')) ?>" class="flex items-center justify-between rounded-md px-3 py-3 text-sm font-medium text-foreground-800 hover:bg-background-100"><span class="flex items-center gap-2.5"><?= e($item[1]) ?></span><i class="ri-arrow-right-s-line text-foreground-400" aria-hidden="true"></i></a>
+      <?php foreach ($navMain as $item): ?>
+        <a href="<?= url($item[0] . ($item[2] && $item[2] !== 'all' ? '?sport=' . $item[2] : '')) ?>" class="flex items-center justify-between rounded-md px-3 py-2.5 text-sm font-medium text-foreground-800 hover:bg-background-100"><span><?= e($item[1]) ?></span><i class="ri-arrow-right-s-line text-foreground-400" aria-hidden="true"></i></a>
       <?php endforeach; ?>
-      <?php foreach ($explore as $x): ?>
-        <a href="<?= url($x[0]) ?>" class="flex items-center justify-between rounded-md px-3 py-3 text-sm font-medium text-foreground-800 hover:bg-background-100"><span class="flex items-center gap-2.5"><i class="<?= $x[2] ?> text-base text-primary-600" aria-hidden="true"></i><?= e($x[1]) ?></span><i class="ri-arrow-right-s-line text-foreground-400" aria-hidden="true"></i></a>
+      <p class="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-foreground-400">Ưu đãi &amp; Tiện ích</p>
+      <?php foreach (array_merge($promoMenu, $toolsMenu) as $x): ?>
+        <?php if ($x[0] === '#ai-chat'): ?>
+          <button type="button" data-open-chatbot class="flex items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-medium text-foreground-800 hover:bg-background-100"><span class="flex items-center gap-2.5"><i class="<?= $x[2] ?> text-base text-primary-600" aria-hidden="true"></i><?= e($x[1]) ?></span><i class="ri-arrow-right-s-line text-foreground-400" aria-hidden="true"></i></button>
+        <?php else: ?>
+          <a href="<?= url($x[0]) ?>" class="flex items-center justify-between rounded-md px-3 py-2.5 text-sm font-medium text-foreground-800 hover:bg-background-100"><span class="flex items-center gap-2.5"><i class="<?= $x[2] ?> text-base text-primary-600" aria-hidden="true"></i><?= e($x[1]) ?></span><i class="ri-arrow-right-s-line text-foreground-400" aria-hidden="true"></i></a>
+        <?php endif; ?>
       <?php endforeach; ?>
+      <p class="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-foreground-400">Giới thiệu &amp; Liên hệ</p>
+      <?php foreach ($aboutMenu as $x): ?>
+        <a href="<?= url($x[0]) ?>" class="flex items-center justify-between rounded-md px-3 py-2.5 text-sm font-medium text-foreground-800 hover:bg-background-100"><span class="flex items-center gap-2.5"><i class="<?= $x[2] ?> text-base text-primary-600" aria-hidden="true"></i><?= e($x[1]) ?></span><i class="ri-arrow-right-s-line text-foreground-400" aria-hidden="true"></i></a>
+      <?php endforeach; ?>
+      <a href="<?= url('/lien-he') ?>" class="flex items-center justify-between rounded-md px-3 py-2.5 text-sm font-medium text-foreground-800 hover:bg-background-100"><span class="flex items-center gap-2.5"><i class="ri-phone-line text-base text-primary-600" aria-hidden="true"></i>Liên hệ</span><i class="ri-arrow-right-s-line text-foreground-400" aria-hidden="true"></i></a>
       <div class="mt-3 flex flex-col gap-2 border-t border-background-200 pt-3">
         <a href="<?= url('/tai-khoan?tab=favorites') ?>" class="flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm font-semibold text-foreground-800 hover:bg-background-100">
           <i class="ri-heart-3-line text-base text-accent-600" aria-hidden="true"></i>Sân yêu thích
@@ -413,10 +509,28 @@ function render_language_toggle(bool $tr = false, string $extra = ''): void
 
 function render_site_footer(): void
 {
-    $explore = [['Sân bóng đá', '/tim-san?sport=football'], ['Sân cầu lông', '/tim-san?sport=badminton'], ['Bản đồ sân', '/ban-do'],
-        ['Ngẫu nhiên & chia đội', '/ngau-nhien'], ['Ưu đãi & mã giảm giá', '/uu-dai'], ['Đặt sân nhanh', '/dat-san']];
-    $support = [['Giới thiệu về chúng tôi', '/gioi-thieu'], ['Liên hệ hỗ trợ', '/lien-he'], ['Tài khoản của tôi', '/tai-khoan'],
-        ['Kênh chủ sân', '/chu-san'], ['Đăng nhập', '/dang-nhap'], ['Tạo tài khoản mới', '/dang-ky'], ['Trở thành đối tác chủ sân', '/dang-ky-chu-san']];
+    $cfg = system_settings_all();
+    $hotline = $cfg['hotline'] ?: HOTLINE;
+    $email = $cfg['support_email'] ?: SUPPORT_EMAIL;
+    $address = $cfg['site_address'] ?: 'TP. Buôn Ma Thuột, Đắk Lắk, Việt Nam';
+    $explore = [
+        ['Sân bóng đá', '/tim-san?sport=football'],
+        ['Sân cầu lông', '/tim-san?sport=badminton'],
+        ['Tìm sân trống', '/tim-san'],
+        ['Ưu đãi & giờ vàng', '/uu-dai'],
+        ['Vòng quay ưu đãi', '/uu-dai#vong-quay'],
+        ['Ngẫu nhiên & chia đội', '/ngau-nhien'],
+        ['Bản đồ sân', '/ban-do'],
+    ];
+    $support = [
+        ['Về BMT 24H', '/gioi-thieu#ve-bmt'],
+        ['Chính sách đặt, hủy, hoàn cọc', '/gioi-thieu#chinh-sach'],
+        ['Câu hỏi thường gặp', '/gioi-thieu#faq'],
+        ['Liên hệ hỗ trợ', '/lien-he'],
+        ['Dành cho chủ sân', '/dang-ky-chu-san'],
+        ['Tài khoản của tôi', '/tai-khoan'],
+        ['Kênh chủ sân', '/chu-san'],
+    ];
     $socials = [['ri-facebook-fill', 'Facebook'], ['ri-messenger-line', 'Messenger'], ['ri-youtube-fill', 'YouTube'], ['ri-tiktok-fill', 'TikTok']];
     ?>
 <footer class="mt-auto border-t border-background-200 bg-background-100 text-foreground-600">
@@ -437,23 +551,23 @@ function render_site_footer(): void
             <a href="#" aria-label="<?= $s[1] ?>" class="w-9 h-9 flex items-center justify-center rounded-md bg-primary-500/15 text-foreground-700 transition-colors hover:bg-primary-500 hover:text-foreground-950"><i class="<?= $s[0] ?> text-base" aria-hidden="true"></i></a>
           <?php endforeach; ?>
         </div>
-        <a href="<?= url('/dang-ky-chu-san') ?>" class="mt-6 inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-primary-300 bg-white px-4 py-2.5 text-sm font-semibold text-primary-700 transition-colors hover:border-primary-500 hover:bg-primary-500 hover:text-white"><i class="ri-store-2-line text-base" aria-hidden="true"></i>Trở thành đối tác chủ sân</a>
+        <a href="<?= url('/dang-ky-chu-san') ?>" class="mt-6 inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-primary-300 bg-white px-4 py-2.5 text-sm font-semibold text-primary-700 transition-colors hover:border-primary-500 hover:bg-primary-500 hover:text-white"><i class="ri-store-2-line text-base" aria-hidden="true"></i>Dành cho chủ sân</a>
         <p class="mt-2 text-xs leading-relaxed text-foreground-500">Miễn phí đăng ký, nhận đơn đặt sân mỗi ngày.</p>
       </div>
       <div>
-        <h4 class="font-heading text-sm font-bold uppercase tracking-wide text-foreground-950 mb-4"><a href="<?= url('/tim-san') ?>" class="hover:text-primary-600 transition-colors">Khám phá sân</a></h4>
+        <h4 class="font-heading text-sm font-bold uppercase tracking-wide text-foreground-950 mb-4"><a href="<?= url('/tim-san') ?>" class="hover:text-primary-600 transition-colors">Đặt sân &amp; Tiện ích</a></h4>
         <ul class="space-y-2.5"><?php foreach ($explore as $l): ?><li><a href="<?= url($l[1]) ?>" class="text-sm text-foreground-600 transition-colors hover:text-primary-600"><?= e($l[0]) ?></a></li><?php endforeach; ?></ul>
       </div>
       <div>
-        <h4 class="font-heading text-sm font-bold uppercase tracking-wide text-foreground-950 mb-4"><a href="<?= url('/gioi-thieu') ?>" class="hover:text-primary-600 transition-colors">Hỗ trợ</a></h4>
+        <h4 class="font-heading text-sm font-bold uppercase tracking-wide text-foreground-950 mb-4"><a href="<?= url('/gioi-thieu') ?>" class="hover:text-primary-600 transition-colors">Giới thiệu &amp; Hỗ trợ</a></h4>
         <ul class="space-y-2.5"><?php foreach ($support as $l): ?><li><a href="<?= url($l[1]) ?>" class="text-sm text-foreground-600 transition-colors hover:text-primary-600"><?= e($l[0]) ?></a></li><?php endforeach; ?></ul>
       </div>
       <div class="col-span-2 sm:col-span-1">
         <h4 class="font-heading text-sm font-bold uppercase tracking-wide text-foreground-950 mb-4"><a href="<?= url('/lien-he') ?>" class="hover:text-primary-600 transition-colors">Liên hệ</a></h4>
         <ul class="space-y-3 text-sm text-foreground-600">
-          <li class="flex items-start gap-2.5"><i class="ri-map-pin-line text-primary-600 mt-0.5" aria-hidden="true"></i><span>TP. Buôn Ma Thuột, Đắk Lắk, Việt Nam</span></li>
-          <li class="flex items-start gap-2.5"><i class="ri-phone-line text-primary-600 mt-0.5" aria-hidden="true"></i><a href="tel:<?= preg_replace('/\D/', '', HOTLINE) ?>" class="hover:text-primary-600 transition-colors"><?= HOTLINE ?></a></li>
-          <li class="flex items-start gap-2.5"><i class="ri-mail-line text-primary-600 mt-0.5" aria-hidden="true"></i><a href="mailto:<?= SUPPORT_EMAIL ?>" class="hover:text-primary-600 transition-colors"><?= SUPPORT_EMAIL ?></a></li>
+          <li class="flex items-start gap-2.5"><i class="ri-map-pin-line text-primary-600 mt-0.5" aria-hidden="true"></i><span><?= e($address) ?></span></li>
+          <li class="flex items-start gap-2.5"><i class="ri-phone-line text-primary-600 mt-0.5" aria-hidden="true"></i><a href="tel:<?= preg_replace('/\D/', '', $hotline) ?>" class="hover:text-primary-600 transition-colors"><?= e($hotline) ?></a></li>
+          <li class="flex items-start gap-2.5"><i class="ri-mail-line text-primary-600 mt-0.5" aria-hidden="true"></i><a href="mailto:<?= e($email) ?>" class="hover:text-primary-600 transition-colors"><?= e($email) ?></a></li>
           <li class="flex items-start gap-2.5"><i class="ri-time-line text-primary-600 mt-0.5" aria-hidden="true"></i><span>Hỗ trợ 24/7, kể cả ngày lễ</span></li>
         </ul>
       </div>
@@ -461,10 +575,10 @@ function render_site_footer(): void
   </div>
   <div class="border-t border-background-200">
     <div class="w-full px-4 md:px-8 py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
-      <p class="text-xs text-foreground-500">© <?= date('Y') ?> Đặt Sân BMT 24H. Tất cả các quyền được bảo lưu.</p>
+      <p class="text-xs text-foreground-500">© <?= date('Y') ?> <?= e($cfg['site_name'] ?: SITE_NAME) ?>. Tất cả các quyền được bảo lưu.</p>
       <div class="flex items-center gap-5 text-xs text-foreground-500">
-        <a href="<?= url('/gioi-thieu') ?>" class="hover:text-primary-600 transition-colors">Điều khoản sử dụng</a>
-        <a href="<?= url('/gioi-thieu') ?>" class="hover:text-primary-600 transition-colors">Chính sách bảo mật</a>
+        <a href="<?= url('/gioi-thieu#chinh-sach') ?>" class="hover:text-primary-600 transition-colors">Chính sách đặt, hủy, hoàn cọc</a>
+        <a href="<?= url('/gioi-thieu#faq') ?>" class="hover:text-primary-600 transition-colors">Câu hỏi thường gặp</a>
       </div>
     </div>
   </div>
