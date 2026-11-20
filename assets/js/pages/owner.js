@@ -1,8 +1,8 @@
 /**
  * KÊNH CHỦ SÂN — điểm vào: tải dữ liệu, vẽ tab đang mở, menu di động, nút "Tạo đơn tại quầy".
  */
-import { errorBlock, loadingBlock } from '../core/ui.js';
-import { PAGE, main, loadData } from './owner-shared.js';
+import { errorBlock, loadingBlock, toast } from '../core/ui.js';
+import { PAGE, main, actions, loadData, S } from './owner-shared.js';
 import { renderOverview, renderBookings, renderInvoices, renderCourts, renderSchedule, renderReviews, openCounterBooking, resetInvoices } from './owner-ops.js';
 import { renderReports, renderCustomers, renderServices, renderPromotions, renderDeposits } from './owner-biz.js';
 
@@ -22,6 +22,7 @@ const RENDER = {
 
 const render = () => {
   resetInvoices();
+  if (actions()) actions().innerHTML = '';
   (RENDER[PAGE.tab] || renderOverview)();
 };
 window.__ownerRender = render;
@@ -36,7 +37,12 @@ const toggleMenu = (open) => {
 document.getElementById('owner-menu-btn').addEventListener('click', () => toggleMenu(true));
 overlay.addEventListener('click', () => toggleMenu(false));
 
-document.getElementById('counter-btn').addEventListener('click', () => openCounterBooking());
+document.querySelectorAll('#counter-btn, [data-open-counter]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    toggleMenu(false);
+    openCounterBooking();
+  });
+});
 
 (async () => {
   main().innerHTML = loadingBlock('Đang tải dữ liệu kênh chủ sân...');
@@ -47,3 +53,19 @@ document.getElementById('counter-btn').addEventListener('click', () => openCount
     main().innerHTML = errorBlock(e.message);
   }
 })();
+
+// Tự động kiểm tra đơn mới mỗi 30 giây khi tab đang hiển thị
+setInterval(async () => {
+  if (document.hidden) return;
+  try {
+    const prevPending = S.bookings.filter((b) => b.status === 'pending').length;
+    await loadData();
+    const newPending = S.bookings.filter((b) => b.status === 'pending').length;
+    if (newPending > prevPending) {
+      toast(`Có ${newPending - prevPending} đơn đặt sân mới chờ duyệt!`, 'info');
+      if (['overview', 'bookings'].includes(PAGE.tab)) {
+        render();
+      }
+    }
+  } catch (_) {}
+}, 30000);

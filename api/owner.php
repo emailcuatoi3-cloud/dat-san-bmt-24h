@@ -33,6 +33,7 @@ function my_booking(string $id): array
 function my_bookings(): array
 {
     auto_complete_bookings();
+    auto_cancel_expired_holds();
     $ids = my_court_ids();
     if (!$ids) return [];
     $rows = q_all(BOOKING_SELECT . ' WHERE b.court_id IN (' . in_list($ids) . ') ORDER BY b.booking_date DESC, b.created_at DESC', $ids);
@@ -53,12 +54,16 @@ run_api([
         $trash = array_map('map_court', q_all('SELECT * FROM courts WHERE owner_id = ? AND deleted_at IS NOT NULL ORDER BY deleted_at DESC', [$OWNER['id']]));
         $ids = array_column($courts, 'id');
         $unreplied = $ids ? (int) q_val("SELECT COUNT(*) FROM reviews WHERE moderation_status <> 'hidden' AND (owner_reply IS NULL OR owner_reply = '') AND court_id IN (" . in_list($ids) . ')', $ids) : 0;
+        $services = array_map(fn($s) => ['id' => $s['id'], 'name' => $s['name'], 'category' => $s['category'], 'unit' => $s['unit'],
+            'price' => (int) $s['price'], 'stock' => (int) $s['stock'], 'active' => (bool) $s['active']],
+            q_all('SELECT * FROM owner_services WHERE owner_id = ? ORDER BY sort_order, name', [$OWNER['id']]));
         return [
             'courts' => $courts,
             'trash' => $trash,
             'bookings' => my_bookings(),
             'blocked' => (object) blocked_slots_map(null, $ids),
             'unreplied' => $unreplied,
+            'services' => $services,
         ];
     },
 
@@ -85,15 +90,33 @@ run_api([
         if (mb_strlen($name) < 2) fail('Vui lòng nhập tên khách.');
         $occ = array_merge(occupied_slots($date)[$court['id']] ?? [], blocked_slots_map($date, [$court['id']])[$court['id'] . ':' . $date] ?? []);
         if ($clash = array_values(array_intersect($slots, $occ))) fail('Khung giờ ' . implode(', ', $clash) . ' đã có người đặt hoặc đang khóa.');
-        $total = 0;
+        $courtTotal = 0;
         foreach ($slots as $s) {
-            [$h, $m] = array_map('intval', explode(':', $s));
             $price = $court['pricePerHour'];
             foreach ($court['priceBands'] as $b) {
                 if ($s >= $b['start'] && $s < $b['end']) { $price = (int) $b['price']; break; }
             }
-            $total += $price;
+            $courtTotal += $price;
         }
+
+        // Dịch vụ kèm theo nếu có
+        $rawExtras = input()['extras'] ?? [];
+        $extras = [];
+        $extraTotal = 0;
+        if (is_array($rawExtras)) {
+            foreach ($rawExtras as $ex) {
+                $qty = max(0, (int) ($ex['qty'] ?? $ex['quantity'] ?? 0));
+                $price = max(0, (int) ($ex['price'] ?? 0));
+                $label = trim((string) ($ex['label'] ?? $ex['name'] ?? ''));
+                if ($qty > 0 && $label) {
+                    $itemTotal = $price * $qty;
+                    $extraTotal += $itemTotal;
+                    $extras[] = ['id' => $ex['id'] ?? '', 'label' => $label, 'price' => $price, 'qty' => $qty, 'total' => $itemTotal];
+                }
+            }
+        }
+
+        $total = $courtTotal + $extraTotal;
         $paid = in_str('payment');
         $method = in_array(in_str('method'), ['cash', 'vietqr', 'transfer'], true) ? in_str('method') : 'cash';
         $deposit = $paid === 'deposit' ? min($total, max(0, in_int('deposit'))) : 0;
@@ -103,22 +126,24 @@ run_api([
         while (q_val('SELECT id FROM bookings WHERE code = ?', [$code])) $code = 'BMT' . date('Ymd') . '-' . random_int(1000, 9999);
         $id = uid('ob-');
         q('INSERT INTO bookings (id, code, source, court_id, court_name, sport, area, image, customer_name, customer_phone, booking_date, start_slot, duration_minutes, slots,
-             unit_price, base_total, total_price, deposit_amount, payment_method, payment_status, payment_label, status, note)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [
+             unit_price, base_total, total_price, deposit_amount, extras, payment_method, payment_status, payment_label, status, note)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [
             $id, $code, 'owner', $court['id'], $court['name'], $court['sport'], $court['area'], $court['image'], $name, $phone, $date, $slots[0], count($slots) * 60, j($slots),
-            $court['pricePerHour'], $total, $total, $deposit, $method, $status, $label, 'confirmed', mb_substr(in_str('note'), 0, 500),
+            $court['pricePerHour'], $total, $total, $deposit, $extras ? j($extras) : null, $method, $status, $label, 'confirmed', mb_substr(in_str('note'), 0, 500),
         ]);
         return map_booking(q_one(BOOKING_SELECT . ' WHERE b.id = ?', [$id]));
     },
 
     'checkin' => function () {
-        $code = strtoupper(in_str('code'));
+        $code = trim(strtoupper(in_str('code')));
         $id = in_str('id');
         if (!$id && $code) {
-            $row = q_one('SELECT id FROM bookings WHERE code = ?', [explode('|', $code)[0]]);
-            if (!$row) fail('Không tìm thấy vé với mã này.');
+            $codePart = trim(explode('|', $code)[0]);
+            $row = q_one('SELECT id FROM bookings WHERE code = ?', [$codePart]);
+            if (!$row) fail('Không tìm thấy vé với mã "' . $codePart . '".');
             $id = $row['id'];
         }
+        if (!$id) fail('Vui lòng cung cấp mã vé hoặc chọn đơn cần nhận sân.');
         $b = my_booking($id);
         if (!in_array($b['status'], ['confirmed', 'completed'], true)) fail('Đơn chưa được xác nhận nên chưa thể nhận sân.');
         if ($b['checked_in_at']) fail('Vé này đã được check-in lúc ' . date('H:i d/m/Y', strtotime($b['checked_in_at'])) . '.');
@@ -141,6 +166,11 @@ run_api([
         $close = in_str('closeTime') ?: '23:00';
         if ($close <= $open) fail('Giờ đóng cửa phải sau giờ mở cửa.');
         $images = clean_list($d['images'] ?? []);
+        if (empty($images) && !$id) {
+            $images = $sport === 'badminton'
+                ? ['https://readdy.ai/api/search-image?query=Modern%20indoor%20badminton%20court%20with%20green%20flooring%20and%20crisp%20white%20lines%2C%20bright%20LED%20lighting%2C%20clean%20sports%20hall%2C%20no%20people&width=1000&height=700&seq=bmt-court-bm-01a&orientation=landscape']
+                : ['https://readdy.ai/api/search-image?query=Modern%20artificial%20grass%20five%20a%20side%20football%20pitch%20under%20bright%20floodlights%20at%20night%2C%20vivid%20green%20turf%2C%20white%20line%20markings%2C%20green%20net%20fence%2C%20clean%20sports%20photography%2C%20no%20people&width=1000&height=700&seq=bmt-court-fb-01a&orientation=landscape'];
+        }
         $bands = [];
         $peakStart = in_str('peakStart') ?: '17:00';
         if ($peak > $price && $peakStart > $open && $peakStart < $close) {
@@ -200,6 +230,7 @@ run_api([
     'court_purge' => function () {
         $c = my_court(in_str('id'));
         if (!$c['deleted_at']) fail('Chỉ xóa vĩnh viễn được sân đang ở thùng rác.');
+        q('DELETE FROM bookings WHERE court_id = ?', [$c['id']]);
         q('DELETE FROM courts WHERE id = ?', [$c['id']]);
         return true;
     },

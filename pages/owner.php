@@ -57,6 +57,9 @@ render_page([
       <span class="flex h-9 w-9 items-center justify-center rounded-md bg-primary-500 text-white"><i class="ri-football-fill text-lg" aria-hidden="true"></i></span>
       <span class="leading-tight"><span class="block font-heading text-sm font-extrabold text-foreground-950">Đặt Sân BMT 24H</span><span class="block text-[11px] font-medium text-foreground-500">Kênh chủ sân</span></span>
     </a>
+    <div class="border-b border-background-200 p-3">
+      <button type="button" data-open-counter class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-primary-500 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-600"><i class="ri-add-circle-line text-lg" aria-hidden="true"></i>Tạo đơn tại quầy</button>
+    </div>
     <nav class="flex-1 overflow-y-auto px-3 py-4" aria-label="Điều hướng chủ sân">
       <?php foreach ($groups as [$label, $items]): ?>
         <p class="mb-1.5 mt-4 px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-foreground-400 first:mt-0"><?= $label ?></p>
@@ -94,7 +97,7 @@ render_page([
           <i class="ri-notification-3-line text-lg" aria-hidden="true"></i>
           <span id="owner-bell" class="absolute -right-1 -top-1 hidden min-w-[18px] rounded-full bg-accent-500 px-1 text-center text-[10px] font-bold leading-[18px] text-white"></span>
         </a>
-        <button type="button" id="counter-btn" class="hidden items-center gap-1.5 whitespace-nowrap rounded-md bg-primary-500 px-3.5 py-2 text-sm font-semibold text-white hover:bg-primary-600 md:inline-flex"><i class="ri-add-line" aria-hidden="true"></i>Tạo đơn tại quầy</button>
+        <button type="button" id="counter-btn" class="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md bg-primary-500 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-primary-600 sm:px-3.5 sm:py-2 sm:text-sm"><i class="ri-add-line text-base" aria-hidden="true"></i><span class="hidden sm:inline">Tạo đơn tại quầy</span><span class="sm:hidden">Tạo đơn</span></button>
         <button type="button" data-logout class="flex h-9 w-9 items-center justify-center rounded-md border border-background-300 text-foreground-700 hover:border-accent-400 hover:text-accent-700" aria-label="Đăng xuất" title="Đăng xuất"><i class="ri-logout-box-r-line text-lg" aria-hidden="true"></i></button>
       </div>
     </header>

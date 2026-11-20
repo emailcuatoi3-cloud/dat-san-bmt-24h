@@ -116,9 +116,10 @@ function booking_payment_label(array $r): string
     if ($r['source'] === 'owner') return $r['payment_label'] ?: 'Thanh toán tại sân';
     $total = (int) $r['total_price'];
     $dep = (int) $r['deposit_amount'];
+    $methodName = payment_method_label($r['payment_method'] ?? 'vietqr');
     switch ($r['payment_status']) {
         case 'unpaid': return 'VietQR – chờ cọc ' . money($dep);
-        case 'paid': return 'VietQR – đã thu đủ ' . money($total);
+        case 'paid': return 'Đã thu đủ (' . $methodName . ') · ' . money($total);
         case 'deposit_paid': return 'VietQR – đã nhận cọc ' . money($dep);
         default: return $dep > 0 ? 'VietQR – đã báo cọc ' . money($dep) : 'Thanh toán tại sân';
     }
@@ -354,17 +355,16 @@ function blocked_slots_map(?string $date = null, ?array $courtIds = null): array
 function map_invoice(array $b): array
 {
     $total = $b['totalPrice'];
+    $deposit = min($b['depositAmount'] ?? 0, $total);
     if ($b['source'] === 'online') {
-        $deposit = min($b['depositAmount'], $total);
         $isPaid = $b['paymentStatus'] === 'paid';
         $paid = $isPaid ? $total : (in_array($b['paymentStatus'], ['deposit_paid', 'deposit_claimed'], true) ? $deposit : 0);
         $method = $isPaid ? payment_method_label($b['paymentMethod']) : ($paid > 0 ? 'Đã cọc qua ' . payment_method_label($b['paymentMethod']) : 'Chưa thu');
     } else {
-        $deposit = 0;
         $isPaid = $b['paymentStatus'] === 'paid';
-        $paid = $isPaid ? $total : 0;
-        $label = $b['payment'];
-        $method = $isPaid ? (trim(preg_replace('/[·-]/u', '', str_replace('Đã thu đủ', '', $label))) ?: 'Tiền mặt') : ($label ?: 'Chưa thu');
+        $paid = $isPaid ? $total : ($b['paymentStatus'] === 'deposit_paid' ? $deposit : 0);
+        $label = $b['payment'] ?? '';
+        $method = $isPaid ? (trim(preg_replace('/[·-]/u', '', str_replace('Đã thu đủ', '', $label))) ?: payment_method_label($b['paymentMethod'])) : ($deposit > 0 ? 'Đã cọc ' . money($deposit) : ($label ?: 'Chưa thu'));
     }
     $debt = max(0, $total - $paid);
     return [
@@ -391,15 +391,16 @@ function map_invoice(array $b): array
     ];
 }
 
-/** Hóa đơn từ các lượt chơi đã hoàn thành. $where/$params lọc thêm trên bảng b. */
+/** Hóa đơn từ các lượt chơi đã xác nhận hoặc hoàn thành. $where/$params lọc thêm trên bảng b. */
 function invoices_where(string $where = '1=1', array $params = []): array
 {
     auto_complete_bookings();
+    auto_cancel_expired_holds();
     $rows = q_all(BOOKING_SELECT . " WHERE b.status IN ('completed','confirmed') AND ($where) ORDER BY b.booking_date DESC, b.code DESC", $params);
     $list = [];
     foreach ($rows as $r) {
         $b = map_booking($r);
-        if ($b['status'] === 'completed') $list[] = map_invoice($b);
+        if (in_array($b['status'], ['completed', 'confirmed'], true)) $list[] = map_invoice($b);
     }
     return $list;
 }

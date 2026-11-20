@@ -1,7 +1,7 @@
 /**
  * Kênh chủ sân — nhóm VẬN HÀNH: tổng quan, đơn đặt sân, sân của tôi, lịch & khung giờ, đánh giá, hóa đơn.
  */
-import { api, esc, toast, confirmBox, setBusy, formData, on, statusBadge, emptyState, loadingBlock, errorBlock, formatDateTime } from '../core/ui.js';
+import { api, esc, toast, confirmBox, setBusy, formData, on, statusBadge, emptyState, loadingBlock, errorBlock, formatDateTime, downloadCsv } from '../core/ui.js';
 import { openInvoiceModal, invoiceBadge, filterByDate, exportInvoices } from '../core/invoice.js';
 import { detectBookingConflicts, collectConflictIds } from '../lib/bookingConflicts.js';
 import { parseTicketPayload } from '../lib/checkin.js';
@@ -92,25 +92,31 @@ export async function checkIn(b, code = '') {
 
 export function openBookingDetail(b) {
   const row = (l, v) => `<div class="flex items-start justify-between gap-3 py-1.5 text-sm"><span class="text-foreground-500">${l}</span><span class="text-right font-medium text-foreground-900">${v}</span></div>`;
-  const extras = (b.extras || []).map((x) => `${esc(x.label)} (${money(x.price)})`).join(', ');
+  const extras = (b.extras || []).map((x) => `${esc(x.label || x.name)} ${x.qty > 1 ? `x${x.qty}` : ''} (${money(x.price * (x.qty || 1))})`).join(', ');
+  const remaining = Math.max(0, b.totalPrice - (b.paymentStatus === 'paid' ? b.totalPrice : (b.depositAmount || 0)));
   const btns = [];
   if (b.status === 'pending') btns.push(`<button type="button" data-act="reject" class="${BTN_OUT}">Từ chối</button><button type="button" data-act="approve" class="${BTN}">Duyệt đơn</button>`);
   if (b.status === 'confirmed') {
     btns.push(`<button type="button" data-act="cancel" class="${BTN_OUT}">Hủy đơn</button>`);
+    if (b.paymentStatus !== 'paid' && remaining > 0) btns.push(`<button type="button" data-act="pay" class="${BTN_OUT}"><i class="ri-hand-coin-line"></i>Thu đủ (${money(remaining)})</button>`);
     if (!b.checkedInAt) btns.push(`<button type="button" data-act="checkin" class="${BTN}"><i class="ri-qr-scan-2-line"></i>Check-in</button>`);
+  }
+  if (b.status === 'completed' && b.paymentStatus !== 'paid' && remaining > 0) {
+    btns.push(`<button type="button" data-act="pay" class="${BTN}"><i class="ri-hand-coin-line"></i>Thu đủ tiền (${money(remaining)})</button>`);
   }
   const m = modal(
     `Đơn ${esc(b.code)}`,
     `<div class="mb-3 flex flex-wrap items-center gap-2">${statusBadge(b.status)}${sourceBadge(b)}${b.checkedInAt ? `<span class="inline-flex items-center gap-1 rounded-full bg-primary-50 px-2 py-0.5 text-[11px] font-semibold text-primary-700"><i class="ri-checkbox-circle-line"></i>Đã nhận sân ${formatDateTime(b.checkedInAt)}</span>` : ''}</div>
      ${row('Khách hàng', esc(b.customerName))}
-     ${row('Số điện thoại', b.customerPhone ? `<a class="text-primary-700" href="tel:${esc(b.customerPhone)}">${esc(b.customerPhone)}</a>` : '—')}
+     ${row('Số điện thoại', b.customerPhone ? `<a class="text-primary-700 font-semibold" href="tel:${esc(b.customerPhone)}">${esc(b.customerPhone)}</a>` : '—')}
      ${row('Sân', esc(b.courtName))}
      ${row('Ngày chơi', longDate(b.date))}
      ${row('Khung giờ', `${slotText(b)} (${b.slots.length} giờ)`)}
      ${extras ? row('Dịch vụ thêm', extras) : ''}
      ${b.promoCode ? row('Mã ưu đãi', `${esc(b.promoCode)} (-${money(b.discount)})`) : ''}
      ${row('Tổng tiền', `<b class="text-primary-700">${money(b.totalPrice)}</b>`)}
-     ${b.depositAmount ? row('Tiền cọc', money(b.depositAmount)) : ''}
+     ${b.depositAmount ? row('Tiền cọc đã nhận', `<span class="text-primary-700 font-semibold">${money(b.depositAmount)}</span>`) : ''}
+     ${b.paymentStatus !== 'paid' && remaining > 0 ? row('Còn phải thu tại sân', `<b class="text-accent-700">${money(remaining)}</b>`) : ''}
      ${row('Thanh toán', esc(b.payment))}
      ${b.note ? row('Ghi chú', esc(b.note)) : ''}
      ${b.rejectReason ? row('Lý do từ chối', esc(b.rejectReason)) : ''}
@@ -119,19 +125,46 @@ export function openBookingDetail(b) {
     `<button type="button" data-close class="${BTN_OUT}">Đóng</button>${btns.join('')}`,
     'max-w-xl',
   );
-  on(m.el, 'click', '[data-act]', (e, el) => {
+  on(m.el, 'click', '[data-act]', async (e, el) => {
     const act = el.dataset.act;
     m.close();
     if (act === 'approve') approveBooking(b);
     if (act === 'reject') rejectBooking(b);
     if (act === 'cancel') rejectBooking(b, true);
     if (act === 'checkin') checkIn(b);
+    if (act === 'pay') {
+      const payModal = modal(
+        `Thu đủ tiền đơn ${esc(b.code)}`,
+        `<div class="space-y-3">
+          <p class="text-sm text-foreground-600">Khách: <b>${esc(b.customerName)}</b> · Số tiền cần thu: <b class="text-accent-700">${money(remaining)}</b></p>
+          <div><label class="${LABEL}">Hình thức thanh toán</label>
+            <select name="method" class="${INPUT}"><option value="cash">Tiền mặt</option><option value="transfer">Chuyển khoản</option><option value="vietqr">VietQR</option></select>
+          </div>
+        </div>`,
+        `<button type="button" data-close class="${BTN_OUT}">Hủy</button><button type="button" data-save-pay class="${BTN}"><i class="ri-check-line"></i>Xác nhận đã thu</button>`
+      );
+      payModal.el.querySelector('[data-save-pay]').addEventListener('click', async (ev) => {
+        const method = payModal.el.querySelector('select[name=method]').value;
+        setBusy(ev.currentTarget, true, 'Đang lưu...');
+        try {
+          const u = await api('owner', 'mark_paid', { id: b.id, method });
+          Object.assign(b, u);
+          const i = S.bookings.findIndex((x) => x.id === b.id);
+          if (i >= 0) S.bookings[i] = u;
+          payModal.close();
+          toast(`Đã ghi nhận thu đủ tiền cho đơn ${b.code}.`);
+          rerender();
+        } catch (err) { setBusy(ev.currentTarget, false); toast(err.message, 'error'); }
+      });
+    }
   });
 }
 
 /** Tạo đơn tại quầy cho khách gọi điện / đến trực tiếp */
 export function openCounterBooking(preset = {}) {
   if (!S.courts.length) return toast('Bạn cần thêm sân trước khi tạo đơn.', 'error');
+  const activeSv = (S.services || []).filter((s) => s.active);
+  const extraQty = {};
   const m = modal(
     'Tạo đơn tại quầy',
     `<form id="counter-form" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -142,7 +175,22 @@ export function openCounterBooking(preset = {}) {
       <div><label class="${LABEL}">Thanh toán</label><select name="payment" class="${INPUT}"><option value="later">Thu tại sân sau</option><option value="deposit">Khách đã cọc</option><option value="paid">Đã thu đủ</option></select></div>
       <div data-dep class="hidden"><label class="${LABEL}">Số tiền cọc</label><input type="number" name="deposit" min="0" step="10000" class="${INPUT}"></div>
       <div data-meth class="hidden"><label class="${LABEL}">Hình thức</label><select name="method" class="${INPUT}"><option value="cash">Tiền mặt</option><option value="transfer">Chuyển khoản</option><option value="vietqr">VietQR</option></select></div>
-      <div class="sm:col-span-2"><label class="${LABEL}">Khung giờ <span class="font-normal text-foreground-500">(chọn 1 hoặc nhiều giờ liền nhau)</span></label><div data-slots class="grid grid-cols-4 gap-1.5 sm:grid-cols-6"></div></div>
+      <div class="sm:col-span-2"><label class="${LABEL}">Khung giờ <span class="font-normal text-foreground-500">(chọn 1 hoặc nhiều giờ)</span></label><div data-slots class="grid grid-cols-4 gap-1.5 sm:grid-cols-6"></div></div>
+      ${activeSv.length ? `
+      <div class="sm:col-span-2 rounded-md border border-background-200 bg-background-50/50 p-3">
+        <label class="${LABEL} !mb-2"><i class="ri-store-2-line text-primary-600"></i> Dịch vụ bán kèm (tùy chọn)</label>
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
+          ${activeSv.map((s) => `
+            <div class="flex items-center justify-between gap-1.5 rounded-md border border-background-200 bg-white px-2.5 py-1.5 text-xs">
+              <div class="min-w-0"><p class="truncate font-semibold text-foreground-900">${esc(s.name)}</p><p class="text-[11px] text-foreground-500">${money(s.price)}/${esc(s.unit)}</p></div>
+              <div class="flex items-center gap-1 shrink-0">
+                <button type="button" data-sq="${s.id}" data-d="-1" class="flex h-6 w-6 items-center justify-center rounded border border-background-300 bg-background-100 font-bold hover:bg-background-200">−</button>
+                <span data-sq-val="${s.id}" class="w-5 text-center font-bold">0</span>
+                <button type="button" data-sq="${s.id}" data-d="1" class="flex h-6 w-6 items-center justify-center rounded border border-background-300 bg-background-100 font-bold hover:bg-background-200">+</button>
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>` : ''}
       <div class="sm:col-span-2"><label class="${LABEL}">Ghi chú</label><input name="note" class="${INPUT}" placeholder="Ví dụ: khách quen, mang bóng riêng"></div>
       <p data-total class="sm:col-span-2 rounded-md bg-primary-50 px-3 py-2 text-sm font-semibold text-primary-800"></p>
     </form>`,
@@ -154,9 +202,13 @@ export function openCounterBooking(preset = {}) {
   const priceAt = (c, s) => (c.priceBands || []).find((b) => s >= b.start && s < b.end)?.price || c.pricePerHour;
   const drawSlots = () => {
     const f = formData(form);
-    const c = courtById(f.courtId);
+    const c = courtById(f.courtId) || S.courts[0];
+    if (!c) return;
     const h = hoursForDate(c, f.date);
-    const busy = new Set([...S.bookings.filter((b) => b.courtId === c.id && b.date === f.date && ['pending', 'confirmed'].includes(b.status)).flatMap((b) => b.slots), ...(S.blocked[`${c.id}:${f.date}`] || [])]);
+    const busy = new Set([
+      ...S.bookings.filter((b) => b.courtId === c.id && b.date === f.date && ['pending', 'confirmed', 'completed'].includes(b.status)).flatMap((b) => b.slots),
+      ...(S.blocked[`${c.id}:${f.date}`] || []),
+    ]);
     const slots = [];
     if (!h.closed) for (let t = toMinutes(h.open); t + 60 <= toMinutes(h.close); t += 60) slots.push(minutesToTime(t));
     const now = new Date();
@@ -168,8 +220,15 @@ export function openCounterBooking(preset = {}) {
           return `<button type="button" data-s="${s}" ${dis ? 'disabled' : ''} class="rounded-md border px-2 py-2 text-xs font-semibold ${dis ? 'cursor-not-allowed border-background-200 bg-background-100 text-foreground-400 line-through' : picked.has(s) ? 'border-primary-500 bg-primary-500 text-white' : 'border-background-300 bg-white text-foreground-800 hover:border-primary-400'}">${s}</button>`;
         }).join('')
       : '<p class="col-span-full text-sm text-accent-700">Sân nghỉ vào ngày này.</p>';
-    const total = [...picked].reduce((s, x) => s + priceAt(c, x), 0);
-    m.el.querySelector('[data-total]').textContent = picked.size ? `Tạm tính: ${picked.size} giờ · ${money(total)}` : 'Chưa chọn khung giờ';
+    const courtTotal = [...picked].reduce((s, x) => s + priceAt(c, x), 0);
+    const extraTotal = Object.entries(extraQty).reduce((sum, [id, qty]) => {
+      const sv = activeSv.find((s) => s.id === id);
+      return sum + (sv ? sv.price * qty : 0);
+    }, 0);
+    const grandTotal = courtTotal + extraTotal;
+    m.el.querySelector('[data-total]').textContent = picked.size
+      ? `Tạm tính: ${picked.size} giờ sân (${money(courtTotal)})${extraTotal ? ` + dịch vụ (${money(extraTotal)}) = ${money(grandTotal)}` : ` · ${money(grandTotal)}`}`
+      : (extraTotal ? `Dịch vụ: ${money(extraTotal)} (chưa chọn giờ sân)` : 'Chưa chọn khung giờ');
     m.el.querySelector('[data-dep]').classList.toggle('hidden', f.payment !== 'deposit');
     m.el.querySelector('[data-meth]').classList.toggle('hidden', f.payment === 'later');
   };
@@ -178,12 +237,26 @@ export function openCounterBooking(preset = {}) {
     picked.has(el.dataset.s) ? picked.delete(el.dataset.s) : picked.add(el.dataset.s);
     drawSlots();
   });
+  on(form, 'click', '[data-sq]', (e, el) => {
+    const id = el.dataset.sq;
+    const delta = Number(el.dataset.d);
+    extraQty[id] = Math.max(0, (extraQty[id] || 0) + delta);
+    const display = form.querySelector(`[data-sq-val="${id}"]`);
+    if (display) display.textContent = extraQty[id];
+    drawSlots();
+  });
   drawSlots();
   m.el.querySelector('[data-ok]').addEventListener('click', async (e) => {
     const f = formData(form);
+    const extras = Object.entries(extraQty)
+      .filter(([_, qty]) => qty > 0)
+      .map(([id, qty]) => {
+        const sv = activeSv.find((s) => s.id === id);
+        return { id, label: sv.name, price: sv.price, qty };
+      });
     setBusy(e.currentTarget, true, 'Đang tạo...');
     try {
-      const b = await api('owner', 'counter_create', { ...f, slots: [...picked] });
+      const b = await api('owner', 'counter_create', { ...f, slots: [...picked], extras });
       S.bookings.unshift(b);
       m.close();
       toast(`Đã tạo đơn ${b.code} cho ${b.customerName}.`);
@@ -232,7 +305,105 @@ function openHoursInRange(court, from, to) {
   return total;
 }
 
+export function openQrScanner() {
+  let stream = null;
+  let interval = null;
+  const m = modal(
+    'Quét mã QR vé nhận sân',
+    `<div class="space-y-3">
+      <div class="relative overflow-hidden rounded-lg bg-black aspect-video flex items-center justify-center">
+        <video id="qr-scan-video" playsinline class="h-full w-full object-cover"></video>
+        <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <div class="h-44 w-44 rounded-xl border-2 border-primary-400 border-dashed animate-pulse"></div>
+        </div>
+      </div>
+      <p id="qr-scan-msg" class="text-center text-xs text-foreground-600">Đang kết nối camera...</p>
+      <div class="flex items-center justify-center gap-2 pt-2 border-t border-background-200">
+        <label class="${BTN_SM} cursor-pointer"><i class="ri-image-add-line"></i> Chọn ảnh vé từ máy<input type="file" id="qr-scan-file" accept="image/*" class="hidden"></label>
+      </div>
+    </div>`,
+    `<button type="button" data-close class="${BTN_OUT}">Đóng</button>`,
+    'max-w-md',
+  );
+
+  const video = m.el.querySelector('#qr-scan-video');
+  const msg = m.el.querySelector('#qr-scan-msg');
+  const fileInput = m.el.querySelector('#qr-scan-file');
+
+  const stopCamera = () => {
+    if (interval) { clearInterval(interval); interval = null; }
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      stream = null;
+    }
+  };
+
+  m.el.querySelectorAll('[data-close]').forEach((btn) => btn.addEventListener('click', stopCamera));
+
+  const handleFoundCode = async (rawCode) => {
+    const code = parseTicketPayload(rawCode).code;
+    if (!code) return;
+    stopCamera();
+    m.close();
+    await checkIn(null, code);
+  };
+
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      .then((s) => {
+        stream = s;
+        video.srcObject = s;
+        video.play();
+        msg.textContent = 'Hướng camera vào mã QR vé của khách...';
+
+        if ('BarcodeDetector' in window) {
+          const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+          interval = setInterval(async () => {
+            try {
+              if (video.readyState >= 2) {
+                const barcodes = await detector.detect(video);
+                if (barcodes.length) {
+                  await handleFoundCode(barcodes[0].rawValue);
+                }
+              }
+            } catch (_) {}
+          }, 300);
+        } else {
+          msg.textContent = 'Camera đã bật. Bạn có thể hướng vào mã QR hoặc tải ảnh vé bên dưới.';
+        }
+      })
+      .catch((err) => {
+        msg.textContent = 'Chưa thể bật camera: ' + (err.message || 'chưa cấp quyền') + '. Bạn có thể tải ảnh vé bên dưới.';
+      });
+  } else {
+    msg.textContent = 'Thiết bị không hỗ trợ camera. Vui lòng tải ảnh vé bên dưới hoặc nhập mã.';
+  }
+
+  fileInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if ('BarcodeDetector' in window) {
+      try {
+        const bmp = await createImageBitmap(file);
+        const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+        const barcodes = await detector.detect(bmp);
+        if (barcodes.length) {
+          await handleFoundCode(barcodes[0].rawValue);
+          return;
+        }
+        toast('Không tìm thấy mã QR trong ảnh. Vui lòng thử lại.', 'error');
+      } catch (err) {
+        toast('Không đọc được ảnh: ' + err.message, 'error');
+      }
+    } else {
+      toast('Trình duyệt chưa hỗ trợ giải mã ảnh QR. Vui lòng nhập mã vé bằng tay.', 'info');
+    }
+  });
+}
+
 export function renderOverview() {
+  actions().innerHTML = `<button type="button" id="ov-add" class="${BTN}"><i class="ri-add-line"></i>Tạo đơn tại quầy</button>`;
+  actions().querySelector('#ov-add').onclick = () => openCounterBooking();
   const live = S.bookings.filter(isActive);
   const today = live.filter((b) => b.date === TODAY);
   const pending = S.bookings.filter((b) => b.status === 'pending');
@@ -306,11 +477,33 @@ export function renderBookings() {
   const waiting = S.bookings.filter((b) => b.date === TODAY && b.status === 'confirmed' && !b.checkedInAt);
   const tabs = [['all', 'Tất cả'], ['pending', 'Chờ duyệt'], ['confirmed', 'Đã xác nhận'], ['completed', 'Hoàn thành'], ['cancelled', 'Đã hủy']];
 
+  actions().innerHTML = `
+    <button type="button" id="bk-csv" class="${BTN_OUT}"><i class="ri-file-excel-2-line"></i>Xuất Excel (CSV)</button>
+    <button type="button" id="bk-add" class="${BTN}"><i class="ri-add-line"></i>Tạo đơn tại quầy</button>
+  `;
+  actions().querySelector('#bk-csv').onclick = () => {
+    downloadCsv([
+      ['Mã đơn', 'Nguồn', 'Sân', 'Khách hàng', 'Số điện thoại', 'Ngày chơi', 'Khung giờ', 'Số tiền (VND)', 'Đã cọc (VND)', 'Thanh toán', 'Trạng thái', 'Check-in', 'Ghi chú'],
+      ...list.map((b) => [
+        b.code, b.source === 'online' ? 'Online' : 'Tại quầy', b.courtName, b.customerName, b.customerPhone,
+        b.date, slotText(b), b.totalPrice, b.depositAmount, b.payment,
+        b.status === 'confirmed' ? 'Đã xác nhận' : b.status === 'pending' ? 'Chờ duyệt' : b.status === 'completed' ? 'Hoàn thành' : 'Đã hủy',
+        b.checkedInAt ? formatDateTime(b.checkedInAt) : 'Chưa nhận sân', b.note || b.rejectReason || b.cancelReason || '',
+      ]),
+    ], `danh-sach-don-dat-san-${TODAY}.csv`);
+  };
+  actions().querySelector('#bk-add').onclick = () => openCounterBooking();
+
   main().innerHTML = `
   <section class="${CARD} mb-5 p-4">
     <div class="flex flex-col gap-3 md:flex-row md:items-end">
       <div class="flex-1"><label class="${LABEL}"><i class="ri-qr-scan-2-line text-primary-600"></i> Check-in nhanh bằng mã vé</label>
-        <form id="quick-checkin" class="flex gap-2"><input name="code" class="${INPUT} font-mono uppercase placeholder:font-sans placeholder:normal-case" placeholder="Nhập mã vé hoặc dán nội dung QR (VD: BMT20261109-1234)"><button class="${BTN}">Nhận sân</button></form></div>
+        <form id="quick-checkin" class="flex flex-wrap gap-2 sm:flex-nowrap">
+          <input name="code" class="${INPUT} font-mono uppercase placeholder:font-sans placeholder:normal-case" placeholder="Nhập mã vé hoặc dán nội dung QR (VD: BMT20261109-1234)">
+          <button type="submit" class="${BTN} whitespace-nowrap">Nhận sân</button>
+          <button type="button" id="btn-camera-scan" class="${BTN_OUT} whitespace-nowrap" title="Quét mã QR bằng camera"><i class="ri-camera-lens-line text-base"></i><span class="hidden sm:inline">Quét camera</span></button>
+        </form>
+      </div>
       <p class="text-xs text-foreground-500 md:w-56">Đơn hôm nay chưa nhận sân: <b class="text-foreground-900">${waiting.length}</b></p>
     </div>
     ${waiting.length ? `<div class="mt-3 flex flex-wrap gap-2">${waiting.map((b) => `<button type="button" data-checkin="${b.id}" class="${BTN_SM}"><i class="ri-login-circle-line"></i>${b.startSlot} · ${esc(b.customerName)} · ${esc(b.courtName)}</button>`).join('')}</div>` : ''}
@@ -348,11 +541,14 @@ export function renderBookings() {
   root.querySelector('#bk-court').addEventListener('change', (e) => { bf.court = e.target.value; renderBookings(); });
   root.querySelector('#bk-date').addEventListener('change', (e) => { bf.date = e.target.value; renderBookings(); });
   root.querySelector('#bk-today').addEventListener('change', (e) => { bf.todayOnly = e.target.checked; renderBookings(); });
+  root.querySelector('#btn-camera-scan').addEventListener('click', openQrScanner);
   root.querySelector('#quick-checkin').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const code = parseTicketPayload(e.target.code.value).code;
+    const input = e.target.code;
+    const code = parseTicketPayload(input.value).code;
     if (!code) return toast('Vui lòng nhập mã vé.', 'error');
-    await checkIn(null, code);
+    const res = await checkIn(null, code);
+    if (res) input.value = '';
   });
 }
 
@@ -569,6 +765,9 @@ export function renderSchedule() {
   const wd = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
   const free = slots.filter((s) => !bookedBy[s] && !blocked.has(s)).length;
 
+  actions().innerHTML = `<button type="button" id="sc-counter" class="${BTN}"><i class="ri-add-line"></i>Tạo đơn tại quầy</button>`;
+  actions().querySelector('#sc-counter').onclick = () => openCounterBooking({ courtId: c.id, date: sf.date });
+
   main().innerHTML = `
   <div class="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_300px]">
     <div class="${CARD} min-w-0 p-4">
@@ -584,6 +783,8 @@ export function renderSchedule() {
       }).join('')}</div>`}
       <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-background-200 pt-4">
         <span class="text-xs text-foreground-500">Đã chọn ${sf.picked.size} khung giờ</span>
+        <button type="button" data-pick-all class="${BTN_SM}"><i class="ri-checkbox-multiple-line"></i>Chọn tất cả giờ trống</button>
+        ${sf.picked.size ? `<button type="button" data-clear-pick class="${BTN_SM}"><i class="ri-close-circle-line"></i>Bỏ chọn</button>` : ''}
         <button type="button" data-block="1" class="${BTN_SM}" ${sf.picked.size ? '' : 'disabled'}><i class="ri-lock-line"></i>Khóa giờ đã chọn</button>
         <button type="button" data-block="0" class="${BTN_SM}" ${sf.picked.size ? '' : 'disabled'}><i class="ri-lock-unlock-line"></i>Mở khóa</button>
         <button type="button" data-counter class="${BTN_SM_PRI}" ${sf.picked.size ? '' : 'disabled'}><i class="ri-add-line"></i>Tạo đơn cho giờ đã chọn</button>
@@ -607,6 +808,14 @@ export function renderSchedule() {
   root.querySelector('#sc-date').addEventListener('change', (e) => { sf.date = e.target.value || TODAY; sf.picked.clear(); renderSchedule(); });
   on(root, 'click', '[data-day]', (e, el) => { sf.date = el.dataset.day; sf.picked.clear(); renderSchedule(); });
   on(root, 'click', '[data-slot]', (e, el) => { const s = el.dataset.slot; sf.picked.has(s) ? sf.picked.delete(s) : sf.picked.add(s); renderSchedule(); });
+  on(root, 'click', '[data-pick-all]', () => {
+    slots.filter((s) => !bookedBy[s] && !blocked.has(s)).forEach((s) => sf.picked.add(s));
+    renderSchedule();
+  });
+  on(root, 'click', '[data-clear-pick]', () => {
+    sf.picked.clear();
+    renderSchedule();
+  });
   on(root, 'click', '[data-edit-court]', () => openCourtForm(c));
   on(root, 'click', '[data-counter]', () => {
     const slots = [...sf.picked].filter((s) => !blocked.has(s));

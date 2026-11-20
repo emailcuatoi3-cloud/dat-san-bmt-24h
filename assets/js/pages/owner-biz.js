@@ -135,7 +135,7 @@ export function renderCustomers() {
   <div class="mt-5 mb-3 flex flex-wrap gap-2">${filters.map(([k, l, f]) => `<button type="button" data-cf="${k}" class="${chip(cf.filter === k)}">${l}<span class="opacity-75">${all.filter(f).length}</span></button>`).join('')}</div>
   <div class="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_220px]"><input id="cu-q" value="${esc(cf.q)}" class="${INPUT}" placeholder="Tìm tên hoặc số điện thoại..."><select id="cu-sort" class="${INPUT}">${[['spend', 'Chi tiêu nhiều nhất'], ['visits', 'Chơi nhiều nhất'], ['recent', 'Mới chơi gần đây'], ['name', 'Tên A → Z']].map(([v, l]) => `<option value="${v}" ${cf.sort === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
   <div class="${CARD} overflow-hidden">${list.length ? table(['Khách hàng', '>Lượt chơi', '>Chi tiêu', '>Hủy', 'Gần nhất', '>Liên hệ'], list.map((c) => `<tr data-cu="${esc(c.key)}" class="cursor-pointer hover:bg-background-50">
-    <td class="px-4 py-3"><div class="flex items-center gap-3"><span class="flex h-9 w-9 items-center justify-center rounded-full bg-primary-50 text-xs font-bold text-primary-700">${esc(c.name.split(' ').slice(-1)[0].slice(0, 2).toUpperCase())}</span><div><p class="font-semibold">${esc(c.name)} ${c.visits >= 3 ? '<i class="ri-vip-crown-fill text-accent-500"></i>' : ''}</p><p class="text-xs text-foreground-500">${esc(c.phone || '—')}</p></div></div></td>
+    <td class="px-4 py-3"><div class="flex items-center gap-3"><span class="flex h-9 w-9 items-center justify-center rounded-full bg-primary-50 text-xs font-bold text-primary-700">${esc((c.name || 'Khách').trim().split(/\s+/).slice(-1)[0].slice(0, 2).toUpperCase())}</span><div><p class="font-semibold">${esc(c.name)} ${c.visits >= 3 ? '<i class="ri-vip-crown-fill text-accent-500"></i>' : ''}</p><p class="text-xs text-foreground-500">${esc(c.phone || '—')}</p></div></div></td>
     <td class="px-4 py-3 text-right font-semibold">${c.visits}</td><td class="px-4 py-3 text-right font-semibold text-primary-700">${money(c.spend)}</td><td class="px-4 py-3 text-right ${c.cancelled ? 'text-accent-700' : ''}">${c.cancelled}</td><td class="px-4 py-3">${dateText(c.last)}</td>
     <td class="px-4 py-3"><div class="flex justify-end gap-1.5">${c.phone ? `<a href="tel:${esc(phoneKey(c.phone))}" data-stop class="${BTN_SM}"><i class="ri-phone-line"></i>Gọi</a><a href="https://zalo.me/${esc(phoneKey(c.phone))}" target="_blank" data-stop class="${BTN_SM}">Zalo</a>` : ''}</div></td></tr>`).join(''), 760)
     : `<div class="p-4">${emptyState('ri-group-line', 'Không có khách phù hợp')}</div>`}</div>`;
@@ -234,10 +234,12 @@ export async function renderServices() {
   on(root, 'click', '[data-del]', async (e, el) => {
     const s = find(el.dataset.del);
     if (!(await confirmBox({ title: 'Xóa dịch vụ?', message: `Xóa "${esc(s.name)}" khỏi danh sách bán kèm.`, confirmText: 'Xóa', danger: true }))) return;
-    await api('owner', 'service_delete', { id: s.id });
-    sv.list = sv.list.filter((x) => x.id !== s.id);
-    toast('Đã xóa dịch vụ.');
-    renderServices();
+    try {
+      await api('owner', 'service_delete', { id: s.id });
+      sv.list = sv.list.filter((x) => x.id !== s.id);
+      toast('Đã xóa dịch vụ.');
+      renderServices();
+    } catch (err) { toast(err.message, 'error'); }
   });
 }
 
@@ -349,11 +351,11 @@ export async function renderDeposits() {
     try { dp.refunds = await api('owner', 'refunds'); } catch (e) { main().innerHTML = errorBlock(e.message); return; }
   }
   const received = (b) => ['deposit_claimed', 'deposit_paid'].includes(b.paymentStatus);
-  const online = S.bookings.filter((b) => b.source === 'online' && b.depositAmount > 0);
+  const withDeposit = S.bookings.filter((b) => b.depositAmount > 0);
   const refunded = new Set(dp.refunds.map((r) => r.bookingCode));
-  const holding = online.filter((b) => received(b) && ['pending', 'confirmed'].includes(b.status));
-  const settle = online.filter((b) => received(b) && b.status === 'completed');
-  const refund = online.filter((b) => (received(b) || b.paymentStatus === 'paid') && b.status === 'cancelled' && !refunded.has(b.code));
+  const holding = withDeposit.filter((b) => received(b) && ['pending', 'confirmed'].includes(b.status));
+  const settle = withDeposit.filter((b) => received(b) && b.status === 'completed');
+  const refund = withDeposit.filter((b) => (received(b) || b.paymentStatus === 'paid') && b.status === 'cancelled' && !refunded.has(b.code));
   const sum = (l, f) => l.reduce((s, b) => s + f(b), 0);
   const groups = {
     holding: ['Đang giữ cọc', holding, 'Đơn sắp chơi, khách đã chuyển cọc. Phần còn lại thu tại sân.'],

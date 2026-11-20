@@ -5,7 +5,7 @@ import { APP, PAGE, api, esc, openModal, formatVnd } from '../core/ui.js';
 import { slotEndTime, formatLongDate } from '../lib/format.js';
 
 export const TODAY = APP.today;
-export const S = { courts: [], trash: [], bookings: [], blocked: {}, unreplied: 0 };
+export const S = { courts: [], trash: [], bookings: [], blocked: {}, unreplied: 0, services: [] };
 export const main = () => document.getElementById('owner-main');
 export const actions = () => document.getElementById('owner-actions');
 
