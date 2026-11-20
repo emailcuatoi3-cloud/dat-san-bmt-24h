@@ -12,7 +12,7 @@ export const bankAccount = {
 /** Tỷ lệ cọc mặc định khi khách chọn "cọc 30%" */
 export const DEPOSIT_RATE = APP.depositRate || 0.3;
 /** Số phút giữ sân trong lúc khách quét mã chuyển khoản */
-export const HOLD_MINUTES = APP.holdMinutes || 10;
+export const HOLD_MINUTES = APP.holdMinutes || 5;
 /** Số giây hệ thống chờ để đối soát giao dịch rồi tự động xác nhận tiền cọc */
 export const AUTO_CONFIRM_SECONDS = APP.autoConfirmSeconds || 5;
 export const HOTLINE = APP.hotline || '0262 399 8888';

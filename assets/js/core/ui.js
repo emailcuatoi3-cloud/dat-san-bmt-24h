@@ -54,6 +54,8 @@ export async function api(file, action, body = undefined, method = undefined) {
   if (!json || json.ok === false) {
     const error = new Error((json && json.error) || 'Đã có lỗi xảy ra.');
     error.status = res.status;
+    error.requireSudo = Boolean(json && json.require_sudo);
+    error.payload = json;
     throw error;
   }
   return json.data;
@@ -63,6 +65,8 @@ export async function api(file, action, body = undefined, method = undefined) {
 export function toast(message, tone = 'success', ms = 3200) {
   const root = document.getElementById('toast-root');
   if (!root) return;
+  const existing = Array.from(root.children).find((c) => c.textContent.trim().includes(message.trim()));
+  if (existing) return;
   const icon = tone === 'error' ? 'ri-error-warning-line' : tone === 'info' ? 'ri-information-line' : 'ri-checkbox-circle-line';
   const color =
     tone === 'error'

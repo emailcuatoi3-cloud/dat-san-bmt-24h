@@ -1,4 +1,9 @@
 <?php
+/*
+ * Module: Giao diện Chi tiết đơn đặt sân (Mã Minh Hoan - PK04409)
+ * - Hiển thị trạng thái đơn, thông tin sân, bảng kê chi phí và chính sách hủy
+ * - Tích hợp thẻ vé QR check-in, tải ảnh vé, in vé và chia sẻ link cho đồng đội
+ */
 /** CHI TIẾT ĐƠN ĐẶT SÂN — /don-dat-san/{mã vé}. Ai có đường dẫn đều xem được vé (giống bản gốc). */
 $code = strtoupper(trim($params[0] ?? ''));
 $row = $code ? q_one(BOOKING_SELECT . ' WHERE b.code = ?', [$code]) : null;

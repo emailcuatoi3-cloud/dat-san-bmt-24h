@@ -34,20 +34,32 @@ $routes = [
     '#^/lien-he$#' => 'contact',
     '#^/dang-nhap$#' => 'auth-login',
     '#^/dang-ky$#' => 'auth-register',
+    '#^/dang-ky-chu-san$#' => 'auth-register-owner',
     '#^/quen-mat-khau$#' => 'auth-forgot',
     '#^/dat-lai-mat-khau$#' => 'auth-reset',
     '#^/tai-khoan$#' => 'account',
     '#^/chu-san$#' => 'owner',
     '#^/quan-tri$#' => 'admin',
-];
+]; 
 
-// Các đường dẫn cũ chuyển hướng về cổng đăng nhập/đăng ký chung
-$aliases = ['/chu-san/dang-nhap' => '/dang-nhap', '/chu-san/dang-ky' => '/dang-ky?vai-tro=owner', '/quan-tri/dang-nhap' => '/dang-nhap'];
+// Các đường dẫn cũ / alias theo Sitemap
+$aliases = [
+    '/chu-san/dang-nhap' => '/dang-nhap',
+    '/chu-san/dang-ky' => '/dang-ky-chu-san',
+    '/quan-tri/dang-nhap' => '/dang-nhap',
+    '/danh-cho-chu-san' => '/dang-ky-chu-san',
+    '/vong-quay' => '/uu-dai#vong-quay',
+];
 if (isset($aliases[$path])) redirect($aliases[$path]);
 
 if ($path === '/dang-xuat') {
     logout_user();
     redirect('/');
+}
+
+if ($path === '/thoat-gia-lap') {
+    stop_impersonating();
+    redirect('/quan-tri?tab=accounts');
 }
 
 $page = 'not-found';

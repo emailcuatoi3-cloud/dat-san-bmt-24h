@@ -6,19 +6,32 @@
 $u = current_user();
 $access = admin_access();
 $meta = [
-    'overview' => ['Tổng quan hệ thống', 'Toàn cảnh tài khoản, sân và đơn đặt sân trên Đặt Sân BMT 24H trong một màn hình.'],
-    'accounts' => ['Quản lý tài khoản', 'Tra cứu khách hàng, chủ sân và quản trị viên; đổi vai trò, cấp hoặc thu bộ quyền quản trị và tạm khóa tài khoản vi phạm.'],
-    'courts' => ['Sân & cơ sở', 'Giám sát mọi sân trên hệ thống, tạm dừng sân chưa đạt tiêu chuẩn hoặc gỡ sân khỏi nền tảng.'],
-    'bookings' => ['Đơn đặt sân', 'Theo dõi toàn bộ đơn của khách, duyệt hoặc từ chối các đơn còn chờ xử lý.'],
-    'invoices' => ['Hóa đơn & công nợ', 'Đối soát hóa đơn toàn hệ thống: doanh thu, phần đã thu, công nợ và xuất Excel để lưu trữ.'],
-    'categories' => ['Danh mục môn & khu vực', 'Quản lý bộ môn thể thao và khu vực dùng cho bộ lọc tìm sân của khách hàng.'],
-    'content' => ['Nội dung website', 'Biên tập banner, tin tức, câu hỏi thường gặp và chính sách hiển thị công khai.'],
-    'moderation' => ['Kiểm duyệt & báo cáo vi phạm', 'Duyệt hoặc ẩn đánh giá, tiếp nhận và ghi kết quả xử lý báo cáo vi phạm.'],
-    'promotions' => ['Khuyến mãi & mã giảm giá', 'Theo dõi hiệu quả từng mã giảm giá: số lượt dùng, ngân sách đã giảm và doanh thu mang lại.'],
-    'audit' => ['Nhật ký thao tác quản trị', 'Tra cứu toàn bộ thao tác duyệt đơn, ẩn đánh giá, đổi nội dung và phân quyền.'],
+    'overview' => ['Tổng quan hệ thống', 'Toàn cảnh số người dùng, số sân, số đơn, doanh thu và các yêu cầu chờ duyệt.'],
+    'accounts' => ['Quản lý tài khoản', 'Tài khoản khách hàng, tài khoản chủ sân, duyệt đăng ký chủ sân và quản trị viên & phân quyền.'],
+    'courts' => ['Quản lý sân', 'Danh sách sân, chi tiết sân, duyệt sân mới và tạm ngưng sân vi phạm.'],
+    'bookings' => ['Quản lý đơn đặt sân', 'Theo dõi toàn bộ đơn đặt sân của khách, duyệt hoặc từ chối đơn còn chờ xử lý.'],
+    'payments' => ['Thanh toán & đối soát', 'Giao dịch toàn hệ thống, đối soát & chuyển tiền chủ sân và xử lý yêu cầu hoàn tiền.'],
+    'moderation' => ['Đánh giá & khiếu nại', 'Kiểm duyệt đánh giá công khai và tiếp nhận, xử lý khiếu nại vi phạm.'],
+    'content' => ['Nội dung & khuyến mãi', 'Biên tập banner, tin tức, FAQ, chính sách và quản lý mã giảm giá toàn hệ thống.'],
+    'categories' => ['Danh mục', 'Quản lý loại sân (môn thể thao), tiện ích sân và khu vực hiển thị.'],
+    'reports' => ['Báo cáo doanh thu', 'Thống kê doanh thu toàn hệ thống theo thời gian, chủ sân, sân và bộ môn; xuất Excel.'],
+    'ai' => ['Quản lý AI · Cấu hình chatbot', 'Thiết lập trợ lý AI tư vấn khách hàng, lời chào, gợi ý nhanh và kịch bản hỏi – đáp tự động.'],
+    'settings' => ['Cấu hình hệ thống', 'Thông tin website, cổng thanh toán VietQR, chính sách chung và nhật ký thao tác quản trị.'],
+];
+$tabAliases = [
+    'owners' => ['accounts', 'owners'],
+    'invoices' => ['payments', 'transactions'],
+    'promotions' => ['content', 'promotions'],
+    'audit' => ['settings', 'audit'],
 ];
 $allowed = $access['allowed'];
-$tab = $_GET['tab'] ?? 'overview';
+$rawTab = $_GET['tab'] ?? 'overview';
+$subTab = $_GET['sub'] ?? '';
+if (isset($tabAliases[$rawTab])) {
+    [$tab, $subTab] = $tabAliases[$rawTab];
+} else {
+    $tab = $rawTab;
+}
 $denied = isset($meta[$tab]) && !in_array($tab, $allowed, true);
 if (!isset($meta[$tab]) || $denied) $tab = $allowed[0] ?? 'overview';
 $modules = array_values(array_filter(ADMIN_MODULES, fn($m) => in_array($m['key'], $allowed, true)));
@@ -28,14 +41,14 @@ render_page([
     'layout' => 'bare',
     'bodyClass' => 'bg-background-100',
     'script' => 'pages/admin.js',
-    'data' => ['tab' => $tab, 'access' => $access, 'denied' => $denied, 'modules' => ADMIN_MODULES],
+    'data' => ['tab' => $tab, 'sub' => $subTab, 'access' => $access, 'denied' => $denied, 'modules' => ADMIN_MODULES],
 ], function () use ($u, $access, $meta, $tab, $modules, $denied) {
     ?>
 <div class="min-h-screen bg-background-100">
   <div id="owner-overlay" class="fixed inset-0 z-40 hidden bg-black/40 lg:hidden"></div>
   <aside id="owner-sidebar" class="fixed inset-y-0 left-0 z-50 flex w-[264px] -translate-x-full flex-col border-r border-background-200 bg-white transition-transform lg:translate-x-0">
     <a href="<?= url('/') ?>" class="flex h-16 shrink-0 items-center gap-2.5 border-b border-background-200 px-5">
-      <span class="flex h-9 w-9 items-center justify-center rounded-md bg-secondary-700 text-white"><i class="ri-shield-star-fill text-lg" aria-hidden="true"></i></span>
+      <img src="<?= site_logo() ?>" alt="Logo Đặt Sân BMT 24H" class="h-9 w-9 rounded-md object-contain">
       <span class="leading-tight"><span class="block font-heading text-sm font-extrabold text-foreground-950">Đặt Sân BMT 24H</span><span class="block text-[11px] font-medium text-foreground-500">Trang quản trị</span></span>
     </a>
     <nav class="flex-1 overflow-y-auto px-3 py-4" aria-label="Điều hướng quản trị">

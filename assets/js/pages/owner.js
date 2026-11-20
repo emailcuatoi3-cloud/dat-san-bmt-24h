@@ -1,29 +1,37 @@
 /**
- * KÊNH CHỦ SÂN — điểm vào: tải dữ liệu, vẽ tab đang mở, menu di động, nút "Tạo đơn tại quầy".
+ * KÊNH CHỦ SÂN — điểm vào theo 9 nhóm của Sitemap Chủ sân.
  */
-import { errorBlock, loadingBlock, toast } from '../core/ui.js';
-import { PAGE, main, actions, loadData, S } from './owner-shared.js';
-import { renderOverview, renderBookings, renderInvoices, renderCourts, renderSchedule, renderReviews, openCounterBooking, resetInvoices } from './owner-ops.js';
-import { renderReports, renderCustomers, renderServices, renderPromotions, renderDeposits } from './owner-biz.js';
+import { errorBlock, loadingBlock } from '../core/ui.js';
+import { PAGE, main, actions, loadData } from './owner-shared.js';
+import { openCounterBooking, resetInvoices } from './owner-ops.js';
+import {
+  renderSitemapOverview,
+  renderSitemapCourts,
+  renderSitemapBookings,
+  renderSitemapPayments,
+  renderSitemapServices,
+  renderSitemapPromotions,
+  renderSitemapCustomers,
+  renderSitemapSettings,
+  renderSitemapAccount,
+} from './owner-sitemap.js';
 
 const RENDER = {
-  overview: renderOverview,
-  bookings: renderBookings,
-  invoices: renderInvoices,
-  courts: renderCourts,
-  schedule: renderSchedule,
-  reviews: renderReviews,
-  reports: renderReports,
-  customers: renderCustomers,
-  services: renderServices,
-  promotions: renderPromotions,
-  deposits: renderDeposits,
+  overview: renderSitemapOverview,
+  courts: renderSitemapCourts,
+  bookings: renderSitemapBookings,
+  payments: renderSitemapPayments,
+  services: renderSitemapServices,
+  promotions: renderSitemapPromotions,
+  customers: renderSitemapCustomers,
+  settings: renderSitemapSettings,
+  account: renderSitemapAccount,
 };
 
 const render = () => {
   resetInvoices();
   if (actions()) actions().innerHTML = '';
-  (RENDER[PAGE.tab] || renderOverview)();
+  (RENDER[PAGE.tab] || renderSitemapOverview)();
 };
 window.__ownerRender = render;
 

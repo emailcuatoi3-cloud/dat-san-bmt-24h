@@ -1,4 +1,5 @@
 <?php
+// MODULE: ĐẶT SÂN & TÍNH TIỀN CỌC
 /** ĐẶT SÂN 3 BƯỚC — /dat-san hoặc /dat-san/{slug}. Toàn bộ luồng do assets/js/pages/booking.js điều khiển. */
 $u = current_user();
 render_page([

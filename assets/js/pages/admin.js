@@ -41,13 +41,95 @@ function askNote(title, label, { min = 0, value = '', confirm = 'Xác nhận', d
   });
 }
 
-async function run(promise, msg, key) {
+function promptSudoModal() {
+  return new Promise((resolve) => {
+    let done = false;
+    const m = modal(
+      '<span class="flex items-center gap-2 text-accent-700 font-heading"><i class="ri-shield-keyhole-line text-xl"></i> Xác thực Quản trị viên (Sudo Mode)</span>',
+      `<div class="space-y-3">
+         <p class="text-sm leading-relaxed text-foreground-700">
+           Thao tác bạn vừa thực hiện thuộc danh mục <b class="text-accent-700">bảo mật nhạy cảm</b>. Vui lòng nhập mật khẩu quản trị viên để mở khóa phiên làm việc (có hiệu lực 15 phút).
+         </p>
+         <div>
+           <label class="${LABEL}">Mật khẩu quản trị của bạn</label>
+           <div class="relative">
+             <input type="password" id="sudo-pwd-input" class="${INPUT} pr-10" placeholder="••••••••" autocomplete="current-password">
+             <button type="button" id="toggle-sudo-pwd" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-foreground-400 hover:text-foreground-700 p-1" title="Hiện/ẩn mật khẩu">
+               <i class="ri-eye-line"></i>
+             </button>
+           </div>
+         </div>
+       </div>`,
+      `<button type="button" data-close class="${BTN_OUT}">Hủy</button>
+       <button type="button" id="sudo-btn-ok" class="${BTN_SM_PRI} !px-4 !py-2 text-xs font-semibold"><i class="ri-lock-unlock-line"></i> Xác thực phiên làm việc</button>`,
+      'max-w-md'
+    );
+
+    const input = m.el.querySelector('#sudo-pwd-input');
+    const toggle = m.el.querySelector('#toggle-sudo-pwd');
+    const btn = m.el.querySelector('#sudo-btn-ok');
+
+    setTimeout(() => input?.focus(), 120);
+
+    toggle?.addEventListener('click', () => {
+      const isPwd = input.type === 'password';
+      input.type = isPwd ? 'text' : 'password';
+      toggle.innerHTML = isPwd ? '<i class="ri-eye-off-line"></i>' : '<i class="ri-eye-line"></i>';
+    });
+
+    const submit = async () => {
+      const pwd = input.value;
+      if (!pwd) return toast('Vui lòng nhập mật khẩu.', 'error');
+      setBusy(btn, true, 'Đang xác thực...');
+      try {
+        await api('admin', 'verify_sudo', { password: pwd });
+        toast('Đã xác thực thành công. Phiên Sudo có hiệu lực 15 phút.', 'success');
+        done = true;
+        m.close();
+        resolve(true);
+      } catch (err) {
+        setBusy(btn, false);
+        toast(err.message, 'error');
+      }
+    };
+
+    btn?.addEventListener('click', submit);
+    input?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        submit();
+      }
+    });
+
+    m.el.closest('.fixed').addEventListener('click', (e) => {
+      if (!done && e.target.closest('[data-close]')) resolve(false);
+    });
+  });
+}
+
+async function run(op, msg, key) {
+  const execute = async () => (typeof op === 'function' ? await op() : await op);
   try {
-    await promise;
+    const res = await execute();
     if (msg) toast(msg);
     if (key) reload(key);
-    return true;
+    return res ?? true;
   } catch (e) {
+    if (e.requireSudo && typeof op === 'function') {
+      const sudoOk = await promptSudoModal();
+      if (sudoOk) {
+        try {
+          const res = await op();
+          if (msg) toast(msg);
+          if (key) reload(key);
+          return res ?? true;
+        } catch (retryErr) {
+          toast(retryErr.message, 'error');
+          return false;
+        }
+      }
+      return false;
+    }
     toast(e.message, 'error');
     return false;
   }
@@ -73,6 +155,7 @@ async function renderOverview() {
     ${statCard('ri-money-dollar-circle-line', 'Doanh thu tháng này', money(t.monthRevenue), 'Đơn đã xác nhận & hoàn thành', 'neutral')}
   </div>
   ${t.openReports || t.pendingReviews ? `<a href="?tab=moderation" class="mt-4 flex items-center gap-2 rounded-lg border border-accent-300 bg-accent-50 px-4 py-3 text-sm text-accent-800"><i class="ri-alarm-warning-line"></i>Có <b>${t.openReports}</b> báo cáo vi phạm chưa xử lý và <b>${t.pendingReviews}</b> đánh giá chờ duyệt.<span class="ml-auto font-semibold">Xử lý ngay →</span></a>` : ''}
+  ${t.pendingOwnerRequests ? `<a href="?tab=accounts" class="mt-3 flex items-center gap-2 rounded-lg border border-accent-300 bg-accent-50 px-4 py-3 text-sm text-accent-800"><i class="ri-store-2-line"></i>Có <b>${t.pendingOwnerRequests}</b> yêu cầu đăng ký chủ sân đang chờ duyệt.<span class="ml-auto font-semibold">Xem ngay →</span></a>` : ''}
   <div class="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[1.5fr_1fr]">
     <section class="${CARD}">${sectionTitle('Doanh thu 7 ngày gần nhất')}
       <div class="p-4"><div class="flex h-48 items-end gap-3">${d.days.map((x) => `<div class="flex h-full flex-1 flex-col items-center justify-end gap-1" title="${money(x.revenue)} · ${x.count} đơn"><span class="text-[10px] font-semibold text-foreground-600">${x.revenue ? Math.round(x.revenue / 1000) + 'k' : ''}</span><div class="w-full rounded-t ${x.date === TODAY ? 'bg-accent-500' : 'bg-primary-500'}" style="height:${Math.max(x.revenue ? 3 : 0, (x.revenue / max) * 85)}%"></div></div>`).join('')}</div>
@@ -93,6 +176,120 @@ async function renderOverview() {
 // =====================================================================
 // TÀI KHOẢN & PHÂN QUYỀN
 // =====================================================================
+function accountForm(d, user = null, defaultRole = 'customer') {
+  const u = user || { id: 0, fullName: '', email: '', phone: '', address: '', role: defaultRole, businessName: '', status: 'active', adminRole: '' };
+  const isEdit = Boolean(u.id);
+
+  const m = modal(
+    isEdit ? `<span class="flex items-center gap-2"><i class="ri-user-settings-line text-lg text-primary-600"></i> Sửa tài khoản: <b>${esc(u.fullName || u.email)}</b></span>` : '<span class="flex items-center gap-2"><i class="ri-user-add-line text-lg text-primary-600"></i> Thêm tài khoản mới</span>',
+    `<form class="space-y-3.5" id="form-account">
+       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+         <div>
+           <label class="${LABEL}">Họ và tên <span class="text-accent-600">*</span></label>
+           <input name="fullName" value="${esc(u.fullName)}" class="${INPUT}" placeholder="Nguyễn Văn A" required>
+         </div>
+         <div>
+           <label class="${LABEL}">Email đăng nhập <span class="text-accent-600">*</span></label>
+           <input type="email" name="email" value="${esc(u.email)}" class="${INPUT}" placeholder="user@bmt24h.vn" required>
+         </div>
+       </div>
+
+       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+         <div>
+           <label class="${LABEL}">Số điện thoại</label>
+           <input type="tel" name="phone" value="${esc(u.phone)}" class="${INPUT}" placeholder="0912 345 678">
+         </div>
+         <div>
+           <label class="${LABEL}">${isEdit ? 'Đổi mật khẩu mới' : 'Mật khẩu khởi tạo <span class="text-accent-600">*</span>'}</label>
+           <input type="password" name="password" class="${INPUT}" placeholder="${isEdit ? 'Để trống nếu giữ nguyên mật khẩu cũ' : 'Tối thiểu 6 ký tự'}" value="${isEdit ? '' : '123456'}">
+           ${!isEdit ? '<p class="text-[11px] text-foreground-500 mt-1">Mặc định gợi ý: <b>123456</b></p>' : ''}
+         </div>
+       </div>
+
+       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+         <div>
+           <label class="${LABEL}">Vai trò</label>
+           <select name="role" id="ac-form-role" class="${INPUT}">
+             ${Object.entries(ROLE).map(([k, l]) => `<option value="${k}" ${u.role === k ? 'selected' : ''}>${l}</option>`).join('')}
+           </select>
+         </div>
+         <div>
+           <label class="${LABEL}">Trạng thái</label>
+           <select name="status" class="${INPUT}">
+             <option value="active" ${u.status === 'active' ? 'selected' : ''}>Hoạt động</option>
+             <option value="suspended" ${u.status === 'suspended' ? 'selected' : ''}>Tạm khóa</option>
+           </select>
+         </div>
+       </div>
+
+       <div id="ac-form-business-wrap" class="${u.role === 'owner' ? '' : 'hidden'}">
+         <label class="${LABEL}">Tên cơ sở / Sân kinh doanh</label>
+         <input name="businessName" value="${esc(u.businessName)}" class="${INPUT}" placeholder="Ví dụ: Hưng Sport BMT, Lộc Sport...">
+       </div>
+
+       <div id="ac-form-arole-wrap" class="${u.role === 'admin' ? '' : 'hidden'}">
+         <label class="${LABEL}">Bộ quyền quản trị</label>
+         <select name="adminRole" class="${INPUT}">
+           <option value="">Toàn quyền (mặc định)</option>
+           ${d.roles.map((r) => `<option value="${r.key}" ${u.adminRole === r.key ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}
+         </select>
+       </div>
+
+       <div>
+         <label class="${LABEL}">Địa chỉ liên hệ</label>
+         <input name="address" value="${esc(u.address)}" class="${INPUT}" placeholder="Số nhà, đường, phường, TP. Buôn Ma Thuột">
+       </div>
+     </form>`,
+    `<button type="button" data-close class="${BTN_OUT}">Hủy</button>
+     <button type="button" data-ok class="${BTN_SM_PRI} !px-4 !py-2"><i class="ri-save-line"></i> ${isEdit ? 'Lưu thay đổi' : 'Tạo tài khoản'}</button>`,
+    'max-w-xl'
+  );
+
+  const form = m.el.querySelector('#form-account');
+  const roleSelect = m.el.querySelector('#ac-form-role');
+  const bizWrap = m.el.querySelector('#ac-form-business-wrap');
+  const aroleWrap = m.el.querySelector('#ac-form-arole-wrap');
+
+  roleSelect.addEventListener('change', () => {
+    bizWrap.classList.toggle('hidden', roleSelect.value !== 'owner');
+    aroleWrap.classList.toggle('hidden', roleSelect.value !== 'admin');
+  });
+
+  m.el.querySelector('[data-ok]').addEventListener('click', async (e) => {
+    const fn = form.fullName.value.trim();
+    const em = form.email.value.trim();
+    const pw = form.password.value;
+    if (fn.length < 2) return toast('Vui lòng nhập họ và tên đầy đủ.', 'error');
+    if (!em.includes('@')) return toast('Vui lòng nhập email hợp lệ.', 'error');
+    if (!isEdit && pw.length < 6) return toast('Mật khẩu tạo mới cần ít nhất 6 ký tự.', 'error');
+    if (isEdit && pw && pw.length < 6) return toast('Mật khẩu mới cần ít nhất 6 ký tự.', 'error');
+
+    setBusy(e.currentTarget, true, 'Đang lưu...');
+    const payload = {
+      id: u.id,
+      fullName: fn,
+      email: em,
+      phone: form.phone.value.trim(),
+      password: pw,
+      role: form.role.value,
+      status: form.status.value,
+      businessName: form.businessName ? form.businessName.value.trim() : '',
+      adminRole: form.adminRole ? form.adminRole.value : '',
+      address: form.address.value.trim(),
+    };
+
+    delete C.owners;
+    delete C.accounts;
+    const ok = await run(
+      () => api('admin', 'account_save', payload),
+      isEdit ? 'Đã cập nhật thông tin tài khoản.' : 'Đã tạo tài khoản mới thành công.',
+      PAGE.tab === 'owners' ? 'owners' : 'accounts'
+    );
+    if (ok) m.close();
+    else setBusy(e.currentTarget, false);
+  });
+}
+
 function roleForm(d, role = null) {
   const r = role || { key: '', name: '', description: '', permissions: ['overview'] };
   const m = modal(
@@ -106,22 +303,204 @@ function roleForm(d, role = null) {
   m.el.querySelector('[data-ok]').addEventListener('click', async (e) => {
     const f = m.el.querySelector('form');
     setBusy(e.currentTarget, true, 'Đang lưu...');
-    if (await run(api('admin', 'role_save', { key: r.key, name: f.name.value, description: f.description.value, permissions: [...f.querySelectorAll('[name=perm]:checked')].map((i) => i.value) }), 'Đã lưu bộ quyền.', 'accounts')) m.close();
+    if (await run(() => api('admin', 'role_save', { key: r.key, name: f.name.value, description: f.description.value, permissions: [...f.querySelectorAll('[name=perm]:checked')].map((i) => i.value) }), 'Đã lưu bộ quyền.', 'accounts')) m.close();
     else setBusy(e.currentTarget, false);
   });
 }
 
+async function triggerImpersonate(targetId) {
+  const d = await get('accounts', 'accounts');
+  const u = d.users.find((x) => x.id === Number(targetId));
+  if (!u) return;
+  const ok = await confirmBox({
+    title: '<span class="flex items-center gap-2 text-secondary-800 font-heading"><i class="ri-spy-line text-xl"></i> Khởi tạo phiên Ghost Login?</span>',
+    message: `Bạn sắp đăng nhập danh nghĩa tài khoản: <b>${esc(u.fullName || u.email)}</b> (${ROLE[u.role]}).<br><br><span class="text-xs text-foreground-500 leading-relaxed">Bạn sẽ trải nghiệm đúng góc nhìn và dữ liệu của người dùng này để kiểm tra hoặc hỗ trợ kỹ thuật. Mọi thao tác trong phiên đều được ghi vào nhật ký kiểm toán.</span>`,
+    confirmText: 'Bắt đầu Giả lập'
+  });
+  if (!ok) return;
+
+  const res = await run(
+    () => api('admin', 'impersonate', { id: targetId }),
+    'Đang khởi tạo phiên Ghost Login...',
+    null
+  );
+  if (res && res.redirect) {
+    window.location.href = res.redirect;
+  }
+}
+
+async function showAccountDetailModal(userId) {
+  try {
+    const data = await api('admin', 'account_detail', { id: Number(userId) });
+    const u = data.user;
+    const isOwner = u.role === 'owner';
+    const isSuspended = u.status === 'suspended';
+
+    const m = modal(
+      `<div class="flex items-center gap-3">
+         <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-secondary-700 text-sm font-bold text-white shadow-sm">
+           ${esc((u.fullName || u.email).slice(0, 2).toUpperCase())}
+         </span>
+         <div class="min-w-0">
+           <p class="truncate font-heading font-extrabold text-foreground-950">${esc(u.fullName || 'Chưa đặt tên')} <span class="text-xs font-normal text-foreground-500">(#${u.id})</span></p>
+           <p class="truncate text-xs text-foreground-500">${esc(u.email)}</p>
+         </div>
+       </div>`,
+      `<div class="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+         <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+           <div class="rounded-lg border border-background-200 bg-background-50 p-3 text-center">
+             <p class="text-[11px] font-bold uppercase tracking-wider text-foreground-500">Vai trò</p>
+             <p class="mt-1 text-sm font-extrabold text-foreground-900">${ROLE[u.role]}</p>
+           </div>
+           <div class="rounded-lg border border-background-200 bg-background-50 p-3 text-center">
+             <p class="text-[11px] font-bold uppercase tracking-wider text-foreground-500">Trạng thái</p>
+             <p class="mt-1 text-xs font-bold ${isSuspended ? 'text-accent-700' : 'text-primary-700'}">${isSuspended ? 'Tạm khóa' : 'Hoạt động'}</p>
+           </div>
+           <div class="rounded-lg border border-background-200 bg-background-50 p-3 text-center">
+             <p class="text-[11px] font-bold uppercase tracking-wider text-foreground-500">${isOwner ? 'Cơ sở & Sân' : 'Tổng số đơn'}</p>
+             <p class="mt-1 text-sm font-extrabold text-foreground-900">${isOwner ? data.courts.length + ' sân' : data.totalBookings + ' đơn'}</p>
+           </div>
+           <div class="rounded-lg border border-background-200 bg-background-50 p-3 text-center">
+             <p class="text-[11px] font-bold uppercase tracking-wider text-foreground-500">${isOwner ? 'Doanh thu sân' : 'Tổng chi tiêu'}</p>
+             <p class="mt-1 text-sm font-extrabold text-primary-700">${money(isOwner ? data.ownerRevenue : data.totalSpent)}</p>
+           </div>
+         </div>
+
+         <div class="rounded-lg border border-background-200 p-3.5 text-xs space-y-1.5 bg-background-50/50">
+           <p><span class="font-semibold text-foreground-500 inline-block w-28">Số điện thoại:</span> ${data.phone ? `<a href="tel:${esc(data.phone)}" class="font-semibold text-primary-700 hover:underline">${esc(data.phone)}</a>` : '<span class="text-foreground-400 italic">Chưa cập nhật</span>'}</p>
+           <p><span class="font-semibold text-foreground-500 inline-block w-28">Địa chỉ:</span> <span class="text-foreground-800">${esc(data.address || 'Chưa cập nhật')}</span></p>
+           <p><span class="font-semibold text-foreground-500 inline-block w-28">Ngày đăng ký:</span> <span class="text-foreground-800">${formatDateTime(u.createdAt)}</span></p>
+           ${u.businessName ? `<p><span class="font-semibold text-foreground-500 inline-block w-28">Tên cơ sở:</span> <b class="text-secondary-700">${esc(u.businessName)}</b></p>` : ''}
+         </div>
+
+         ${isOwner && data.courts.length ? `
+           <div>
+             <h4 class="text-xs font-bold uppercase tracking-wider text-foreground-500 mb-2">Sân sở hữu (${data.courts.length})</h4>
+             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+               ${data.courts.map(c => `
+                 <div class="rounded-md border border-background-200 p-2.5 text-xs flex justify-between items-center bg-white">
+                   <div class="min-w-0 pr-2">
+                     <p class="font-semibold truncate text-foreground-900">${esc(c.name)}</p>
+                     <p class="text-foreground-500 text-[11px] truncate">${esc(c.sport_label)} · ${esc(c.area)}</p>
+                   </div>
+                   <div class="text-right shrink-0">
+                     <span class="rounded px-1.5 py-0.5 text-[10px] font-bold ${c.status === 'active' ? 'bg-primary-50 text-primary-700' : 'bg-background-200 text-foreground-600'}">${c.status === 'active' ? 'Hoạt động' : 'Tạm dừng'}</span>
+                     <p class="text-[11px] text-foreground-500 mt-0.5">${c.rating}⭐ (${c.review_count})</p>
+                   </div>
+                 </div>
+               `).join('')}
+             </div>
+           </div>
+         ` : ''}
+
+         <div>
+           <h4 class="text-xs font-bold uppercase tracking-wider text-foreground-500 mb-2">Đơn đặt sân gần đây</h4>
+           ${data.recentBookings.length ? `
+             <div class="divide-y divide-background-200 border border-background-200 rounded-lg overflow-hidden text-xs bg-white">
+               ${data.recentBookings.map(b => `
+                 <div class="p-2.5 flex items-center justify-between gap-2 hover:bg-background-50">
+                   <div class="min-w-0">
+                     <p class="font-semibold"><span class="font-mono text-foreground-950">${esc(b.code)}</span> · <span>${esc(b.courtName)}</span></p>
+                     <p class="text-[11px] text-foreground-500">${b.date} (${b.startSlot} - ${b.endSlot})</p>
+                   </div>
+                   <div class="text-right shrink-0">
+                     <p class="font-bold text-primary-700">${money(b.totalPrice)}</p>
+                     <span class="inline-block mt-0.5">${statusBadge(b.status)}</span>
+                   </div>
+                 </div>
+               `).join('')}
+             </div>
+           ` : '<p class="text-xs text-foreground-400 italic">Chưa có đơn đặt sân nào.</p>'}
+         </div>
+
+         <div>
+           <h4 class="text-xs font-bold uppercase tracking-wider text-foreground-500 mb-2">Nhật ký kiểm toán liên quan</h4>
+           ${data.auditLogs.length ? `
+             <div class="space-y-1.5 text-xs">
+               ${data.auditLogs.map(l => `
+                 <div class="rounded-md bg-background-100 p-2.5 flex items-start gap-2.5">
+                   <i class="ri-history-line mt-0.5 text-foreground-400 text-sm"></i>
+                   <div class="min-w-0 flex-1">
+                     <p class="font-medium"><b>${esc(l.actor)}</b>: ${esc(l.action)}</p>
+                     ${l.detail ? `<p class="text-[11px] text-foreground-600 mt-0.5">${esc(l.detail)}</p>` : ''}
+                     <p class="text-[10px] text-foreground-400 mt-1">${formatDateTime(l.createdAt)}</p>
+                   </div>
+                 </div>
+               `).join('')}
+             </div>
+           ` : '<p class="text-xs text-foreground-400 italic">Chưa có thao tác kiểm toán nào.</p>'}
+         </div>
+       </div>`,
+      `<button type="button" data-close class="${BTN_OUT}">Đóng</button>
+       ${u.id !== PAGE.data?.me ? `
+         <button type="button" data-modal-impersonate="${u.id}" class="${BTN_SM_PRI} !bg-secondary-700 hover:!bg-secondary-800 !px-3 !py-2 text-xs">
+           <i class="ri-spy-line"></i> Ghost Login vào tài khoản này
+         </button>
+       ` : ''}`,
+      'max-w-2xl'
+    );
+
+    m.el.querySelector('[data-modal-impersonate]')?.addEventListener('click', async () => {
+      m.close();
+      await triggerImpersonate(u.id);
+    });
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+/** Khối "Yêu cầu đăng ký chủ sân" ở đầu mục Tài khoản */
+function ownerRequestsBlock(reqs, showAll) {
+  const RS = { pending: ['Chờ duyệt', 'bg-accent-100 text-accent-800'], approved: ['Đã duyệt', 'bg-primary-50 text-primary-700'], rejected: ['Từ chối', 'bg-background-200 text-foreground-700'] };
+  const pending = reqs.filter((r) => r.status === 'pending');
+  const list = showAll ? reqs : pending;
+  return `<section class="${CARD} mb-5 ${pending.length ? 'border-accent-300' : ''}">
+    ${sectionTitle(`<i class="ri-store-2-line text-accent-600"></i> Yêu cầu đăng ký chủ sân ${pending.length ? `<span class="ml-1 rounded-full bg-accent-500 px-2 py-0.5 text-[11px] text-white">${pending.length} chờ duyệt</span>` : ''}`,
+    reqs.length > pending.length ? `<button type="button" data-or-all class="text-xs font-semibold text-primary-700">${showAll ? 'Chỉ xem chờ duyệt' : `Xem cả đã xử lý (${reqs.length - pending.length})`}</button>` : '')}
+    ${list.length ? `<div class="divide-y divide-background-200">${list.map((r) => `<div class="flex flex-col gap-3 px-4 py-4 md:flex-row md:items-start md:justify-between">
+      <div class="min-w-0">
+        <p class="flex flex-wrap items-center gap-2 font-semibold text-foreground-950">${esc(r.businessName)} <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold ${RS[r.status][1]}">${RS[r.status][0]}</span></p>
+        <p class="mt-1 text-xs text-foreground-600"><i class="ri-user-line"></i> ${esc(r.contactName)} · <a href="tel:${esc(r.phone)}" class="text-primary-700">${esc(r.phone)}</a> · ${esc(r.email)}</p>
+        <p class="mt-0.5 text-xs text-foreground-600"><i class="ri-map-pin-line"></i> ${esc(r.address)} · ${esc(r.sportsLabel)} · ${r.courtCount} sân</p>
+        ${r.note ? `<p class="mt-2 rounded bg-background-100 px-2.5 py-1.5 text-xs text-foreground-700">${esc(r.note)}</p>` : ''}
+        ${r.adminNote || r.reviewedBy ? `<p class="mt-1.5 text-[11px] text-foreground-500">${r.reviewedBy ? `Xử lý bởi ${esc(r.reviewedBy)} · ${formatDateTime(r.reviewedAt)}` : ''}${r.adminNote ? ` — ${esc(r.adminNote)}` : ''}</p>` : ''}
+        <p class="mt-1 text-[11px] text-foreground-400">Gửi lúc ${formatDateTime(r.createdAt)}</p>
+      </div>
+      ${r.status === 'pending' ? `<div class="flex shrink-0 gap-1.5"><button type="button" data-or-reject="${r.id}" class="${BTN_SM}"><i class="ri-close-line"></i>Từ chối</button><button type="button" data-or-approve="${r.id}" class="${BTN_SM_PRI}"><i class="ri-check-line"></i>Duyệt làm chủ sân</button></div>` : ''}
+    </div>`).join('')}</div>` : '<p class="px-4 py-5 text-sm text-foreground-500">Không có yêu cầu nào đang chờ duyệt.</p>'}
+  </section>`;
+}
+
 async function renderAccounts() {
   const d = await get('accounts', 'accounts');
-  const f = filter('accounts', { role: 'all', status: 'all', q: '' });
+  const reqs = await get('ownerReq', 'owner_requests');
+  const f = filter('accounts', { role: 'all', status: 'all', q: '', page: 1 });
   const q = f.q.toLowerCase();
   const list = d.users.filter((u) => f.role === 'all' || u.role === f.role).filter((u) => f.status === 'all' || u.status === f.status).filter((u) => !q || `${u.fullName} ${u.email} ${u.phone} ${u.businessName}`.toLowerCase().includes(q));
   const roleName = (k) => (d.roles.find((r) => r.key === k) || {}).name || 'Toàn quyền (mặc định)';
   const isSuper = PAGE.access.roleKey === 'super_admin';
-  actions().innerHTML = `<button type="button" id="ac-csv" class="${BTN_OUT}"><i class="ri-file-excel-2-line"></i>Xuất danh sách</button>`;
+
+  const pageSize = 10;
+  const total = list.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  f.page = Math.min(Math.max(1, f.page || 1), totalPages);
+  const pagedList = list.slice((f.page - 1) * pageSize, f.page * pageSize);
+  const fromIdx = total > 0 ? (f.page - 1) * pageSize + 1 : 0;
+  const toIdx = Math.min(f.page * pageSize, total);
+
+  actions().innerHTML = `
+    <button type="button" id="ac-new" class="${BTN_SM_PRI} !px-3.5 !py-2 text-xs font-semibold">
+      <i class="ri-user-add-line text-sm"></i> Thêm tài khoản
+    </button>
+    <button type="button" id="ac-csv" class="${BTN_OUT} !px-3.5 !py-2 text-xs font-semibold">
+      <i class="ri-file-excel-2-line text-sm"></i> Xuất danh sách
+    </button>
+  `;
+  actions().querySelector('#ac-new').onclick = () => accountForm(d);
   actions().querySelector('#ac-csv').onclick = () => downloadCsv([['Họ tên', 'Email', 'Điện thoại', 'Vai trò', 'Trạng thái', 'Ngày tạo'], ...list.map((u) => [u.fullName, u.email, u.phone, ROLE[u.role], u.status === 'active' ? 'Hoạt động' : 'Tạm khóa', (u.createdAt || '').slice(0, 10)])], `tai-khoan-${TODAY}.csv`);
 
   main().innerHTML = `
+  ${ownerRequestsBlock(reqs, f.orAll)}
   <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
     ${statCard('ri-user-line', 'Khách hàng', d.users.filter((u) => u.role === 'customer').length)}
     ${statCard('ri-store-2-line', 'Chủ sân', d.users.filter((u) => u.role === 'owner').length, '', 'secondary')}
@@ -130,7 +509,7 @@ async function renderAccounts() {
   </div>
   <div class="mt-5 mb-3 flex flex-wrap gap-2">${[['all', 'Tất cả'], ...Object.entries(ROLE)].map(([k, l]) => `<button type="button" data-role-f="${k}" class="${chip(f.role === k)}">${l}</button>`).join('')}<span class="mx-1 w-px bg-background-300"></span>${[['all', 'Mọi trạng thái'], ['active', 'Hoạt động'], ['suspended', 'Tạm khóa']].map(([k, l]) => `<button type="button" data-status-f="${k}" class="${chip(f.status === k)}">${l}</button>`).join('')}</div>
   <div class="mb-4">${search('ac-q', f.q, 'Tìm theo tên, email, số điện thoại, tên cơ sở...')}</div>
-  <div class="${CARD} overflow-hidden">${list.length ? table(['Tài khoản', 'Vai trò', 'Bộ quyền quản trị', 'Hoạt động', 'Trạng thái', '>Thao tác'], list.map((u) => {
+  <div class="${CARD} overflow-hidden">${list.length ? table(['Tài khoản', 'Vai trò', 'Bộ quyền quản trị', 'Hoạt động', 'Trạng thái', '>Thao tác'], pagedList.map((u) => {
     const me = u.id === d.me;
     return `<tr class="${u.status === 'suspended' ? 'bg-accent-50/40' : ''}">
       ${td(`<p class="font-semibold">${esc(u.fullName || '—')} ${me ? '<span class="rounded bg-primary-50 px-1.5 text-[10px] text-primary-700">Bạn</span>' : ''}</p><p class="text-xs text-foreground-500">${esc(u.email)}${u.phone ? ' · ' + esc(u.phone) : ''}</p>${u.businessName && u.role === 'owner' ? `<p class="text-xs text-secondary-700">${esc(u.businessName)}</p>` : ''}`)}
@@ -138,9 +517,48 @@ async function renderAccounts() {
       ${td(u.role === 'admin' ? `<select data-arole="${u.id}" class="max-w-[180px] rounded-md border border-background-300 bg-white px-2 py-1.5 text-xs">${`<option value="">Toàn quyền (mặc định)</option>`}${d.roles.map((r) => `<option value="${r.key}" ${u.adminRole === r.key ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select>` : '<span class="text-xs text-foreground-400">—</span>')}
       ${td(`<span class="text-xs text-foreground-600">${u.role === 'owner' ? `${u.courtCount} sân` : `${u.bookingCount} đơn`}<br>Từ ${dateText((u.createdAt || '').slice(0, 10))}</span>`)}
       ${td(u.status === 'active' ? '<span class="rounded-full bg-primary-50 px-2 py-1 text-[11px] font-semibold text-primary-700">Hoạt động</span>' : '<span class="rounded-full bg-accent-100 px-2 py-1 text-[11px] font-semibold text-accent-800">Tạm khóa</span>')}
-      ${td(me ? '' : `<div class="flex justify-end">${u.status === 'active' ? `<button type="button" data-lock="${u.id}" class="${BTN_SM_DANGER}"><i class="ri-lock-line"></i>Khóa</button>` : `<button type="button" data-unlock="${u.id}" class="${BTN_SM}"><i class="ri-lock-unlock-line"></i>Mở khóa</button>`}</div>`)}
+      ${td(`<div class="flex items-center justify-end gap-1.5">
+        <button type="button" data-detail="${u.id}" class="inline-flex h-8 items-center gap-1 rounded border border-background-300 bg-white px-2 text-xs font-semibold text-foreground-700 hover:bg-background-100 hover:text-foreground-950 transition-colors" title="Xem chi tiết & lịch sử">
+          <i class="ri-eye-line text-sm"></i> Chi tiết
+        </button>
+        <button type="button" data-edit="${u.id}" class="inline-flex h-8 items-center gap-1 rounded border border-background-300 bg-white px-2 text-xs font-semibold text-foreground-700 hover:bg-background-100 hover:text-foreground-950 transition-colors" title="Chỉnh sửa tài khoản">
+          <i class="ri-edit-line text-sm"></i> Sửa
+        </button>
+        ${!me ? `
+          <button type="button" data-impersonate="${u.id}" class="inline-flex h-8 items-center gap-1 rounded border border-secondary-300 bg-secondary-50 px-2 text-xs font-semibold text-secondary-800 hover:bg-secondary-100 transition-colors" title="Đăng nhập danh nghĩa (Ghost Login)">
+            <i class="ri-spy-line text-sm"></i> Giả lập
+          </button>
+          ${u.status === 'active' ? `
+            <button type="button" data-lock="${u.id}" class="${BTN_SM_DANGER}" title="Tạm khóa tài khoản">
+              <i class="ri-lock-line"></i> Khóa
+            </button>
+          ` : `
+            <button type="button" data-unlock="${u.id}" class="${BTN_SM}" title="Mở khóa tài khoản">
+              <i class="ri-lock-unlock-line"></i> Mở khóa
+            </button>
+          `}
+          <button type="button" data-del="${u.id}" class="${BTN_SM_DANGER} !bg-accent-700 hover:!bg-accent-800" title="Xóa vĩnh viễn tài khoản">
+            <i class="ri-delete-bin-line"></i>
+          </button>
+        ` : ''}
+      </div>`)}
     </tr>`;
-  }).join(''), 900) : `<div class="p-4">${emptyState('ri-user-search-line', 'Không tìm thấy tài khoản')}</div>`}</div>
+  }).join(''), 1020) : `<div class="p-4">${emptyState('ri-user-search-line', 'Không tìm thấy tài khoản')}</div>`}
+  ${list.length ? `
+    <div class="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-background-200 px-4 py-3 bg-white">
+      <p class="text-xs text-foreground-500">Hiển thị <span class="font-semibold text-foreground-800">${fromIdx} - ${toIdx}</span> trên tổng số <span class="font-semibold text-foreground-800">${total}</span> tài khoản</p>
+      ${totalPages > 1 ? `
+        <div class="flex items-center gap-1">
+          <button type="button" data-ac-page="${f.page - 1}" ${f.page === 1 ? 'disabled' : ''} class="h-8 w-8 inline-flex items-center justify-center rounded border border-background-300 bg-white text-xs font-semibold text-foreground-700 hover:border-primary-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors" title="Trang trước"><i class="ri-arrow-left-s-line text-sm"></i></button>
+          ${Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => `
+            <button type="button" data-ac-page="${n}" class="h-8 min-w-[32px] px-2 inline-flex items-center justify-center rounded border text-xs font-semibold transition-colors ${n === f.page ? 'border-primary-600 bg-primary-50 text-primary-700 font-bold' : 'border-background-300 bg-white text-foreground-700 hover:border-primary-400'}">${n}</button>
+          `).join('')}
+          <button type="button" data-ac-page="${f.page + 1}" ${f.page === totalPages ? 'disabled' : ''} class="h-8 w-8 inline-flex items-center justify-center rounded border border-background-300 bg-white text-xs font-semibold text-foreground-700 hover:border-primary-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors" title="Trang sau"><i class="ri-arrow-right-s-line text-sm"></i></button>
+        </div>
+      ` : ''}
+    </div>
+  ` : ''}
+  </div>
   <section class="${CARD} mt-6">${sectionTitle('Bộ quyền quản trị', isSuper ? `<button type="button" data-role-new class="${BTN_SM_PRI}"><i class="ri-add-line"></i>Tạo bộ quyền</button>` : '<span class="text-xs text-foreground-500">Chỉ Quản trị cấp cao được chỉnh</span>')}
     <div class="grid grid-cols-1 gap-3 p-4 md:grid-cols-2">${d.roles.map((r) => `<div class="rounded-md border border-background-200 p-4"><div class="flex items-start justify-between gap-2"><div><p class="font-semibold">${esc(r.name)}</p><p class="text-xs text-foreground-500">${esc(r.description)}</p></div><span class="whitespace-nowrap text-xs text-foreground-500">${d.users.filter((u) => u.adminRole === r.key).length} người</span></div>
       <div class="mt-2 flex flex-wrap gap-1">${(r.key === 'super_admin' ? d.modules.map((m) => m.key) : r.permissions).map((k) => `<span class="rounded bg-background-100 px-1.5 py-0.5 text-[11px]">${(d.modules.find((m) => m.key === k) || {}).label || k}</span>`).join('')}</div>
@@ -148,35 +566,338 @@ async function renderAccounts() {
 
   const root = main();
   const user = (id) => d.users.find((u) => u.id === Number(id));
-  on(root, 'click', '[data-role-f]', (e, el) => { f.role = el.dataset.roleF; render(); });
-  on(root, 'click', '[data-status-f]', (e, el) => { f.status = el.dataset.statusF; render(); });
-  root.querySelector('#ac-q').addEventListener('change', (e) => { f.q = e.target.value; render(); });
+  on(root, 'click', '[data-detail]', (e, el) => showAccountDetailModal(el.dataset.detail));
+  on(root, 'click', '[data-edit]', (e, el) => accountForm(d, user(el.dataset.edit)));
+  on(root, 'click', '[data-impersonate]', (e, el) => triggerImpersonate(el.dataset.impersonate));
+  on(root, 'click', '[data-del]', async (e, el) => {
+    const targetId = Number(el.dataset.del);
+    const u = user(targetId);
+    if (!u) return;
+    const ok = await confirmBox({
+      title: '<span class="flex items-center gap-2 text-accent-700 font-heading"><i class="ri-delete-bin-line text-xl"></i> Xóa vĩnh viễn tài khoản?</span>',
+      message: `Bạn có chắc chắn muốn xóa tài khoản <b>${esc(u.fullName || u.email)}</b> (#${u.id})?<br><br><span class="text-xs text-accent-700 font-semibold">Cảnh báo: Hành động này không thể hoàn tác! Tài khoản sẽ bị xóa hoàn toàn khỏi cơ sở dữ liệu.</span>`,
+      confirmText: 'Xóa tài khoản',
+      danger: true
+    });
+    if (!ok) return;
+    run(() => api('admin', 'account_delete', { id: targetId }), 'Đã xóa tài khoản vĩnh viễn.', 'accounts');
+  });
+  on(root, 'click', '[data-ac-page]', (e, el) => {
+    const p = Number(el.dataset.acPage);
+    if (p >= 1 && p <= totalPages && p !== f.page) {
+      f.page = p;
+      render();
+    }
+  });
+  on(root, 'click', '[data-role-f]', (e, el) => { f.role = el.dataset.roleF; f.page = 1; render(); });
+  on(root, 'click', '[data-or-all]', () => { f.orAll = !f.orAll; render(); });
+  const reviewReq = (id, decision, note) => { delete C.ownerReq; return run(api('admin', 'owner_request_review', { id, decision, note }), decision === 'approve' ? 'Đã duyệt — tài khoản đã được mở kênh chủ sân.' : 'Đã từ chối yêu cầu.', 'accounts'); };
+  on(root, 'click', '[data-or-approve]', async (e, el) => {
+    const r = reqs.find((x) => x.id === el.dataset.orApprove);
+    if (await confirmBox({ title: 'Duyệt làm chủ sân?', message: `Tài khoản <b>${esc(r.email)}</b> sẽ trở thành chủ sân của "<b>${esc(r.businessName)}</b>" và vào được kênh chủ sân.`, confirmText: 'Duyệt' })) reviewReq(r.id, 'approve', '');
+  });
+  on(root, 'click', '[data-or-reject]', async (e, el) => {
+    const note = await askNote('Từ chối đăng ký chủ sân', 'Lý do (người đăng ký sẽ thấy nội dung này)', { min: 5, confirm: 'Từ chối', danger: true });
+    if (note !== null) reviewReq(el.dataset.orReject, 'reject', note);
+  });
+  on(root, 'click', '[data-status-f]', (e, el) => { f.status = el.dataset.statusF; f.page = 1; render(); });
+  root.querySelector('#ac-q').addEventListener('change', (e) => { f.q = e.target.value; f.page = 1; render(); });
   root.addEventListener('change', async (e) => {
     const r = e.target.closest('[data-role]');
     if (r) {
       const u = user(r.dataset.role);
-      if (await confirmBox({ title: 'Đổi vai trò tài khoản?', message: `${esc(u.email)}: ${ROLE[u.role]} → <b>${ROLE[r.value]}</b>.`, confirmText: 'Đổi vai trò' })) run(api('admin', 'account_role', { id: u.id, role: r.value }), 'Đã đổi vai trò.', 'accounts');
-      else r.value = u.role;
+      if (await confirmBox({ title: 'Đổi vai trò tài khoản?', message: `${esc(u.email)}: ${ROLE[u.role]} → <b>${ROLE[r.value]}</b>.`, confirmText: 'Đổi vai trò' })) {
+        run(() => api('admin', 'account_role', { id: u.id, role: r.value }), 'Đã đổi vai trò.', 'accounts');
+      } else {
+        r.value = u.role;
+      }
     }
     const a = e.target.closest('[data-arole]');
-    if (a) run(api('admin', 'assign_admin_role', { id: Number(a.dataset.arole), roleKey: a.value }), a.value ? `Đã gán bộ quyền "${roleName(a.value)}".` : 'Đã thu hồi bộ quyền.', 'accounts');
+    if (a) {
+      run(() => api('admin', 'assign_admin_role', { id: Number(a.dataset.arole), roleKey: a.value }), a.value ? `Đã gán bộ quyền "${roleName(a.value)}".` : 'Đã thu hồi bộ quyền.', 'accounts');
+    }
   });
   on(root, 'click', '[data-lock]', async (e, el) => {
     const u = user(el.dataset.lock);
     const reason = await askNote(`Tạm khóa ${esc(u.email)}`, 'Lý do khóa (ghi vào nhật ký)', { min: 5, confirm: 'Khóa tài khoản', danger: true });
-    if (reason !== null) run(api('admin', 'account_status', { id: u.id, status: 'suspended', reason }), 'Đã tạm khóa tài khoản.', 'accounts');
+    if (reason !== null) {
+      run(() => api('admin', 'account_status', { id: u.id, status: 'suspended', reason }), 'Đã tạm khóa tài khoản.', 'accounts');
+    }
   });
-  on(root, 'click', '[data-unlock]', (e, el) => run(api('admin', 'account_status', { id: Number(el.dataset.unlock), status: 'active' }), 'Đã mở khóa tài khoản.', 'accounts'));
+  on(root, 'click', '[data-unlock]', (e, el) => {
+    run(() => api('admin', 'account_status', { id: Number(el.dataset.unlock), status: 'active' }), 'Đã mở khóa tài khoản.', 'accounts');
+  });
   on(root, 'click', '[data-role-new]', () => roleForm(d));
   on(root, 'click', '[data-role-edit]', (e, el) => roleForm(d, d.roles.find((r) => r.key === el.dataset.roleEdit)));
   on(root, 'click', '[data-role-del]', async (e, el) => {
-    if (await confirmBox({ title: 'Xóa bộ quyền?', message: 'Bộ quyền chưa gán cho ai mới xóa được.', confirmText: 'Xóa', danger: true })) run(api('admin', 'role_delete', { key: el.dataset.roleDel }), 'Đã xóa bộ quyền.', 'accounts');
+    if (await confirmBox({ title: 'Xóa bộ quyền?', message: 'Bộ quyền chưa gán cho ai mới xóa được.', confirmText: 'Xóa', danger: true })) {
+      run(() => api('admin', 'role_delete', { key: el.dataset.roleDel }), 'Đã xóa bộ quyền.', 'accounts');
+    }
+  });
+}
+
+// =====================================================================
+// QUẢN LÝ CHỦ SÂN
+// =====================================================================
+async function renderOwners() {
+  const d = await get('owners', 'owners');
+  const reqs = await get('ownerReq', 'owner_requests');
+  const f = filter('owners', { status: 'all', q: '', page: 1, orAll: false });
+  const q = f.q.toLowerCase();
+  const list = d.owners.filter((u) => f.status === 'all' || u.status === f.status).filter((u) => !q || `${u.fullName} ${u.email} ${u.phone} ${u.businessName} ${u.courtNames}`.toLowerCase().includes(q));
+
+  const pageSize = 10;
+  const total = list.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  f.page = Math.min(Math.max(1, f.page || 1), totalPages);
+  const pagedList = list.slice((f.page - 1) * pageSize, f.page * pageSize);
+  const fromIdx = total > 0 ? (f.page - 1) * pageSize + 1 : 0;
+  const toIdx = Math.min(f.page * pageSize, total);
+
+  actions().innerHTML = `
+    <button type="button" id="ow-new" class="${BTN_SM_PRI} !px-3.5 !py-2 text-xs font-semibold">
+      <i class="ri-user-add-line text-sm"></i> Thêm chủ sân
+    </button>
+    <button type="button" id="ow-csv" class="${BTN_OUT} !px-3.5 !py-2 text-xs font-semibold">
+      <i class="ri-file-excel-2-line text-sm"></i> Xuất danh sách
+    </button>
+  `;
+  actions().querySelector('#ow-new').onclick = () => accountForm(d, null, 'owner');
+  actions().querySelector('#ow-csv').onclick = () => downloadCsv([['Họ tên', 'Tên cơ sở', 'Email', 'Điện thoại', 'Số sân', 'Tổng đơn', 'Doanh thu', 'Trạng thái', 'Ngày tạo'], ...list.map((u) => [u.fullName, u.businessName || '', u.email, u.phone, u.courtCount, u.bookingCount, u.revenue, u.status === 'active' ? 'Hoạt động' : 'Tạm khóa', (u.createdAt || '').slice(0, 10)])], `chu-san-${TODAY}.csv`);
+
+  main().innerHTML = `
+  ${ownerRequestsBlock(reqs, f.orAll)}
+  <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    ${statCard('ri-store-2-line', 'Tổng số chủ sân', d.stat.total)}
+    ${statCard('ri-checkbox-circle-line', 'Đang hoạt động', d.stat.active, '', 'primary')}
+    ${statCard('ri-football-line', 'Sân trực thuộc', d.stat.totalCourts, '', 'secondary')}
+    ${statCard('ri-money-dollar-circle-line', 'Doanh thu các sân', money(d.stat.totalRevenue), '', 'neutral')}
+  </div>
+  <div class="mt-5 mb-3 flex flex-wrap gap-2">${[['all', 'Mọi trạng thái'], ['active', 'Hoạt động'], ['suspended', 'Tạm khóa']].map(([k, l]) => `<button type="button" data-ow-status="${k}" class="${chip(f.status === k)}">${l}</button>`).join('')}</div>
+  <div class="mb-4">${search('ow-q', f.q, 'Tìm theo tên chủ sân, tên cơ sở kinh doanh, email, SĐT, tên sân...')}</div>
+  <div class="${CARD} overflow-hidden">${list.length ? table(['Chủ sân & Cơ sở', 'Sân trực thuộc', '>Đơn · Doanh thu', 'Trạng thái', '>Thao tác'], pagedList.map((u) => {
+    const me = u.id === d.me;
+    return `<tr class="${u.status === 'suspended' ? 'bg-accent-50/40' : ''}">
+      ${td(`<p class="font-semibold text-foreground-950">${esc(u.fullName || '—')} ${me ? '<span class="rounded bg-primary-50 px-1.5 text-[10px] text-primary-700">Bạn</span>' : ''}</p>
+            ${u.businessName ? `<p class="text-xs font-bold text-secondary-700 flex items-center gap-1 mt-0.5"><i class="ri-store-2-fill text-[11px]"></i>${esc(u.businessName)}</p>` : ''}
+            <p class="text-xs text-foreground-500 mt-0.5">${esc(u.email)}${u.phone ? ' · ' + esc(u.phone) : ''}</p>
+            ${u.address ? `<p class="truncate text-[11px] text-foreground-400 mt-0.5 max-w-[280px]"><i class="ri-map-pin-line"></i> ${esc(u.address)}</p>` : ''}`)}
+      ${td(`<p class="font-semibold text-foreground-900">${u.courtCount} sân</p>
+            ${u.courtNames ? `<p class="text-xs text-foreground-500 truncate max-w-[220px]" title="${esc(u.courtNames)}">${esc(u.courtNames)}</p>` : '<span class="text-xs text-foreground-400 italic">Chưa tạo sân</span>'}`)}
+      ${td(`<p class="text-xs text-foreground-700">${u.bookingCount} đơn</p>
+            <p class="font-semibold text-foreground-950 mt-0.5">${money(u.revenue)}</p>`, 'text-right')}
+      ${td(u.status === 'active' ? '<span class="rounded-full bg-primary-50 px-2 py-1 text-[11px] font-semibold text-primary-700">Hoạt động</span>' : '<span class="rounded-full bg-accent-100 px-2 py-1 text-[11px] font-semibold text-accent-800">Tạm khóa</span>')}
+      ${td(`<div class="flex items-center justify-end gap-1.5">
+        <button type="button" data-detail="${u.id}" class="inline-flex h-8 items-center gap-1 rounded border border-background-300 bg-white px-2 text-xs font-semibold text-foreground-700 hover:bg-background-100 hover:text-foreground-950 transition-colors" title="Xem chi tiết & lịch sử">
+          <i class="ri-eye-line text-sm"></i> Chi tiết
+        </button>
+        <button type="button" data-edit="${u.id}" class="inline-flex h-8 items-center gap-1 rounded border border-background-300 bg-white px-2 text-xs font-semibold text-foreground-700 hover:bg-background-100 hover:text-foreground-950 transition-colors" title="Chỉnh sửa chủ sân">
+          <i class="ri-edit-line text-sm"></i> Sửa
+        </button>
+        ${!me ? `
+          <button type="button" data-impersonate="${u.id}" class="inline-flex h-8 items-center gap-1 rounded border border-secondary-300 bg-secondary-50 px-2 text-xs font-semibold text-secondary-800 hover:bg-secondary-100 transition-colors" title="Đăng nhập danh nghĩa vào kênh Chủ sân">
+            <i class="ri-spy-line text-sm"></i> Giả lập
+          </button>
+          ${u.status === 'active' ? `
+            <button type="button" data-lock="${u.id}" class="${BTN_SM_DANGER}" title="Tạm khóa tài khoản chủ sân">
+              <i class="ri-lock-line"></i> Khóa
+            </button>
+          ` : `
+            <button type="button" data-unlock="${u.id}" class="${BTN_SM}" title="Mở khóa tài khoản chủ sân">
+              <i class="ri-lock-unlock-line"></i> Mở khóa
+            </button>
+          `}
+          <button type="button" data-del="${u.id}" class="${BTN_SM_DANGER} !bg-accent-700 hover:!bg-accent-800" title="Xóa tài khoản chủ sân">
+            <i class="ri-delete-bin-line"></i>
+          </button>
+        ` : ''}
+      </div>`)}
+    </tr>`;
+  }).join(''), 1020) : `<div class="p-4">${emptyState('ri-store-2-line', 'Không tìm thấy chủ sân phù hợp')}</div>`}
+  ${list.length ? `
+    <div class="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-background-200 px-4 py-3 bg-white">
+      <p class="text-xs text-foreground-500">Hiển thị <span class="font-semibold text-foreground-800">${fromIdx} - ${toIdx}</span> trên tổng số <span class="font-semibold text-foreground-800">${total}</span> chủ sân</p>
+      ${totalPages > 1 ? `
+        <div class="flex items-center gap-1">
+          <button type="button" data-ow-page="${f.page - 1}" ${f.page === 1 ? 'disabled' : ''} class="h-8 w-8 inline-flex items-center justify-center rounded border border-background-300 bg-white text-xs font-semibold text-foreground-700 hover:border-primary-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors" title="Trang trước"><i class="ri-arrow-left-s-line text-sm"></i></button>
+          ${Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => `
+            <button type="button" data-ow-page="${n}" class="h-8 min-w-[32px] px-2 inline-flex items-center justify-center rounded border text-xs font-semibold transition-colors ${n === f.page ? 'border-primary-600 bg-primary-50 text-primary-700 font-bold' : 'border-background-300 bg-white text-foreground-700 hover:border-primary-400'}">${n}</button>
+          `).join('')}
+          <button type="button" data-ow-page="${f.page + 1}" ${f.page === totalPages ? 'disabled' : ''} class="h-8 w-8 inline-flex items-center justify-center rounded border border-background-300 bg-white text-xs font-semibold text-foreground-700 hover:border-primary-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors" title="Trang sau"><i class="ri-arrow-right-s-line text-sm"></i></button>
+        </div>
+      ` : ''}
+    </div>
+  ` : ''}
+  </div>`;
+
+  const root = main();
+  const user = (id) => d.owners.find((u) => u.id === Number(id));
+  on(root, 'click', '[data-detail]', (e, el) => showAccountDetailModal(el.dataset.detail));
+  on(root, 'click', '[data-edit]', (e, el) => accountForm(d, user(el.dataset.edit)));
+  on(root, 'click', '[data-impersonate]', (e, el) => triggerImpersonate(el.dataset.impersonate));
+  on(root, 'click', '[data-del]', async (e, el) => {
+    const targetId = Number(el.dataset.del);
+    const u = user(targetId);
+    if (!u) return;
+    const ok = await confirmBox({
+      title: '<span class="flex items-center gap-2 text-accent-700 font-heading"><i class="ri-delete-bin-line text-xl"></i> Xóa tài khoản chủ sân?</span>',
+      message: `Bạn có chắc chắn muốn xóa tài khoản <b>${esc(u.fullName || u.email)}</b> (${esc(u.businessName || 'Chủ sân')})?<br><br><span class="text-xs text-accent-700 font-semibold">Lưu ý: Nếu chủ sân này đang có sân bóng, hệ thống sẽ yêu cầu gỡ sân trước khi xóa.</span>`,
+      confirmText: 'Xóa tài khoản',
+      danger: true
+    });
+    if (!ok) return;
+    run(() => api('admin', 'account_delete', { id: targetId }), 'Đã xóa tài khoản vĩnh viễn.', 'owners');
+  });
+  on(root, 'click', '[data-ow-page]', (e, el) => {
+    const p = Number(el.dataset.owPage);
+    if (p >= 1 && p <= totalPages && p !== f.page) {
+      f.page = p;
+      render();
+    }
+  });
+  on(root, 'click', '[data-ow-status]', (e, el) => { f.status = el.dataset.owStatus; f.page = 1; render(); });
+  on(root, 'click', '[data-or-all]', () => { f.orAll = !f.orAll; render(); });
+  const reviewReq = (id, decision, note) => { delete C.ownerReq; delete C.owners; return run(api('admin', 'owner_request_review', { id, decision, note }), decision === 'approve' ? 'Đã duyệt — tài khoản đã được cấp quyền chủ sân.' : 'Đã từ chối yêu cầu.', 'owners'); };
+  on(root, 'click', '[data-or-approve]', async (e, el) => {
+    const r = reqs.find((x) => x.id === el.dataset.orApprove);
+    if (await confirmBox({ title: 'Duyệt làm chủ sân?', message: `Tài khoản <b>${esc(r.email)}</b> sẽ trở thành chủ sân của "<b>${esc(r.businessName)}</b>" và vào được kênh chủ sân.`, confirmText: 'Duyệt' })) reviewReq(r.id, 'approve', '');
+  });
+  on(root, 'click', '[data-or-reject]', async (e, el) => {
+    const note = await askNote('Từ chối đăng ký chủ sân', 'Lý do (người đăng ký sẽ thấy nội dung này)', { min: 5, confirm: 'Từ chối', danger: true });
+    if (note !== null) reviewReq(el.dataset.orReject, 'reject', note);
+  });
+  root.querySelector('#ow-q').addEventListener('change', (e) => { f.q = e.target.value; f.page = 1; render(); });
+  on(root, 'click', '[data-lock]', async (e, el) => {
+    const u = user(el.dataset.lock);
+    const reason = await askNote(`Tạm khóa ${esc(u.email)}`, 'Lý do khóa (ghi vào nhật ký)', { min: 5, confirm: 'Khóa chủ sân', danger: true });
+    if (reason !== null) {
+      run(() => api('admin', 'account_status', { id: u.id, status: 'suspended', reason }), 'Đã tạm khóa tài khoản.', 'owners');
+    }
+  });
+  on(root, 'click', '[data-unlock]', (e, el) => {
+    run(() => api('admin', 'account_status', { id: Number(el.dataset.unlock), status: 'active' }), 'Đã mở khóa tài khoản.', 'owners');
   });
 }
 
 // =====================================================================
 // SÂN & CƠ SỞ
 // =====================================================================
+function courtForm(d, court = null) {
+  const c = court || { id: '', name: '', sport: 'football', area: 'Tân Lợi', address: '', pricePerHour: 180000, peakPrice: 250000, ownerId: 0, image: '', status: 'active', featured: false, description: '' };
+  const isEdit = Boolean(c.id);
+
+  const m = modal(
+    isEdit ? `<span class="flex items-center gap-2"><i class="ri-football-line text-lg text-primary-600"></i> Sửa sân: <b>${esc(c.name)}</b></span>` : '<span class="flex items-center gap-2"><i class="ri-add-circle-line text-lg text-primary-600"></i> Thêm sân mới</span>',
+    `<form class="space-y-3.5" id="form-court">
+       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+         <div>
+           <label class="${LABEL}">Tên sân <span class="text-accent-600">*</span></label>
+           <input name="name" value="${esc(c.name)}" class="${INPUT}" placeholder="Sân bóng BMT Arena" required>
+         </div>
+         <div>
+           <label class="${LABEL}">Bộ môn</label>
+           <select name="sport" class="${INPUT}">
+             <option value="football" ${c.sport === 'football' ? 'selected' : ''}>Bóng đá</option>
+             <option value="badminton" ${c.sport === 'badminton' ? 'selected' : ''}>Cầu lông</option>
+           </select>
+         </div>
+       </div>
+
+       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+         <div>
+           <label class="${LABEL}">Khu vực (Phường / Xã)</label>
+           <input name="area" value="${esc(c.area)}" class="${INPUT}" placeholder="Tân Lợi, Thành Công, Ea Tam...">
+         </div>
+         <div>
+           <label class="${LABEL}">Chủ sân phụ trách</label>
+           <select name="ownerId" class="${INPUT}">
+             <option value="0">Hệ thống quản lý</option>
+             ${d.owners.map((o) => `<option value="${o.id}" ${c.ownerId === o.id ? 'selected' : ''}>${esc(o.name)}</option>`).join('')}
+           </select>
+         </div>
+       </div>
+
+       <div>
+         <label class="${LABEL}">Địa chỉ chi tiết</label>
+         <input name="address" value="${esc(c.address)}" class="${INPUT}" placeholder="Số nhà, đường, phường, TP. Buôn Ma Thuột">
+       </div>
+
+       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+         <div>
+           <label class="${LABEL}">Giá thường / giờ (VNĐ) <span class="text-accent-600">*</span></label>
+           <input type="number" name="pricePerHour" value="${c.pricePerHour}" class="${INPUT}" step="10000" min="10000">
+         </div>
+         <div>
+           <label class="${LABEL}">Giá cao điểm / giờ (VNĐ)</label>
+           <input type="number" name="peakPrice" value="${c.peakPrice}" class="${INPUT}" step="10000" min="10000">
+         </div>
+       </div>
+
+       <div>
+         <label class="${LABEL}">URL Ảnh đại diện</label>
+         <input name="image" value="${esc(c.image)}" class="${INPUT}" placeholder="https://images.unsplash.com/...">
+       </div>
+
+       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+         <div>
+           <label class="${LABEL}">Trạng thái</label>
+           <select name="status" class="${INPUT}">
+             <option value="active" ${c.status === 'active' ? 'selected' : ''}>Hoạt động</option>
+             <option value="paused" ${c.status === 'paused' ? 'selected' : ''}>Tạm dừng</option>
+             <option value="maintenance" ${c.status === 'maintenance' ? 'selected' : ''}>Bảo trì</option>
+           </select>
+         </div>
+         <div class="flex items-center pt-6">
+           <label class="flex items-center gap-2 cursor-pointer text-sm font-semibold text-foreground-800">
+             <input type="checkbox" name="featured" value="1" ${c.featured ? 'checked' : ''} class="accent-primary-600 h-4 w-4">
+             Đánh dấu Sân nổi bật (trang chủ)
+           </label>
+         </div>
+       </div>
+
+       <div>
+         <label class="${LABEL}">Mô tả ngắn</label>
+         <textarea name="description" rows="2" class="${INPUT}" placeholder="Mô tả cơ sở vật chất, mặt sân...">${esc(c.description || '')}</textarea>
+       </div>
+     </form>`,
+    `<button type="button" data-close class="${BTN_OUT}">Hủy</button>
+     <button type="button" data-ok class="${BTN_SM_PRI} !px-4 !py-2"><i class="ri-save-line"></i> ${isEdit ? 'Lưu thay đổi' : 'Thêm sân'}</button>`,
+    'max-w-xl'
+  );
+
+  const form = m.el.querySelector('#form-court');
+  m.el.querySelector('[data-ok]').addEventListener('click', async (e) => {
+    const name = form.name.value.trim();
+    const price = Number(form.pricePerHour.value);
+    if (name.length < 3) return toast('Vui lòng nhập tên sân ít nhất 3 ký tự.', 'error');
+    if (price <= 0) return toast('Vui lòng nhập giá thuê hợp lệ.', 'error');
+
+    setBusy(e.currentTarget, true, 'Đang lưu...');
+    const payload = {
+      id: c.id,
+      name,
+      sport: form.sport.value,
+      area: form.area.value.trim(),
+      ownerId: Number(form.ownerId.value),
+      address: form.address.value.trim(),
+      pricePerHour: price,
+      peakPrice: Number(form.peakPrice.value) || price,
+      image: form.image.value.trim(),
+      status: form.status.value,
+      featured: form.featured.checked ? 1 : 0,
+      description: form.description.value.trim(),
+    };
+
+    const ok = await run(
+      () => api('admin', 'court_save', payload),
+      isEdit ? 'Đã cập nhật sân.' : 'Đã thêm sân mới thành công.',
+      'courts'
+    );
+    if (ok) m.close();
+    else setBusy(e.currentTarget, false);
+  });
+}
+
 async function renderCourts() {
   const d = await get('courts', 'courts');
   const f = filter('courts', { status: 'all', sport: 'all', q: '' });
@@ -184,6 +905,13 @@ async function renderCourts() {
   const st = (c) => (c.deletedAt ? 'removed' : c.status);
   const list = d.courts.filter((c) => f.status === 'all' || st(c) === f.status).filter((c) => f.sport === 'all' || c.sport === f.sport).filter((c) => !q || `${c.name} ${c.address} ${c.ownerName} ${c.area}`.toLowerCase().includes(q));
   const count = (s) => d.courts.filter((c) => st(c) === s).length;
+  actions().innerHTML = `
+    <button type="button" id="ct-new" class="${BTN_SM_PRI} !px-3.5 !py-2 text-xs font-semibold">
+      <i class="ri-add-line text-sm"></i> Thêm sân mới
+    </button>
+  `;
+  actions().querySelector('#ct-new').onclick = () => courtForm(d);
+
   main().innerHTML = `
   <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
     ${statCard('ri-football-line', 'Tổng sân', d.courts.filter((c) => !c.deletedAt).length)}
@@ -199,25 +927,46 @@ async function renderCourts() {
     ${td(`${c.bookingCount} đơn<br><b>${money(c.revenue)}</b>`, 'text-right text-xs')}
     ${td(`<i class="ri-star-fill text-accent-500"></i> ${c.rating.toFixed(1)} <span class="text-xs text-foreground-500">(${c.reviewCount})</span>`, 'whitespace-nowrap')}
     ${td(c.deletedAt ? '<span class="rounded-full bg-background-200 px-2 py-1 text-[11px] font-semibold">Đã gỡ</span>' : statusBadge(c.status))}
-    ${td(`<div class="flex justify-end gap-1.5">${c.deletedAt ? `<button type="button" data-restore="${c.id}" class="${BTN_SM}"><i class="ri-arrow-go-back-line"></i>Khôi phục</button>` : `${c.status === 'active' ? `<button type="button" data-pause="${c.id}" class="${BTN_SM}"><i class="ri-pause-line"></i>Tạm dừng</button>` : `<button type="button" data-open="${c.id}" class="${BTN_SM_PRI}"><i class="ri-play-line"></i>Mở lại</button>`}<button type="button" data-feat="${c.id}" class="${BTN_SM}" title="Nổi bật"><i class="${c.featured ? 'ri-star-fill text-accent-500' : 'ri-star-line'}"></i></button><button type="button" data-remove="${c.id}" class="${BTN_SM_DANGER}"><i class="ri-delete-bin-line"></i></button>`}</div>`)}
-  </tr>`).join(''), 960) : `<div class="p-4">${emptyState('ri-football-line', 'Không có sân phù hợp')}</div>`}</div>`;
+    ${td(`<div class="flex justify-end gap-1.5">${c.deletedAt ? `
+      <button type="button" data-restore="${c.id}" class="${BTN_SM}" title="Khôi phục sân"><i class="ri-arrow-go-back-line"></i>Khôi phục</button>
+      <button type="button" data-purge="${c.id}" class="${BTN_SM_DANGER} !bg-accent-700 hover:!bg-accent-800" title="Xóa vĩnh viễn khỏi CSDL"><i class="ri-delete-bin-line"></i></button>
+    ` : `
+      <button type="button" data-edit-court="${c.id}" class="${BTN_SM}" title="Chỉnh sửa sân"><i class="ri-edit-line"></i>Sửa</button>
+      ${c.status === 'active' ? `<button type="button" data-pause="${c.id}" class="${BTN_SM}"><i class="ri-pause-line"></i>Tạm dừng</button>` : `<button type="button" data-open="${c.id}" class="${BTN_SM_PRI}"><i class="ri-play-line"></i>Mở lại</button>`}
+      <button type="button" data-feat="${c.id}" class="${BTN_SM}" title="Nổi bật"><i class="${c.featured ? 'ri-star-fill text-accent-500' : 'ri-star-line'}"></i></button>
+      <button type="button" data-remove="${c.id}" class="${BTN_SM_DANGER}" title="Gỡ sân khỏi hệ thống"><i class="ri-delete-bin-line"></i></button>
+    `}</div>`)}
+  </tr>`).join(''), 980) : `<div class="p-4">${emptyState('ri-football-line', 'Không có sân phù hợp')}</div>`}</div>`;
 
   const root = main();
   const court = (id) => d.courts.find((c) => c.id === id);
+  on(root, 'click', '[data-edit-court]', (e, el) => courtForm(d, court(el.dataset.editCourt)));
   on(root, 'click', '[data-sf]', (e, el) => { f.status = el.dataset.sf; render(); });
   on(root, 'click', '[data-sp]', (e, el) => { f.sport = el.dataset.sp; render(); });
   root.querySelector('#ct-q').addEventListener('change', (e) => { f.q = e.target.value; render(); });
-  root.addEventListener('change', (e) => { const s = e.target.closest('[data-owner]'); if (s) run(api('admin', 'court_owner', { id: s.dataset.owner, ownerId: Number(s.value) }), 'Đã đổi chủ sân phụ trách.', 'courts'); });
+  root.addEventListener('change', (e) => { const s = e.target.closest('[data-owner]'); if (s) run(() => api('admin', 'court_owner', { id: s.dataset.owner, ownerId: Number(s.value) }), 'Đã đổi chủ sân phụ trách.', 'courts'); });
   on(root, 'click', '[data-pause]', async (e, el) => {
     const reason = await askNote(`Tạm dừng ${esc(court(el.dataset.pause).name)}`, 'Lý do tạm dừng (sân sẽ ẩn khỏi trang tìm sân)', { min: 5, confirm: 'Tạm dừng sân', danger: true });
-    if (reason !== null) run(api('admin', 'court_status', { id: el.dataset.pause, status: 'paused', reason }), 'Đã tạm dừng sân.', 'courts');
+    if (reason !== null) run(() => api('admin', 'court_status', { id: el.dataset.pause, status: 'paused', reason }), 'Đã tạm dừng sân.', 'courts');
   });
-  on(root, 'click', '[data-open]', (e, el) => run(api('admin', 'court_status', { id: el.dataset.open, status: 'active' }), 'Sân đã hoạt động trở lại.', 'courts'));
-  on(root, 'click', '[data-feat]', (e, el) => run(api('admin', 'court_featured', { id: el.dataset.feat }), 'Đã cập nhật sân nổi bật.', 'courts'));
-  on(root, 'click', '[data-restore]', (e, el) => run(api('admin', 'court_remove', { id: el.dataset.restore, restore: true }), 'Đã khôi phục sân (đang tạm dừng).', 'courts'));
+  on(root, 'click', '[data-open]', (e, el) => run(() => api('admin', 'court_status', { id: el.dataset.open, status: 'active' }), 'Sân đã hoạt động trở lại.', 'courts'));
+  on(root, 'click', '[data-feat]', (e, el) => run(() => api('admin', 'court_featured', { id: el.dataset.feat }), 'Đã cập nhật sân nổi bật.', 'courts'));
+  on(root, 'click', '[data-restore]', (e, el) => run(() => api('admin', 'court_remove', { id: el.dataset.restore, restore: true }), 'Đã khôi phục sân (đang tạm dừng).', 'courts'));
   on(root, 'click', '[data-remove]', async (e, el) => {
     const reason = await askNote(`Gỡ ${esc(court(el.dataset.remove).name)} khỏi nền tảng`, 'Lý do gỡ sân', { min: 5, confirm: 'Gỡ sân', danger: true });
-    if (reason !== null) run(api('admin', 'court_remove', { id: el.dataset.remove, reason }), 'Đã gỡ sân khỏi nền tảng.', 'courts');
+    if (reason !== null) run(() => api('admin', 'court_remove', { id: el.dataset.remove, reason }), 'Đã gỡ sân khỏi nền tảng.', 'courts');
+  });
+  on(root, 'click', '[data-purge]', async (e, el) => {
+    const c = court(el.dataset.purge);
+    if (!c) return;
+    const ok = await confirmBox({
+      title: '<span class="flex items-center gap-2 text-accent-700 font-heading"><i class="ri-delete-bin-line text-xl"></i> Xóa vĩnh viễn sân?</span>',
+      message: `Bạn có chắc chắn muốn xóa vĩnh viễn sân <b>${esc(c.name)}</b> khỏi cơ sở dữ liệu?<br><br><span class="text-xs text-accent-700 font-semibold">Lưu ý: Chỉ sân chưa từng có đơn đặt sân mới xóa được vĩnh viễn.</span>`,
+      confirmText: 'Xóa vĩnh viễn',
+      danger: true
+    });
+    if (!ok) return;
+    run(() => api('admin', 'court_delete_permanent', { id: c.id }), 'Đã xóa sân vĩnh viễn.', 'courts');
   });
 }
 
@@ -287,16 +1036,17 @@ async function renderInvoices() {
 // DANH MỤC
 // =====================================================================
 function categoryForm(c = null, kind = 'sport') {
-  const x = c || { kind, name: '', slug: '', description: '', icon: kind === 'sport' ? 'ri-football-line' : 'ri-map-pin-line', sortOrder: 0, active: true };
+  const defaultIcon = kind === 'sport' ? 'ri-football-line' : kind === 'amenity' ? 'ri-checkbox-circle-line' : 'ri-map-pin-line';
+  const x = c || { kind, name: '', slug: '', description: '', icon: defaultIcon, sortOrder: 0, active: true };
   const m = modal(c ? 'Sửa danh mục' : 'Thêm danh mục', `<form class="grid grid-cols-2 gap-3">
-    <div><label class="${LABEL}">Loại</label><select name="kind" class="${INPUT}"><option value="sport" ${x.kind === 'sport' ? 'selected' : ''}>Môn thể thao</option><option value="area" ${x.kind === 'area' ? 'selected' : ''}>Khu vực</option></select></div>
+    <div><label class="${LABEL}">Loại danh mục</label><select name="kind" class="${INPUT}"><option value="sport" ${x.kind === 'sport' ? 'selected' : ''}>Loại sân (Môn thể thao)</option><option value="amenity" ${x.kind === 'amenity' ? 'selected' : ''}>Tiện ích sân</option><option value="area" ${x.kind === 'area' ? 'selected' : ''}>Khu vực</option></select></div>
     <div><label class="${LABEL}">Tên</label><input name="name" value="${esc(x.name)}" class="${INPUT}"></div>
     <div><label class="${LABEL}">Mã (slug)</label><input name="slug" value="${esc(x.slug)}" class="${INPUT}" placeholder="tự tạo nếu để trống"></div>
     <div><label class="${LABEL}">Biểu tượng (Remix Icon)</label><input name="icon" value="${esc(x.icon)}" class="${INPUT}"></div>
     <div class="col-span-2"><label class="${LABEL}">Mô tả</label><input name="description" value="${esc(x.description)}" class="${INPUT}"></div>
     <div><label class="${LABEL}">Thứ tự</label><input type="number" name="sortOrder" value="${x.sortOrder}" class="${INPUT}"></div>
     <label class="mt-6 flex items-center gap-2 text-sm"><input type="checkbox" name="active" ${x.active ? 'checked' : ''} class="accent-primary-500">Hiển thị cho khách</label></form>`,
-  `<button type="button" data-close class="${BTN_OUT}">Hủy</button><button type="button" data-ok class="${BTN}">Lưu</button>`);
+    `<button type="button" data-close class="${BTN_OUT}">Hủy</button><button type="button" data-ok class="${BTN}">Lưu</button>`);
   m.el.querySelector('[data-ok]').addEventListener('click', async () => {
     const form = m.el.querySelector('form');
     if (await run(api('admin', 'category_save', { ...formData(form), id: c ? c.id : '', sortOrder: Number(form.sortOrder.value) || 0, active: form.active.checked }), 'Đã lưu danh mục.', 'categories')) m.close();
@@ -305,18 +1055,45 @@ function categoryForm(c = null, kind = 'sport') {
 
 async function renderCategories() {
   const list = await get('categories', 'categories');
-  actions().innerHTML = `<button type="button" id="cat-add" class="${BTN}"><i class="ri-add-line"></i>Thêm danh mục</button>`;
-  actions().querySelector('#cat-add').onclick = () => categoryForm();
-  const col = (kind, title) => `<section class="${CARD}">${sectionTitle(title, `<button type="button" data-add="${kind}" class="${BTN_SM}"><i class="ri-add-line"></i>Thêm</button>`)}<ul class="divide-y divide-background-200">${list.filter((c) => c.kind === kind).map((c) => `<li class="flex items-center gap-3 px-4 py-3 ${c.active ? '' : 'opacity-60'}"><span class="flex h-9 w-9 items-center justify-center rounded-md bg-primary-50 text-primary-600"><i class="${esc(c.icon)}"></i></span><div class="min-w-0 flex-1"><p class="text-sm font-semibold">${esc(c.name)} ${c.active ? '' : '<span class="text-[10px] text-foreground-500">(ẩn)</span>'}</p><p class="truncate text-xs text-foreground-500">${esc(c.description || c.slug)} · ${c.courtCount} sân</p></div><button type="button" data-edit="${c.id}" class="${BTN_SM}"><i class="ri-edit-line"></i></button><button type="button" data-del="${c.id}" class="${BTN_SM_DANGER}"><i class="ri-delete-bin-line"></i></button></li>`).join('') || '<li class="px-4 py-5 text-sm text-foreground-500">Chưa có danh mục.</li>'}</ul></section>`;
-  main().innerHTML = `<div class="grid grid-cols-1 gap-5 lg:grid-cols-2">${col('sport', 'Môn thể thao')}${col('area', 'Khu vực')}</div>`;
+  const isSuper = PAGE.access.roleKey === 'super_admin';
+  actions().innerHTML = isSuper ? `<button type="button" id="cat-add" class="${BTN}"><i class="ri-add-line"></i>Thêm danh mục</button>` : '';
+  if (isSuper && actions().querySelector('#cat-add')) actions().querySelector('#cat-add').onclick = () => categoryForm();
+
+  const col = (kind, title) => `<section class="${CARD}">
+    ${sectionTitle(title, isSuper ? `<button type="button" data-add="${kind}" class="${BTN_SM}"><i class="ri-add-line"></i>Thêm</button>` : '<span class="text-xs font-medium text-foreground-400">Chỉ xem (NV)</span>')}
+    <ul class="divide-y divide-background-200">${list.filter((c) => c.kind === kind).map((c) => `
+      <li class="flex items-center gap-3 px-4 py-3 ${c.active ? '' : 'opacity-60'}">
+        <span class="flex h-9 w-9 items-center justify-center rounded-md bg-primary-50 text-primary-600"><i class="${esc(c.icon)}"></i></span>
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-semibold">${esc(c.name)} ${c.active ? '' : '<span class="rounded bg-accent-50 px-1.5 py-0.5 text-[10px] font-semibold text-accent-700">(Đã ẩn)</span>'}</p>
+          <p class="truncate text-xs text-foreground-500">${esc(c.description || c.slug)} · ${c.courtCount} sân</p>
+        </div>
+        ${isSuper ? `
+          <div class="flex items-center gap-1">
+            <button type="button" data-toggle="${c.id}" class="${BTN_SM}" title="${c.active ? 'Ẩn danh mục' : 'Hiện danh mục'}">
+              <i class="${c.active ? 'ri-eye-off-line' : 'ri-eye-line'}"></i>${c.active ? 'Ẩn' : 'Hiện'}
+            </button>
+            <button type="button" data-edit="${c.id}" class="${BTN_SM}" title="Sửa danh mục"><i class="ri-edit-line"></i>Sửa</button>
+            <button type="button" data-del="${c.id}" class="${BTN_SM_DANGER}" title="Xóa danh mục"><i class="ri-delete-bin-line"></i></button>
+          </div>
+        ` : '<span class="text-xs text-foreground-400">Chỉ xem</span>'}
+      </li>`).join('') || '<li class="px-4 py-5 text-sm text-foreground-500">Chưa có danh mục.</li>'}</ul></section>`;
+
+  main().innerHTML = `<div class="grid grid-cols-1 gap-5 lg:grid-cols-3">${col('sport', 'Loại sân')}${col('amenity', 'Tiện ích')}${col('area', 'Khu vực')}</div>`;
   const root = main();
-  on(root, 'click', '[data-add]', (e, el) => categoryForm(null, el.dataset.add));
-  on(root, 'click', '[data-edit]', (e, el) => categoryForm(list.find((c) => c.id === el.dataset.edit)));
-  on(root, 'click', '[data-del]', async (e, el) => {
-    const c = list.find((x) => x.id === el.dataset.del);
-    if (await confirmBox({ title: `Xóa danh mục "${esc(c.name)}"?`, message: c.courtCount ? `Đang có ${c.courtCount} sân dùng danh mục này — sân vẫn giữ nguyên, chỉ bộ lọc bị mất.` : 'Danh mục sẽ bị xóa khỏi bộ lọc tìm sân.', confirmText: 'Xóa', danger: true }))
-      run(api('admin', 'category_delete', { id: c.id }), 'Đã xóa danh mục.', 'categories');
-  });
+  if (isSuper) {
+    on(root, 'click', '[data-add]', (e, el) => categoryForm(null, el.dataset.add));
+    on(root, 'click', '[data-edit]', (e, el) => categoryForm(list.find((c) => c.id === el.dataset.edit)));
+    on(root, 'click', '[data-toggle]', (e, el) => {
+      const c = list.find((x) => x.id === el.dataset.toggle);
+      run(api('admin', 'category_toggle', { id: c.id }), c.active ? 'Đã ẩn danh mục.' : 'Đã hiển thị danh mục.', 'categories');
+    });
+    on(root, 'click', '[data-del]', async (e, el) => {
+      const c = list.find((x) => x.id === el.dataset.del);
+      if (await confirmBox({ title: `Xóa danh mục "${esc(c.name)}"?`, message: c.courtCount ? `Đang có ${c.courtCount} sân dùng danh mục này — sân vẫn giữ nguyên, chỉ bộ lọc bị mất.` : 'Danh mục sẽ bị xóa khỏi bộ lọc tìm sân.', confirmText: 'Xóa', danger: true }))
+        run(api('admin', 'category_delete', { id: c.id }), 'Đã xóa danh mục.', 'categories');
+    });
+  }
 }
 
 // =====================================================================
@@ -337,7 +1114,7 @@ function contentForm(c = null, kind = 'news') {
     <div><label class="${LABEL}">Đường dẫn khi bấm</label><input name="linkUrl" value="${esc(x.linkUrl)}" class="${INPUT}" placeholder="/uu-dai"></div>
     <div><label class="${LABEL}">Thứ tự</label><input type="number" name="sortOrder" value="${x.sortOrder}" class="${INPUT}"></div>
     <label class="mt-6 flex items-center gap-2 text-sm"><input type="checkbox" name="pinned" ${x.pinned ? 'checked' : ''} class="accent-primary-500">Ghim lên đầu</label></form>`,
-  `<button type="button" data-close class="${BTN_OUT}">Hủy</button><button type="button" data-ok class="${BTN}">Lưu nội dung</button>`, 'max-w-2xl');
+    `<button type="button" data-close class="${BTN_OUT}">Hủy</button><button type="button" data-ok class="${BTN}">Lưu nội dung</button>`, 'max-w-2xl');
   m.el.querySelector('[data-ok]').addEventListener('click', async () => {
     const form = m.el.querySelector('form');
     if (await run(api('admin', 'content_save', { ...formData(form), id: c ? c.id : '', sortOrder: Number(form.sortOrder.value) || 0, pinned: form.pinned.checked }), 'Đã lưu nội dung.', 'contents')) m.close();
@@ -386,7 +1163,7 @@ async function renderModeration() {
       <p class="mt-2 text-sm text-foreground-800">${esc(r.comment)}</p>
       ${r.moderationNote ? `<p class="mt-2 rounded bg-background-100 px-2.5 py-1.5 text-xs text-foreground-600"><i class="ri-sticky-note-line"></i> ${esc(r.moderationNote)}${r.moderatedBy ? ` — ${esc(r.moderatedBy)}` : ''}</p>` : ''}
       <div class="mt-3 flex gap-1.5">${r.moderationStatus !== 'approved' ? `<button type="button" data-approve="${r.id}" class="${BTN_SM_PRI}"><i class="ri-eye-line"></i>Cho hiển thị</button>` : ''}${r.moderationStatus !== 'hidden' ? `<button type="button" data-hide="${r.id}" class="${BTN_SM_DANGER}"><i class="ri-eye-off-line"></i>Ẩn đánh giá</button>` : ''}</div></article>`).join('') || emptyState('ri-star-smile-line', 'Không có đánh giá phù hợp')}</div>`
-  : `
+      : `
     <div class="mb-3 flex flex-wrap gap-2">${[['all', 'Tất cả'], ...Object.entries(RSTATUS).map(([k, [l]]) => [k, l])].map(([k, l]) => `<button type="button" data-ps="${k}" class="${chip(f.ps === k)}">${l}<span class="opacity-75">${d.reports.filter((r) => k === 'all' || r.status === k).length}</span></button>`).join('')}</div>
     <div class="space-y-3">${reports.map((r) => `<article class="${CARD} p-4"><div class="flex flex-wrap items-start justify-between gap-2"><div><p class="text-sm font-semibold"><i class="ri-flag-2-fill text-accent-600"></i> ${esc(r.reason)}</p><p class="text-xs text-foreground-500">${TTYPE[r.targetType]}: <b>${esc(r.targetLabel)}</b> · Người báo: ${esc(r.reporterName)}${r.reporterContact ? ` (${esc(r.reporterContact)})` : ''} · ${formatDateTime(r.createdAt)}</p></div><div class="flex items-center gap-2"><span class="text-xs ${SEV[r.severity][1]}">Mức ${SEV[r.severity][0]}</span><span class="rounded-full px-2.5 py-1 text-[11px] font-semibold ${RSTATUS[r.status][1]}">${RSTATUS[r.status][0]}</span></div></div>
       ${r.detail ? `<p class="mt-2 text-sm text-foreground-700">${esc(r.detail)}</p>` : ''}
@@ -454,7 +1231,366 @@ async function renderAudit() {
 }
 
 // =====================================================================
-const RENDER = { overview: renderOverview, accounts: renderAccounts, courts: renderCourts, bookings: renderBookings, invoices: renderInvoices, categories: renderCategories, content: renderContent, moderation: renderModeration, promotions: renderPromotions, audit: renderAudit };
+// CẤU TRÚC SITEMAP ADMIN (Sub-tab cho Tài khoản, Sân, Thanh toán & đối soát,
+// Nội dung & khuyến mãi, Báo cáo doanh thu, Quản lý AI, Cấu hình hệ thống)
+// =====================================================================
+const adminSub = {};
+const getAdminSub = (tab, def) => {
+  if (!adminSub[tab]) adminSub[tab] = PAGE.tab === tab && PAGE.sub ? PAGE.sub : def;
+  return adminSub[tab];
+};
+
+function mountAdminSubBar(tab, items, active) {
+  const host = main();
+  const bar = document.createElement('div');
+  bar.className = 'mb-5 flex flex-wrap items-center gap-1.5 rounded-lg border border-background-200 bg-white p-1.5';
+  bar.innerHTML = items
+    .map(
+      ([k, label, icon]) => `<button type="button" data-ad-sub="${k}" class="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md px-3.5 py-2 text-xs font-semibold transition-colors ${
+        active === k ? 'bg-primary-500 text-white shadow-sm' : 'text-foreground-600 hover:bg-background-100 hover:text-foreground-950'
+      }"><i class="${icon} text-sm" aria-hidden="true"></i>${label}</button>`,
+    )
+    .join('');
+  host.prepend(bar);
+  bar.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ad-sub]');
+    if (!b || b.dataset.adSub === active) return;
+    adminSub[tab] = b.dataset.adSub;
+    render();
+  });
+}
+
+async function renderSitemapAccounts() {
+  const sub = getAdminSub('accounts', 'all');
+  if (sub === 'owners') {
+    await renderOwners();
+  } else {
+    const f = filter('accounts', { role: 'all', status: 'all', q: '', page: 1 });
+    if (sub === 'customers') f.role = 'customer';
+    else if (sub === 'admins') f.role = 'admin';
+    else if (sub === 'all' && f.role !== 'all' && !f._manual) f.role = 'all';
+    await renderAccounts();
+  }
+  mountAdminSubBar(
+    'accounts',
+    [
+      ['all', 'Tất cả & Duyệt chủ sân', 'ri-group-line'],
+      ['customers', 'Tài khoản khách hàng', 'ri-user-line'],
+      ['owners', 'Tài khoản chủ sân', 'ri-store-2-line'],
+      ['admins', 'Quản trị viên & phân quyền', 'ri-shield-user-line'],
+    ],
+    sub,
+  );
+}
+
+async function renderSitemapCourts() {
+  const sub = getAdminSub('courts', 'all');
+  const d = await get('courts', 'courts');
+  if (sub === 'all') {
+    await renderCourts();
+  } else if (sub === 'pending') {
+    const pending = d.courts.filter((c) => !c.deletedAt && c.status === 'pending');
+    main().innerHTML = `<section class="${CARD} overflow-hidden">
+      ${sectionTitle(`Sân mới chờ duyệt (${pending.length})`, '<span class="text-xs text-foreground-500">Kiểm tra thông tin sân trước khi hiển thị công khai</span>')}
+      ${pending.length ? table(['Sân · địa chỉ', 'Chủ sân', 'Giá thuê', '>Thao tác'], pending.map((c) => `<tr>
+        ${td(`<p class="font-semibold">${esc(c.name)}</p><p class="text-xs text-foreground-500">${esc(c.sportLabel)} · ${esc(c.address)}</p>`)}
+        ${td(esc(c.ownerName || 'Hệ thống'))}
+        ${td(`${money(c.pricePerHour)}/giờ`)}
+        ${td(`<div class="flex justify-end gap-1.5"><button type="button" data-approve-court="${c.id}" class="${BTN_SM_PRI}"><i class="ri-check-line"></i>Duyệt mở sân</button><button type="button" data-pause-court="${c.id}" class="${BTN_SM_DANGER}">Từ chối</button></div>`)}
+      </tr>`).join(''), 720) : `<div class="p-6">${emptyState('ri-checkbox-circle-line', 'Không có sân mới nào đang chờ duyệt', 'Mọi sân đã được xét duyệt và hoạt động trên nền tảng.')}</div>`}
+    </section>`;
+    on(main(), 'click', '[data-approve-court]', (e, el) => run(() => api('admin', 'court_status', { id: el.dataset.approveCourt, status: 'active' }), 'Đã duyệt mở sân công khai.', 'courts'));
+    on(main(), 'click', '[data-pause-court]', async (e, el) => {
+      const reason = await askNote('Từ chối / Tạm ngưng sân', 'Lý do (tối thiểu 5 ký tự)', { min: 5, confirm: 'Xác nhận', danger: true });
+      if (reason !== null) run(() => api('admin', 'court_status', { id: el.dataset.pauseCourt, status: 'paused', reason }), 'Đã tạm ngưng sân.', 'courts');
+    });
+  } else {
+    const paused = d.courts.filter((c) => c.deletedAt || c.status === 'paused');
+    main().innerHTML = `<section class="${CARD} overflow-hidden">
+      ${sectionTitle(`Sân đang tạm ngưng / gỡ vi phạm (${paused.length})`)}
+      ${paused.length ? table(['Sân · khu vực', 'Chủ sân', 'Trạng thái', '>Thao tác'], paused.map((c) => `<tr>
+        ${td(`<p class="font-semibold">${esc(c.name)}</p><p class="text-xs text-foreground-500">${esc(c.address)}</p>`)}
+        ${td(esc(c.ownerName || 'Hệ thống'))}
+        ${td(c.deletedAt ? '<span class="rounded-full bg-accent-100 px-2 py-0.5 text-[11px] font-bold text-accent-800">Đã gỡ</span>' : '<span class="rounded-full bg-accent-50 px-2 py-0.5 text-[11px] font-bold text-accent-700">Tạm ngưng</span>')}
+        ${td(`<div class="flex justify-end gap-1.5">${c.deletedAt ? `<button type="button" data-res-c="${c.id}" class="${BTN_SM}"><i class="ri-arrow-go-back-line"></i>Khôi phục</button>` : `<button type="button" data-op-c="${c.id}" class="${BTN_SM_PRI}"><i class="ri-play-line"></i>Mở lại</button>`}</div>`)}
+      </tr>`).join(''), 720) : `<div class="p-6">${emptyState('ri-shield-check-line', 'Không có sân nào đang bị tạm ngưng')}</div>`}
+    </section>`;
+    on(main(), 'click', '[data-op-c]', (e, el) => run(() => api('admin', 'court_status', { id: el.dataset.opC, status: 'active' }), 'Đã mở lại sân.', 'courts'));
+    on(main(), 'click', '[data-res-c]', (e, el) => run(() => api('admin', 'court_remove', { id: el.dataset.resC, restore: true }), 'Đã khôi phục sân.', 'courts'));
+  }
+  mountAdminSubBar(
+    'courts',
+    [
+      ['all', 'Danh sách sân & Chi tiết', 'ri-football-line'],
+      ['pending', `Duyệt sân mới (${d.courts.filter((c) => !c.deletedAt && c.status === 'pending').length})`, 'ri-checkbox-circle-line'],
+      ['paused', 'Tạm ngưng sân vi phạm', 'ri-error-warning-line'],
+    ],
+    sub,
+  );
+}
+
+async function renderSitemapPayments() {
+  const sub = getAdminSub('payments', 'transactions');
+  if (sub === 'transactions') {
+    await renderInvoices();
+  } else if (sub === 'payouts') {
+    const data = await get('payouts', 'payouts');
+    actions().innerHTML = `<button type="button" id="po-new" class="${BTN}"><i class="ri-add-line"></i>Tạo phiếu đối soát</button>`;
+    actions().querySelector('#po-new').onclick = () => {
+      const m = modal('Tạo phiếu đối soát chuyển tiền chủ sân', `<form id="po-form" class="space-y-3">
+        <div><label class="${LABEL}">Chủ sân</label><select name="ownerId" class="${INPUT}">${data.owners.map((o) => `<option value="${o.id}" data-rev="${o.onlineRevenue}">${esc(o.name)} (Online: ${money(o.onlineRevenue)})</option>`).join('')}</select></div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="${LABEL}">Kỳ đối soát</label><input name="periodLabel" value="Tháng ${TODAY.slice(5, 7)}/${TODAY.slice(0, 4)}" class="${INPUT}"></div>
+          <div><label class="${LABEL}">Phí nền tảng (%)</label><input type="number" name="commissionRate" min="0" max="50" value="5" class="${INPUT}"></div>
+        </div>
+        <div><label class="${LABEL}">Doanh thu đối soát (đ)</label><input type="number" name="grossAmount" min="10000" step="10000" value="${data.owners[0]?.onlineRevenue || 1000000}" class="${INPUT}"></div>
+        <div><label class="${LABEL}">Ghi chú</label><input name="note" class="${INPUT}" placeholder="Số tài khoản nhận, mã giao dịch..."></div>
+      </form>`, `<button type="button" data-close class="${BTN_OUT}">Hủy</button><button type="button" data-ok class="${BTN}">Tạo phiếu</button>`, 'max-w-lg');
+      const sel = m.el.querySelector('[name=ownerId]');
+      sel.onchange = () => { m.el.querySelector('[name=grossAmount]').value = sel.selectedOptions[0]?.dataset.rev || 0; };
+      m.el.querySelector('[data-ok]').onclick = async () => {
+        const f = formData(m.el.querySelector('#po-form'));
+        if (await run(api('admin', 'payout_create', { ...f, ownerId: Number(f.ownerId), grossAmount: Number(f.grossAmount), commissionRate: Number(f.commissionRate) }), 'Đã tạo phiếu đối soát.', 'payouts')) m.close();
+      };
+    };
+    const pendingSum = data.payouts.filter((p) => p.status === 'pending').reduce((s, p) => s + p.netAmount, 0);
+    const doneSum = data.payouts.filter((p) => p.status === 'transferred').reduce((s, p) => s + p.netAmount, 0);
+    main().innerHTML = `
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-3 mb-5">
+      ${statCard('ri-time-line', 'Chờ chuyển chủ sân', money(pendingSum), `${data.payouts.filter((p) => p.status === 'pending').length} phiếu chờ`, 'accent')}
+      ${statCard('ri-checkbox-circle-line', 'Đã chuyển khoản', money(doneSum), `${data.payouts.filter((p) => p.status === 'transferred').length} phiếu hoàn tất`)}
+      ${statCard('ri-store-2-line', 'Chủ sân có tài khoản nhận', data.owners.filter((o) => o.bankAccount).length, `/${data.owners.length} chủ sân`, 'secondary')}
+    </div>
+    <section class="${CARD} overflow-hidden">
+      ${sectionTitle('Danh sách đối soát & chuyển tiền chủ sân')}
+      ${data.payouts.length ? table(['Chủ sân · Kỳ', '>Doanh thu', '>Phí sàn', '>Thực chuyển', 'Trạng thái', '>Thao tác'], data.payouts.map((p) => `<tr>
+        ${td(`<p class="font-semibold">${esc(p.ownerName)}</p><p class="text-xs text-foreground-500">${esc(p.periodLabel)}${p.note ? ` · ${esc(p.note)}` : ''}</p>`)}
+        ${td(money(p.grossAmount), 'text-right')}
+        ${td(`${money(p.commissionAmount)} (${p.commissionRate}%)`, 'text-right text-xs text-foreground-500')}
+        ${td(`<b class="text-primary-700">${money(p.netAmount)}</b>`, 'text-right')}
+        ${td(p.status === 'transferred' ? '<span class="rounded-full bg-primary-50 px-2 py-0.5 text-[11px] font-bold text-primary-700">Đã chuyển</span>' : '<span class="rounded-full bg-accent-100 px-2 py-0.5 text-[11px] font-bold text-accent-800">Chờ chuyển</span>')}
+        ${td(p.status === 'pending' ? `<button type="button" data-po-pay="${p.id}" class="${BTN_SM_PRI}"><i class="ri-check-double-line"></i>Xác nhận đã chuyển</button>` : `<span class="text-xs text-foreground-400">${p.transferredAt ? formatDateTime(p.transferredAt) : '—'}</span>`, 'text-right')}
+      </tr>`).join(''), 820) : `<div class="p-6">${emptyState('ri-bank-card-line', 'Chưa có phiếu đối soát')}</div>`}
+    </section>`;
+    on(main(), 'click', '[data-po-pay]', async (e, el) => {
+      const note = await askNote('Xác nhận đã chuyển tiền chủ sân', 'Mã tham chiếu / ghi chú chuyển khoản (không bắt buộc)', { confirm: 'Xác nhận đã chuyển' });
+      if (note !== null) run(api('admin', 'payout_transfer', { id: el.dataset.poPay, note }), 'Đã xác nhận chuyển tiền và gửi thông báo cho chủ sân.', 'payouts');
+    });
+  } else {
+    const data = await get('refunds_all', 'refunds_all');
+    main().innerHTML = `
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 mb-5">
+      ${statCard('ri-error-warning-line', 'Đơn hủy cần kiểm tra hoàn tiền', data.pending.length, 'Đơn đã hủy nhưng ghi nhận đã cọc/thanh toán', 'accent')}
+      ${statCard('ri-refund-2-line', 'Tổng tiền đã hoàn cọc', money(data.refunds.reduce((s, r) => s + r.amount, 0)), `${data.refunds.length} giao dịch hoàn tiền`)}
+    </div>
+    <section class="${CARD} mb-5 overflow-hidden">
+      ${sectionTitle(`Đơn hủy có cọc chờ hoàn (${data.pending.length})`)}
+      ${data.pending.length ? table(['Mã đơn', 'Khách hàng', 'Sân · Ngày', '>Tiền cọc', 'Lý do hủy'], data.pending.map((b) => `<tr>${td(`<span class="font-mono text-xs font-bold">${esc(b.code)}</span>`)}${td(`${esc(b.customerName)}<br><span class="text-xs text-foreground-500">${esc(b.customerPhone)}</span>`)}${td(`${esc(b.courtName)}<br><span class="text-xs text-foreground-500">${dateText(b.date)}</span>`)}${td(`<b class="text-accent-700">${money(b.depositAmount || b.totalPrice)}</b>`, 'text-right')}${td(`<span class="text-xs">${esc(b.cancelReason || b.rejectReason || '—')}</span>`)}</tr>`).join(''), 720) : `<p class="px-4 py-5 text-sm text-foreground-500">Không có yêu cầu hoàn tiền nào đang tồn đọng.</p>`}
+    </section>
+    <section class="${CARD} overflow-hidden">
+      ${sectionTitle(`Lịch sử hoàn tiền toàn hệ thống (${data.refunds.length})`)}
+      ${data.refunds.length ? table(['Mã đơn', 'Khách hàng', 'Sân', '>Số tiền hoàn', 'Phương thức', 'Thời gian'], data.refunds.map((r) => `<tr>${td(`<span class="font-mono text-xs font-bold">${esc(r.bookingCode)}</span>`)}${td(esc(r.customerName))}${td(esc(r.courtName))}${td(`<b class="text-primary-700">${money(r.amount)}</b>`, 'text-right')}${td(esc(r.method))}${td(`<span class="text-xs text-foreground-500">${formatDateTime(r.createdAt)}</span>`)}</tr>`).join(''), 720) : `<p class="px-4 py-5 text-sm text-foreground-500">Chưa có giao dịch hoàn tiền.</p>`}
+    </section>`;
+  }
+  mountAdminSubBar(
+    'payments',
+    [
+      ['transactions', 'Giao dịch toàn hệ thống', 'ri-receipt-line'],
+      ['payouts', 'Đối soát & chuyển tiền chủ sân', 'ri-exchange-dollar-line'],
+      ['refunds', 'Yêu cầu hoàn tiền', 'ri-refund-2-line'],
+    ],
+    sub,
+  );
+}
+
+async function renderSitemapContent() {
+  const sub = getAdminSub('content', 'contents');
+  if (sub === 'promotions') {
+    await renderPromotions();
+  } else {
+    await renderContent();
+  }
+  mountAdminSubBar(
+    'content',
+    [
+      ['contents', 'Banner, Tin tức, FAQ & Chính sách', 'ri-article-line'],
+      ['promotions', 'Mã giảm giá', 'ri-coupon-3-line'],
+    ],
+    sub,
+  );
+}
+
+let repDays = 30;
+async function renderSitemapReports() {
+  const d = await api('admin', 'reports_revenue', { days: repDays });
+  actions().innerHTML = `<div class="flex rounded-md border border-background-300 bg-white p-0.5">${[7, 30, 90].map((n) => `<button type="button" data-ad-days="${n}" class="cursor-pointer rounded px-3 py-1.5 text-xs font-semibold ${repDays === n ? 'bg-primary-500 text-white' : 'text-foreground-700'}">${n} ngày</button>`).join('')}</div><button type="button" id="ad-rep-csv" class="${BTN_OUT}"><i class="ri-file-excel-2-line"></i>Xuất Excel</button>`;
+  on(actions(), 'click', '[data-ad-days]', (e, el) => { repDays = Number(el.dataset.adDays); render(); });
+  actions().querySelector('#ad-rep-csv').onclick = () => downloadCsv([['Báo cáo doanh thu hệ thống', `${d.from} - ${d.to}`], [], ['Chủ sân', 'Số đơn', 'Doanh thu (VND)'], ...d.byOwner.map((o) => [o.name, o.bookings, o.revenue]), [], ['Sân', 'Môn', 'Số đơn', 'Doanh thu (VND)'], ...d.byCourt.map((c) => [c.name, c.sport, c.bookings, c.revenue])], `bao-cao-he-thong-${d.from}-${d.to}.csv`);
+  const entries = Object.entries(d.byDate || {});
+  const maxV = Math.max(1, ...entries.map(([, v]) => v));
+  const fbRev = d.bySport.football || 0;
+  const bdRev = d.bySport.badminton || 0;
+  main().innerHTML = `
+  <div class="grid grid-cols-2 gap-3 lg:grid-cols-4 mb-5">
+    ${statCard('ri-money-dollar-circle-line', `Doanh thu ${d.days} ngày`, money(d.totalRevenue), `${dateText(d.from)} – ${dateText(d.to)}`)}
+    ${statCard('ri-calendar-check-line', 'Tổng đơn hợp lệ', d.totalBookings, 'Đã xác nhận & hoàn thành', 'secondary')}
+    ${statCard('ri-scales-3-line', 'Trung bình / đơn', money(d.avgOrder), '', 'neutral')}
+    ${statCard('ri-football-line', 'Bóng đá / Cầu lông', `${d.totalRevenue ? Math.round((fbRev / d.totalRevenue) * 100) : 0}% / ${d.totalRevenue ? Math.round((bdRev / d.totalRevenue) * 100) : 0}%`, `${money(fbRev)} · ${money(bdRev)}`, 'accent')}
+  </div>
+  <section class="${CARD} mb-5">${sectionTitle(`Biểu đồ doanh thu theo ngày (${entries.length} ngày có đơn)`)}
+    <div class="p-4">${entries.length ? `<div class="flex h-52 items-end gap-1">${entries.map(([dt, v]) => `<div class="group flex h-full flex-1 flex-col justify-end" title="${dateText(dt)}: ${money(v)}"><div class="w-full rounded-t bg-primary-500 opacity-90 group-hover:opacity-100" style="height:${Math.max(4, Math.round((v / maxV) * 100))}%"></div></div>`).join('')}</div><div class="mt-2 flex gap-1 text-[10px] text-foreground-500">${entries.map(([dt], i) => `<span class="flex-1 text-center">${entries.length <= 12 || i % Math.ceil(entries.length / 8) === 0 ? dt.slice(5) : ''}</span>`).join('')}</div>` : '<p class="py-10 text-center text-sm text-foreground-500">Chưa có doanh thu trong khoảng thời gian này.</p>'}</div>
+  </section>
+  <div class="grid grid-cols-1 gap-5 lg:grid-cols-2">
+    <section class="${CARD} overflow-hidden">${sectionTitle('Doanh thu theo chủ sân')}${d.byOwner.length ? table(['Chủ sân', '>Đơn', '>Doanh thu'], d.byOwner.map((o) => `<tr>${td(`<b>${esc(o.name)}</b>`)}${td(o.bookings, 'text-right')}${td(`<b class="text-primary-700">${money(o.revenue)}</b>`, 'text-right')}</tr>`).join(''), 400) : '<p class="p-4 text-sm text-foreground-500">Chưa có dữ liệu.</p>'}</section>
+    <section class="${CARD} overflow-hidden">${sectionTitle('Top sân doanh thu cao nhất')}${d.byCourt.length ? table(['Sân', '>Đơn', '>Doanh thu'], d.byCourt.map((c) => `<tr>${td(`<b>${esc(c.name)}</b>`)}${td(c.bookings, 'text-right')}${td(`<b class="text-primary-700">${money(c.revenue)}</b>`, 'text-right')}</tr>`).join(''), 400) : '<p class="p-4 text-sm text-foreground-500">Chưa có dữ liệu.</p>'}</section>
+  </div>`;
+}
+
+async function renderSitemapAi() {
+  const cfg = await get('sys_settings', 'settings_get');
+  let qaList = Array.isArray(cfg.ai_custom_qa_list) ? [...cfg.ai_custom_qa_list] : [];
+  const quickText = (cfg.ai_quick_replies_list || []).join('\n');
+  main().innerHTML = `<div class="grid grid-cols-1 gap-5 lg:grid-cols-[1.15fr_1fr]">
+    <form id="ai-cfg-form" class="${CARD} p-6 space-y-4">
+      <div class="flex items-center justify-between gap-3"><h3 class="font-heading text-base font-bold text-foreground-950">Cấu hình Chatbot Trợ lý AI</h3>
+        <label class="inline-flex cursor-pointer items-center gap-2 text-xs font-bold text-primary-700"><input type="checkbox" name="ai_enabled" ${cfg.ai_enabled !== '0' ? 'checked' : ''} class="h-4 w-4 accent-primary-500">Bật Chatbot trên website</label></div>
+      <div><label class="${LABEL}">Tên hiển thị của Trợ lý AI</label><input name="ai_bot_name" value="${esc(cfg.ai_bot_name || '')}" class="${INPUT}"></div>
+      <div><label class="${LABEL}">Lời chào mở đầu</label><textarea name="ai_greeting" rows="2" class="${INPUT}">${esc(cfg.ai_greeting || '')}</textarea></div>
+      <div><label class="${LABEL}">Các nút gợi ý nhanh (mỗi dòng 1 câu)</label><textarea name="ai_quick_replies" rows="4" class="${INPUT}">${esc(quickText)}</textarea></div>
+      <div><label class="${LABEL}">Câu trả lời mặc định (khi AI chưa hiểu câu hỏi)</label><textarea name="ai_fallback_reply" rows="2" class="${INPUT}">${esc(cfg.ai_fallback_reply || '')}</textarea></div>
+      <div class="flex justify-end"><button type="submit" class="${BTN}"><i class="ri-save-line"></i>Lưu cấu hình Chatbot AI</button></div>
+    </form>
+    <section class="${CARD} p-6 space-y-4">
+      <div class="flex items-center justify-between gap-2"><h3 class="font-heading text-base font-bold text-foreground-950">Kịch bản Hỏi – Đáp tùy chỉnh (${qaList.length})</h3>
+        <button type="button" id="ai-qa-add" class="${BTN_SM_PRI}"><i class="ri-add-line"></i>Thêm kịch bản</button></div>
+      <p class="text-xs text-foreground-500">Khi khách gõ bất kỳ từ khóa nào khớp, Trợ lý AI sẽ ưu tiên trả lời đúng nội dung này ngay lập tức.</p>
+      <div id="ai-qa-list" class="space-y-2.5">${qaList.map((q, i) => `<div class="rounded-md border border-background-200 bg-background-50 p-3 text-xs">
+        <div class="flex items-start justify-between gap-2"><p class="font-bold text-primary-700"><i class="ri-key-2-line mr-1"></i>${esc(q.keywords)}</p><button type="button" data-qa-del="${i}" class="text-accent-700 hover:underline font-semibold">Xóa</button></div>
+        <p class="mt-1 text-foreground-700 leading-relaxed">${esc(q.answer)}</p>
+      </div>`).join('') || '<p class="text-xs text-foreground-400 italic">Chưa có kịch bản tùy chỉnh.</p>'}</div>
+    </section>
+  </div>`;
+  const saveQa = async () => {
+    delete C.sys_settings;
+    await run(api('admin', 'settings_save', { ai_custom_qa: qaList }), 'Đã cập nhật kịch bản Chatbot AI.', 'sys_settings');
+    render();
+  };
+  main().querySelector('#ai-cfg-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    const quick = f.ai_quick_replies.value.split('\n').map((s) => s.trim()).filter(Boolean);
+    delete C.sys_settings;
+    await run(api('admin', 'settings_save', {
+      ai_enabled: f.ai_enabled.checked ? '1' : '0',
+      ai_bot_name: f.ai_bot_name.value.trim(),
+      ai_greeting: f.ai_greeting.value.trim(),
+      ai_quick_replies: quick,
+      ai_fallback_reply: f.ai_fallback_reply.value.trim(),
+    }), 'Đã lưu cấu hình Chatbot AI (áp dụng ngay trên trang khách hàng).');
+  };
+  main().querySelector('#ai-qa-add').onclick = () => {
+    const m = modal('Thêm kịch bản Hỏi – Đáp AI', `<form id="qa-f" class="space-y-3">
+      <div><label class="${LABEL}">Từ khóa kích hoạt (cách nhau dấu phẩy)</label><input name="keywords" class="${INPUT}" placeholder="VD: giam gia, voucher, khuyen mai"></div>
+      <div><label class="${LABEL}">Câu trả lời của Chatbot</label><textarea name="answer" rows="3" class="${INPUT}" placeholder="Nhập câu trả lời tự động..."></textarea></div>
+    </form>`, `<button type="button" data-close class="${BTN_OUT}">Hủy</button><button type="button" data-ok class="${BTN}">Thêm</button>`, 'max-w-md');
+    m.el.querySelector('[data-ok]').onclick = async () => {
+      const f = formData(m.el.querySelector('#qa-f'));
+      if (!f.keywords || !f.answer) return toast('Nhập đủ từ khóa và câu trả lời.', 'error');
+      qaList.push({ keywords: f.keywords, answer: f.answer });
+      m.close();
+      await saveQa();
+    };
+  };
+  on(main(), 'click', '[data-qa-del]', async (e, el) => {
+    qaList.splice(Number(el.dataset.qaDel), 1);
+    await saveQa();
+  });
+}
+
+async function renderSitemapSettings() {
+  const sub = getAdminSub('settings', 'general');
+  if (sub === 'audit') {
+    await renderAudit();
+  } else {
+    const cfg = await get('sys_settings', 'settings_get');
+    if (sub === 'general') {
+      main().innerHTML = `<form id="sys-gen-form" class="${CARD} p-6 space-y-4 max-w-2xl">
+        <h3 class="font-heading text-base font-bold text-foreground-950">Thông tin website</h3>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div><label class="${LABEL}">Tên website</label><input name="site_name" value="${esc(cfg.site_name || '')}" class="${INPUT}"></div>
+          <div><label class="${LABEL}">Hotline hỗ trợ</label><input name="hotline" value="${esc(cfg.hotline || '')}" class="${INPUT}"></div>
+          <div><label class="${LABEL}">Email hỗ trợ</label><input name="support_email" value="${esc(cfg.support_email || '')}" class="${INPUT}"></div>
+          <div><label class="${LABEL}">Địa chỉ trụ sở</label><input name="site_address" value="${esc(cfg.site_address || '')}" class="${INPUT}"></div>
+        </div>
+        <div class="flex justify-end"><button type="submit" class="${BTN}"><i class="ri-save-line"></i>Lưu thông tin website</button></div>
+      </form>`;
+      main().querySelector('#sys-gen-form').onsubmit = async (e) => {
+        e.preventDefault();
+        delete C.sys_settings;
+        await run(api('admin', 'settings_save', formData(e.target)), 'Đã lưu thông tin website.');
+      };
+    } else if (sub === 'payment') {
+      main().innerHTML = `<form id="sys-pay-form" class="${CARD} p-6 space-y-4 max-w-2xl">
+        <h3 class="font-heading text-base font-bold text-foreground-950">Cổng thanh toán VietQR &amp; Tiền cọc</h3>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div><label class="${LABEL}">Mã BIN ngân hàng (VietQR)</label><input name="bank_id" value="${esc(cfg.bank_id || '')}" class="${INPUT}"></div>
+          <div><label class="${LABEL}">Tên ngân hàng</label><input name="bank_name" value="${esc(cfg.bank_name || '')}" class="${INPUT}"></div>
+          <div><label class="${LABEL}">Số tài khoản nhận cọc</label><input name="bank_account" value="${esc(cfg.bank_account || '')}" class="${INPUT}"></div>
+          <div><label class="${LABEL}">Tên chủ tài khoản</label><input name="bank_holder" value="${esc(cfg.bank_holder || '')}" class="${INPUT}"></div>
+          <div><label class="${LABEL}">Tỷ lệ cọc mặc định (%)</label><input type="number" name="deposit_rate" min="10" max="100" value="${esc(cfg.deposit_rate || '30')}" class="${INPUT}"></div>
+          <div><label class="${LABEL}">Thời gian giữ chỗ chờ cọc (phút)</label><input type="number" name="hold_minutes" min="1" max="30" value="${esc(cfg.hold_minutes || '5')}" class="${INPUT}"></div>
+        </div>
+        <div class="flex justify-end"><button type="submit" class="${BTN}"><i class="ri-save-line"></i>Lưu cổng thanh toán</button></div>
+      </form>`;
+      main().querySelector('#sys-pay-form').onsubmit = async (e) => {
+        e.preventDefault();
+        delete C.sys_settings;
+        await run(api('admin', 'settings_save', formData(e.target)), 'Đã lưu cấu hình cổng thanh toán.');
+      };
+    } else {
+      main().innerHTML = `<form id="sys-pol-form" class="${CARD} p-6 space-y-4 max-w-2xl">
+        <h3 class="font-heading text-base font-bold text-foreground-950">Chính sách chung toàn hệ thống</h3>
+        <div><label class="${LABEL}">Mốc cho phép hủy miễn phí trước giờ chơi (giờ)</label><input type="number" name="cancel_cutoff_hours" min="1" max="48" value="${esc(cfg.cancel_cutoff_hours || '4')}" class="${INPUT} max-w-xs"></div>
+        <div><label class="${LABEL}">Nội dung chính sách đặt, hủy, hoàn cọc (hiển thị tại trang Giới thiệu)</label><textarea name="general_policy" rows="6" class="${INPUT}">${esc(cfg.general_policy || '')}</textarea></div>
+        <div class="flex justify-end"><button type="submit" class="${BTN}"><i class="ri-save-line"></i>Lưu chính sách chung</button></div>
+      </form>`;
+      main().querySelector('#sys-pol-form').onsubmit = async (e) => {
+        e.preventDefault();
+        delete C.sys_settings;
+        await run(api('admin', 'settings_save', formData(e.target)), 'Đã lưu chính sách chung.');
+      };
+    }
+  }
+  mountAdminSubBar(
+    'settings',
+    [
+      ['general', 'Thông tin website', 'ri-global-line'],
+      ['payment', 'Cổng thanh toán', 'ri-bank-card-line'],
+      ['policy', 'Chính sách chung', 'ri-shield-check-line'],
+      ['audit', 'Nhật ký thao tác', 'ri-history-line'],
+    ],
+    sub,
+  );
+}
+
+// =====================================================================
+const RENDER = {
+  overview: renderOverview,
+  accounts: renderSitemapAccounts,
+  owners: renderOwners,
+  courts: renderSitemapCourts,
+  bookings: renderBookings,
+  payments: renderSitemapPayments,
+  invoices: renderInvoices,
+  categories: renderCategories,
+  content: renderSitemapContent,
+  moderation: renderModeration,
+  promotions: renderPromotions,
+  reports: renderSitemapReports,
+  ai: renderSitemapAi,
+  settings: renderSitemapSettings,
+  audit: renderAudit,
+};
 
 async function render() {
   actions().innerHTML = '';
@@ -479,6 +1615,8 @@ api('admin', 'overview').then((d) => {
   const set = (k, n) => { const el = document.querySelector(`[data-badge="${k}"]`); if (el && n) { el.textContent = n; el.classList.remove('hidden'); } };
   set('bookings', d.statuses.pending);
   set('moderation', d.totals.openReports + d.totals.pendingReviews);
-}).catch(() => {});
+  set('accounts', d.totals.pendingOwnerRequests);
+  set('owners', d.totals.pendingOwnerRequests);
+}).catch(() => { });
 
 render();

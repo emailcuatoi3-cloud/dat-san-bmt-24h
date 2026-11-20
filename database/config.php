@@ -2,6 +2,16 @@
 /**
  * CẤU HÌNH CHUNG — chỉ cần sửa file này khi triển khai.
  */
+// ---- Đọc file .env ở thư mục gốc dự án ----
+(function (string $file): void {
+    if (!is_file($file)) return;
+    foreach (file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        $line = trim($line);
+        if ($line === '' || $line[0] === '#' || !str_contains($line, '=')) continue;
+        [$key, $value] = array_map('trim', explode('=', $line, 2));
+        if (getenv($key) === false) putenv("$key=" . trim($value, "\"'"));
+    }
+})(__DIR__ . '/../.env');
 
 // ---- Kết nối MySQL / MariaDB ----
 define('DB_HOST', getenv('DB_HOST') ?: '127.0.0.1');
@@ -24,32 +34,17 @@ define('BANK_ACCOUNT_NAME', 'DAT SAN BMT 24H');
 /** Tỷ lệ cọc mặc định khi khách chọn "cọc 30%" */
 define('DEPOSIT_RATE', 0.3);
 /** Số phút giữ sân trong lúc khách quét mã chuyển khoản */
-define('HOLD_MINUTES', 10);
+define('HOLD_MINUTES', 5);
 /** Số giây hệ thống chờ để đối soát giao dịch rồi tự động xác nhận tiền cọc */
 define('AUTO_CONFIRM_SECONDS', 5);
 /** Chỉ cho hủy khi còn cách giờ chơi từ số giờ này trở lên */
 define('CANCEL_CUTOFF_HOURS', 4);
 
-// ---- Cấu hình chống spam đặt sân & giữ chỗ ảo ----
-/** Số đơn giữ chỗ (pending chưa cọc) tối đa của 1 số điện thoại tại một thời điểm */
-define('MAX_ACTIVE_HOLDS_PER_PHONE', 1);
-/** Số lượt đặt sân tối đa trong cùng 1 ngày chơi của 1 số điện thoại */
-define('MAX_BOOKINGS_PER_DATE_PER_PHONE', 1);
-/** Số lượt tạo đơn tối đa trong vòng 24 giờ của 1 số điện thoại */
-define('MAX_BOOKINGS_CREATED_PER_DAY', 2);
-/** Thời gian chờ tối thiểu (giây) giữa 2 lần bấm đặt sân từ cùng một phiên/IP */
-define('BOOKING_COOLDOWN_SECONDS', 15);
-/** Số lần để đơn giữ sân bị hủy do hết hạn tối đa trong ngày trước khi bị tạm khóa */
-define('MAX_EXPIRED_HOLDS_PER_DAY', 3);
-/** Thời gian tạm khóa (phút) đối với SĐT có dấu hiệu spam bùng cọc liên tiếp */
-define('SPAM_COOLDOWN_MINUTES', 60);
-/**
- * Tự động xác nhận tiền cọc sau AUTO_CONFIRM_SECONDS giây (bản demo).
- * Để CHỐNG SPAM triệt để: Đặt false -> khách bấm 'Tôi đã chuyển khoản', đơn ở trạng thái
- * 'Chờ chủ sân duyệt'. Chủ sân kiểm tra tiền vào tài khoản rồi bấm 'Duyệt' thì vé mới mở.
- */
-define('ENABLE_AUTO_CONFIRM_PAYMENT', false);
-/** Danh sách số điện thoại bị chặn đặt sân trực tuyến */
-define('BLACKLISTED_PHONES', []);
+// ---- Key API (điền trong .env) ----
+define('GOOGLE_CLIENT_ID', getenv('GOOGLE_CLIENT_ID') ?: '');
+define('GOOGLE_CLIENT_SECRET', getenv('GOOGLE_CLIENT_SECRET') ?: '');
+define('FACEBOOK_APP_ID', getenv('FACEBOOK_APP_ID') ?: '');
+define('FACEBOOK_APP_SECRET', getenv('FACEBOOK_APP_SECRET') ?: '');
+define('CHATBOT_API_KEY', getenv('CHATBOT_API_KEY') ?: '');
 
 date_default_timezone_set('Asia/Ho_Chi_Minh');

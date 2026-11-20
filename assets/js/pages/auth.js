@@ -122,7 +122,7 @@ if (registerForm) {
     $('[data-agree-text]', registerForm).textContent = owner
       ? 'và chính sách hoa hồng của Đặt Sân BMT 24H.'
       : 'và chính sách bảo mật của Đặt Sân BMT 24H.';
-    $('[data-submit-label]', registerForm).textContent = owner ? 'Tạo tài khoản chủ sân' : 'Tạo tài khoản';
+    $('[data-submit-label]', registerForm).textContent = owner ? 'Gửi đăng ký chủ sân' : 'Tạo tài khoản';
   };
   $$('[data-role]', registerForm).forEach((btn) =>
     btn.addEventListener('click', () => {
@@ -140,6 +140,7 @@ if (registerForm) {
     const phone = f.phone.value.replace(/[^\d+]/g, '');
     const errors = {};
     if (owner && f.businessName.value.trim().length < 3) errors.businessName = 'Vui lòng nhập tên sân hoặc cơ sở của bạn.';
+    if (owner && f.address.value.trim().length < 8) errors.address = 'Vui lòng nhập địa chỉ sân đầy đủ (số nhà, đường, phường).';
     if (f.name.value.trim().length < 2) errors.name = owner ? 'Vui lòng nhập họ tên người phụ trách.' : 'Vui lòng nhập họ tên đầy đủ.';
     if (!EMAIL_RE.test(email)) errors.email = 'Email chưa đúng định dạng.';
     if (!/^0\d{9,10}$/.test(phone) && !/^\+84\d{9,10}$/.test(phone)) errors.phone = 'Số điện thoại chưa đúng (ví dụ 0912 345 678).';
@@ -155,6 +156,10 @@ if (registerForm) {
       const data = await api('auth', 'register', {
         role: f.role.value,
         businessName: f.businessName.value.trim(),
+        address: f.address.value.trim(),
+        sports: f.sports.value,
+        courtCount: Number(f.courtCount.value) || 1,
+        note: f.note.value.trim(),
         name: f.name.value.trim(),
         phone,
         email,

@@ -18,9 +18,8 @@ function paintFaq() {
     $('button', item).setAttribute('aria-expanded', open ? 'true' : 'false');
     $('[data-faq-body]', item).classList.toggle('hidden', !open);
     const icon = $('[data-faq-icon]', item);
-    icon.className = `flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors ${
-      open ? 'bg-primary-500 text-white' : 'bg-background-200 text-foreground-600'
-    }`;
+    icon.className = `flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors ${open ? 'bg-primary-500 text-white' : 'bg-background-200 text-foreground-600'
+      }`;
     icon.innerHTML = `<i class="${open ? 'ri-subtract-line' : 'ri-add-line'}" aria-hidden="true"></i>`;
   });
 }

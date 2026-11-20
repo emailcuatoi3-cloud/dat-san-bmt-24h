@@ -25,7 +25,8 @@ run_api([
         if ($u['status'] === 'suspended') fail('Tài khoản này đang bị tạm khóa. Vui lòng liên hệ quản trị viên để được hỗ trợ.');
         login_user((int) $u['id']);
         $redirect = in_str('redirect');
-        $target = ($redirect && $redirect[0] === '/' && strpos($redirect, '//') !== 0) ? $redirect : home_of_role($u['role']);
+        $target = get_auth_redirect_target($redirect !== '' ? $redirect : null);
+        unset($_SESSION['auth_redirect']);
         return ['redirect' => url($target), 'role' => $u['role']];
     },
 
@@ -42,16 +43,29 @@ run_api([
         if (!preg_match('/^0\d{9,10}$/', $phone) && !preg_match('/^\+84\d{9,10}$/', $phone)) fail('Số điện thoại chưa đúng (ví dụ 0912 345 678).');
         if (strlen($password) < 6) fail('Mật khẩu cần ít nhất 6 ký tự.');
         if (q_val('SELECT id FROM users WHERE email = ?', [$email])) fail('Email này đã có tài khoản. Hãy đăng nhập hoặc dùng email khác.');
+        if ($role === 'owner' && mb_strlen(trim(in_str('address'))) < 8) fail('Vui lòng nhập địa chỉ sân đầy đủ (số nhà, đường, phường).');
+        // Chủ sân mới được tạo như tài khoản khách; quyền chủ sân chỉ mở khi quản trị viên duyệt yêu cầu
         q('INSERT INTO users (email, password_hash, full_name, phone, role, business_name, favorites) VALUES (?,?,?,?,?,?,?)',
-            [$email, password_hash($password, PASSWORD_DEFAULT), $name, $phone, $role, $role === 'owner' ? $business : '', '[]']);
+            [$email, password_hash($password, PASSWORD_DEFAULT), $name, $phone, 'customer', '', '[]']);
         $id = (int) db()->lastInsertId();
         login_user($id);
-        return ['redirect' => url(home_of_role($role))];
+        if ($role === 'owner') {
+            create_owner_request(q_one('SELECT * FROM users WHERE id = ?', [$id]), input() + ['contactName' => $name]);
+            return ['redirect' => url('/dang-ky-chu-san')];
+        }
+        $target = get_auth_redirect_target(in_str('redirect') ?: null);
+        unset($_SESSION['auth_redirect']);
+        return ['redirect' => url($target)];
     },
 
     'logout' => function () {
         logout_user();
         return ['redirect' => url('/')];
+    },
+
+    'stop_impersonate' => function () {
+        stop_impersonating();
+        return ['redirect' => url('/quan-tri?tab=accounts')];
     },
 
     'me' => function () {

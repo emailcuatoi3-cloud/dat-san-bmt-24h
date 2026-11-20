@@ -1,16 +1,31 @@
 /** Trang tài khoản khách hàng: tổng quan, đơn sắp tới, lịch sử, hóa đơn, sân yêu thích, hồ sơ. */
-import { $, $$, APP, PAGE, api, esc, url, toast, openModal, statusBadge, setBusy, formatVnd, loadingBlock } from '../core/ui.js';
+import { $, $$, APP, PAGE, api, esc, url, toast, openModal, statusBadge, setBusy, formatVnd, loadingBlock, copyText, formatDateTime } from '../core/ui.js';
 import { bindFavoriteButtons, courtCard, getFavorites } from '../core/components.js';
 import { openReviewModal } from '../core/reviewModal.js';
 import { ticketData, ticketQrUrl, downloadTicket } from '../core/ticket.js';
 import { invoiceBadge, openInvoiceModal, exportInvoices, slotRange } from '../core/invoice.js';
 import { formatLongDate, formatRelativeDay, formatShortDate, isTodayOrLater, parseIsoDate, slotEndTime } from '../lib/format.js';
+import { formatCountdown, remainingHoldSeconds } from '../lib/booking.js';
 import { readMyBookingCodes, rememberBookingCode } from '../lib/myBookings.js';
 import { CANCEL_CUTOFF_HOURS, cancelLockedNotice, cancelPolicyFull, formatCancelDeadline, isBeforeCancelCutoff } from '../lib/cancelPolicy.js';
 import { HOTLINE } from '../lib/payment.js';
+import { WEEKDAY_SHORT } from '../lib/promotions.js';
 
 const user = APP.user;
-const st = { tab: PAGE.tab, bookings: [], reviewed: new Set(), loading: true, error: '', historyFilter: 'all', invoices: null, invoiceFilter: 'all' };
+const initTab = PAGE.tab === 'upcoming' || PAGE.tab === 'overview' ? 'history' : PAGE.tab;
+const st = {
+  tab: initTab,
+  bookings: [],
+  reviewed: new Set(),
+  loading: true,
+  error: '',
+  historyFilter: PAGE.tab === 'upcoming' ? 'upcoming' : 'all',
+  invoices: null,
+  invoiceFilter: 'all',
+  recurring: null,
+  vouchers: null,
+  notifications: null,
+};
 const main = $('#account-main');
 
 // ---------------- Dữ liệu ----------------
@@ -48,15 +63,22 @@ const btn = (attrs, icon, label, cls) => `<button type="button" ${attrs} class="
 const emptyState = (icon, title, desc) => `<div class="flex flex-col items-center justify-center rounded-lg border border-dashed border-background-300 bg-white px-6 py-12 text-center"><span class="flex h-14 w-14 items-center justify-center rounded-full bg-background-100 text-foreground-400"><i class="${icon} text-2xl" aria-hidden="true"></i></span><p class="mt-4 font-heading text-base font-bold text-foreground-950">${title}</p><p class="mt-1.5 max-w-md text-sm leading-relaxed text-foreground-600">${desc}</p><a href="${url('/tim-san')}" class="mt-5 inline-flex items-center gap-1.5 whitespace-nowrap rounded-md bg-primary-500 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-primary-600">Tìm sân ngay</a></div>`;
 
 function bookingItem(b) {
-  const active = b.status === 'pending' || b.status === 'confirmed';
-  const canCancel = active && isBeforeCancelCutoff(b.date, b.slots);
+  const isApprovedWaitingDeposit = Boolean(b.approvedAt && b.paymentStatus === 'unpaid' && b.status !== 'cancelled');
+  const isPaidOrDeposited = ['paid', 'deposit_paid'].includes(b.paymentStatus);
+  const active = (b.status === 'pending' || b.status === 'confirmed') && !isApprovedWaitingDeposit;
+  const canCancel = (active || isApprovedWaitingDeposit) && isBeforeCancelCutoff(b.date, b.slots);
   const locked = active && isTodayOrLater(b.date) && !canCancel;
+  const secondsLeft = isApprovedWaitingDeposit ? remainingHoldSeconds(b.holdExpiresAt) : 0;
   return `<article class="overflow-hidden rounded-lg border border-background-200 bg-white transition-colors hover:border-primary-200"><div class="flex flex-col sm:flex-row">
     <div class="relative h-[160px] w-full shrink-0 overflow-hidden bg-background-100 sm:h-auto sm:min-h-[150px] sm:w-[190px]"><img src="${esc(b.image)}" alt="${esc(b.courtName)}" loading="lazy" class="h-full w-full object-cover object-top">
       <span class="absolute left-2.5 top-2.5 inline-flex items-center gap-1 rounded-full bg-background-50/90 px-2 py-0.5 text-[11px] font-semibold text-foreground-950 backdrop-blur-sm"><i class="${b.sport === 'football' ? 'ri-football-line' : 'ri-ping-pong-line'} text-primary-600" aria-hidden="true"></i>${esc(b.sportLabel)}</span></div>
     <div class="flex min-w-0 flex-1 flex-col gap-2.5 p-4">
       <div class="flex flex-wrap items-start justify-between gap-2">
-        <div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><h3 class="font-heading text-base font-bold text-foreground-950">${esc(b.courtName)}</h3>${statusBadge(b.status)}</div><p class="mt-1 flex items-start gap-1.5 text-xs text-foreground-500"><i class="ri-map-pin-line mt-0.5" aria-hidden="true"></i><span class="line-clamp-1">${esc(b.address)}</span></p></div>
+        <div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><h3 class="font-heading text-base font-bold text-foreground-950">${esc(b.courtName)}</h3>
+          ${isApprovedWaitingDeposit
+            ? `<span class="inline-flex items-center gap-1.5 rounded-full border border-accent-300 bg-accent-50 px-2.5 py-0.5 text-[11px] font-bold text-accent-900 animate-pulse"><span class="h-1.5 w-1.5 rounded-full bg-accent-500"></span>Chờ chuyển cọc (<span data-countdown="${esc(b.holdExpiresAt || '')}">${formatCountdown(secondsLeft)}</span>)</span>`
+            : statusBadge(b.status)}
+        </div><p class="mt-1 flex items-start gap-1.5 text-xs text-foreground-500"><i class="ri-map-pin-line mt-0.5" aria-hidden="true"></i><span class="line-clamp-1">${esc(b.address)}</span></p></div>
         <a href="${url(`/don-dat-san/${b.code}`)}" title="Mở trang chi tiết đơn" class="inline-flex items-center gap-1 rounded-md bg-background-100 px-2 py-1 font-mono text-[11px] font-semibold text-foreground-600 transition-colors hover:bg-primary-50 hover:text-primary-800">${esc(b.code)}<i class="ri-arrow-right-up-line text-[11px]" aria-hidden="true"></i></a>
       </div>
       <dl class="grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-2">
@@ -65,12 +87,26 @@ function bookingItem(b) {
         <div class="flex items-center gap-1.5 text-xs text-foreground-700"><i class="ri-wallet-3-line text-foreground-400" aria-hidden="true"></i><dd class="font-semibold text-primary-700">${formatVnd(b.totalPrice)}</dd></div>
         <div class="flex items-center gap-1.5 text-xs text-foreground-700"><i class="ri-bank-card-line text-foreground-400" aria-hidden="true"></i><dd>${esc(b.payment)}</dd></div>
       </dl>
-      ${active && isTodayOrLater(b.date) ? `<p class="flex items-center gap-1.5 rounded-md bg-accent-50 px-2.5 py-1.5 text-[11px] font-semibold text-accent-800"><i class="ri-alarm-line" aria-hidden="true"></i>${formatRelativeDay(b.date)} • ${b.status === 'pending' ? 'Đang chờ chủ sân xác nhận' : 'Chủ sân đã xác nhận'}</p>` : ''}
+      ${isApprovedWaitingDeposit ? `
+        <div class="rounded-lg border border-accent-300 bg-accent-50/90 p-3 text-xs text-accent-950 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+          <div class="flex items-center gap-2">
+            <i class="ri-alarm-warning-line text-lg text-accent-700 animate-pulse shrink-0" aria-hidden="true"></i>
+            <div>
+              <p class="font-bold text-accent-950">Chủ sân đã duyệt! Vui lòng chuyển cọc để hoàn tất giữ sân.</p>
+              <p class="text-[11px] text-accent-800">Quá thời gian giữ sân, đơn sẽ tự động hủy nếu chưa thanh toán.</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5 shrink-0 rounded-md bg-white px-3 py-1.5 border border-accent-300 shadow-sm">
+            <span class="text-[11px] font-semibold text-accent-800">Thời gian giữ sân:</span>
+            <span class="font-mono text-sm font-extrabold text-accent-700" data-countdown="${esc(b.holdExpiresAt || '')}">${formatCountdown(secondsLeft)}</span>
+          </div>
+        </div>` : active && isTodayOrLater(b.date) ? `<p class="flex items-center gap-1.5 rounded-md bg-accent-50 px-2.5 py-1.5 text-[11px] font-semibold text-accent-800"><i class="ri-alarm-line" aria-hidden="true"></i>${formatRelativeDay(b.date)} • ${b.status === 'pending' ? 'Đang chờ chủ sân xác nhận' : 'Chủ sân đã xác nhận'}</p>` : ''}
       ${locked ? `<p class="flex items-start gap-1.5 rounded-md bg-background-100 px-2.5 py-1.5 text-[11px] font-medium text-foreground-600"><i class="ri-lock-2-line mt-0.5" aria-hidden="true"></i>${cancelLockedNotice}</p>` : ''}
       ${b.status === 'cancelled' && b.cancelReason ? `<p class="flex items-start gap-1.5 rounded-md bg-background-100 px-2.5 py-1.5 text-[11px] text-foreground-600"><i class="ri-information-line mt-0.5" aria-hidden="true"></i>Lý do hủy: ${esc(b.cancelReason)}</p>` : ''}
       <div class="mt-auto flex flex-wrap items-center gap-2 pt-1">
+        ${isApprovedWaitingDeposit ? `<a href="${url(`/don-dat-san/${b.code}`)}" class="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md bg-accent-500 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-accent-600 animate-pulse"><i class="ri-bank-card-line text-sm"></i>Chuyển cọc ngay (<span data-countdown="${esc(b.holdExpiresAt || '')}">${formatCountdown(secondsLeft)}</span>)</a>` : ''}
         ${btn(`data-view="${b.id}"`, 'ri-file-list-3-line', 'Xem chi tiết', 'border border-background-300 bg-background-200 text-foreground-950 hover:border-primary-400')}
-        ${btn(`data-view="${b.id}"`, 'ri-qr-code-line', 'Vé QR', 'border border-primary-200 bg-primary-50 text-primary-800 hover:border-primary-400')}
+        ${isPaidOrDeposited ? btn(`data-view="${b.id}"`, 'ri-qr-code-line', 'Vé QR', 'border border-primary-200 bg-primary-50 text-primary-800 hover:border-primary-400') : ''}
         ${canCancel ? btn(`data-cancel="${b.id}"`, 'ri-close-circle-line', 'Hủy đơn', 'border border-accent-300 text-accent-800 hover:bg-accent-50') : ''}
         ${b.status === 'completed' ? (st.reviewed.has(b.code) ? '<span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md bg-primary-50 px-3 py-2 text-xs font-semibold text-primary-700"><i class="ri-checkbox-circle-line" aria-hidden="true"></i>Đã đánh giá</span>' : btn(`data-review="${b.id}"`, 'ri-star-smile-line', 'Đánh giá sân', 'border border-accent-300 bg-accent-50 text-accent-800 hover:bg-accent-100')) : ''}
         ${b.status === 'completed' || b.status === 'cancelled' ? `<a href="${url(`/dat-san/${b.courtSlug}`)}" class="ml-auto inline-flex items-center gap-1.5 whitespace-nowrap rounded-md bg-primary-500 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-600"><i class="ri-refresh-line" aria-hidden="true"></i>Đặt lại sân</a>` : ''}
@@ -140,18 +176,24 @@ function renderUpcoming(g) {
 }
 
 function renderHistory(g) {
-  const list = g.history.filter((b) => st.historyFilter === 'all' || b.status === st.historyFilter);
+  const allOrdered = [...g.upcoming, ...g.history];
+  const list =
+    st.historyFilter === 'upcoming'
+      ? g.upcoming
+      : st.historyFilter === 'all'
+        ? allOrdered
+        : allOrdered.filter((b) => b.status === st.historyFilter);
   const chip = (icon, label, value) => `<div class="flex items-center gap-2 rounded-md bg-background-50 px-3 py-2"><i class="${icon}" aria-hidden="true"></i><span class="text-xs text-foreground-600">${label}: <span class="font-semibold text-foreground-950">${value}</span></span></div>`;
   return `<div class="flex flex-col gap-4">
     <div class="rounded-lg border border-background-200 bg-white p-5">
-      <div class="flex flex-wrap items-end justify-between gap-3"><div><h2 class="font-heading text-lg font-bold text-foreground-950">Lịch sử đặt sân</h2><p class="mt-1 text-sm text-foreground-600">Tổng ${g.history.length} đơn đã hoàn thành hoặc đã hủy. Bấm vào từng đơn để xem chi tiết.</p></div>
-        <div class="inline-flex items-center gap-1 rounded-full bg-background-100 p-1">${[['all', 'Tất cả'], ['completed', 'Hoàn thành'], ['cancelled', 'Đã hủy']].map(([v, l]) => `<button type="button" data-hfilter="${v}" class="cursor-pointer whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${st.historyFilter === v ? 'bg-white text-foreground-950' : 'text-foreground-600 hover:text-foreground-950'}">${l}</button>`).join('')}</div></div>
-      <div class="mt-4 flex flex-wrap gap-2 border-t border-background-200 pt-4">${chip('ri-checkbox-circle-line text-primary-600', 'Hoàn thành', `${g.completedCount} đơn`)}${chip('ri-time-line text-secondary-700', 'Tổng giờ chơi', `${g.totalHours} giờ`)}${chip('ri-close-circle-line text-accent-600', 'Đã hủy', `${g.history.filter((b) => b.status === 'cancelled').length} đơn`)}${chip('ri-wallet-3-line text-foreground-500', 'Tổng chi', formatVnd(g.totalSpent))}</div>
+      <div class="flex flex-wrap items-end justify-between gap-3"><div><h2 class="font-heading text-lg font-bold text-foreground-950">Lịch sử đặt sân</h2><p class="mt-1 text-sm text-foreground-600">Tổng ${allOrdered.length} đơn (${g.upcoming.length} sắp tới, ${g.history.length} lịch sử). Bấm từng đơn để xem chi tiết &amp; vé QR.</p></div>
+        <div class="inline-flex flex-wrap items-center gap-1 rounded-full bg-background-100 p-1">${[['all', 'Tất cả'], ['upcoming', 'Sắp tới'], ['completed', 'Hoàn thành'], ['cancelled', 'Đã hủy']].map(([v, l]) => `<button type="button" data-hfilter="${v}" class="cursor-pointer whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${st.historyFilter === v ? 'bg-white text-foreground-950' : 'text-foreground-600 hover:text-foreground-950'}">${l}</button>`).join('')}</div></div>
+      <div class="mt-4 flex flex-wrap gap-2 border-t border-background-200 pt-4">${chip('ri-calendar-event-line text-primary-600', 'Đơn sắp tới', `${g.upcoming.length} đơn`)}${chip('ri-checkbox-circle-line text-primary-600', 'Hoàn thành', `${g.completedCount} đơn`)}${chip('ri-time-line text-secondary-700', 'Tổng giờ chơi', `${g.totalHours} giờ`)}${chip('ri-wallet-3-line text-foreground-500', 'Tổng chi', formatVnd(g.totalSpent))}</div>
     </div>
     ${lookupHtml}
     ${loadState(!list.length)}
-    ${list.length ? `<div class="flex flex-col gap-3">${list.map(bookingItem).join('')}</div>` : st.loading ? '' : emptyState('ri-history-line', 'Không có đơn phù hợp', 'Chưa có đơn nào ở trạng thái này. Hãy chọn bộ lọc khác để xem toàn bộ lịch sử đặt sân.')}
-    <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-background-200 bg-white p-4"><p class="text-xs text-foreground-600">Cần xem lại tiền sân, tiền cọc và khoản còn phải trả của từng lượt chơi? Mở mục Hóa đơn của tôi.</p><a href="${url('/tai-khoan?tab=invoices')}" data-goto="invoices" class="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border border-background-300 px-3.5 py-2 text-xs font-semibold text-foreground-800 transition-colors hover:border-primary-400 hover:text-primary-700"><i class="ri-receipt-line" aria-hidden="true"></i>Xem hóa đơn của tôi</a></div>
+    ${list.length ? `<div class="flex flex-col gap-3">${list.map(bookingItem).join('')}</div>` : st.loading ? '' : emptyState('ri-history-line', 'Không có đơn phù hợp', 'Chưa có đơn nào ở trạng thái này. Hãy chọn bộ lọc khác hoặc đặt sân mới nhé.')}
+    <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-background-200 bg-white p-4"><p class="text-xs text-foreground-600">Cần xem bảng kê chi tiết tiền sân, tiền cọc và tải file CSV? Mở mục Hóa đơn của tôi.</p><a href="${url('/tai-khoan?tab=invoices')}" data-goto="invoices" class="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border border-background-300 px-3.5 py-2 text-xs font-semibold text-foreground-800 transition-colors hover:border-primary-400 hover:text-primary-700"><i class="ri-receipt-line" aria-hidden="true"></i>Xem hóa đơn của tôi</a></div>
   </div>`;
 }
 
@@ -197,24 +239,201 @@ function renderFavorites() {
 
 function renderProfile() {
   if (!user)
-    return `<div class="rounded-lg border border-background-200 bg-white p-6 text-center"><span class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary-50 text-primary-600"><i class="ri-user-settings-line text-2xl" aria-hidden="true"></i></span><p class="mt-4 font-heading text-base font-bold text-foreground-950">Đăng nhập để cập nhật thông tin cá nhân</p><p class="mt-1.5 text-sm text-foreground-600">Bạn vẫn có thể đặt sân không cần tài khoản. Tạo tài khoản giúp lưu lịch sử và sân yêu thích trên mọi thiết bị.</p><div class="mt-5 flex justify-center gap-2"><a href="${url('/dang-nhap?redirect=/tai-khoan?tab=profile')}" class="rounded-md bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-600">Đăng nhập</a><a href="${url('/dang-ky')}" class="rounded-md border border-background-300 px-4 py-2.5 text-sm font-semibold text-foreground-800 hover:border-primary-400">Tạo tài khoản</a></div></div>`;
+    return `<div class="rounded-lg border border-background-200 bg-white p-6 text-center"><span class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary-50 text-primary-600"><i class="ri-user-settings-line text-2xl" aria-hidden="true"></i></span><p class="mt-4 font-heading text-base font-bold text-foreground-950">Đăng nhập để cập nhật hồ sơ cá nhân</p><p class="mt-1.5 text-sm text-foreground-600">Tạo tài khoản giúp đồng bộ lịch sử đặt sân, lịch cố định, ví voucher và thông báo trên mọi thiết bị.</p><div class="mt-5 flex justify-center gap-2"><a href="${url('/dang-nhap?redirect=/tai-khoan?tab=profile')}" class="rounded-md bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-600">Đăng nhập</a><a href="${url('/dang-ky')}" class="rounded-md border border-background-300 px-4 py-2.5 text-sm font-semibold text-foreground-800 hover:border-primary-400">Tạo tài khoản</a></div></div>`;
   const input = 'w-full rounded-md border border-background-300 bg-white px-3 py-2.5 text-sm text-foreground-950 focus:border-primary-400 focus:outline-none';
   const field = (name, label, value, type = 'text', req = true, span = '') => `<div class="min-w-0 ${span}" data-field="${name}"><label class="mb-1.5 block text-sm font-medium text-foreground-800">${label}${req ? ' <span class="text-accent-600">*</span>' : ''}</label><input name="${name}" type="${type}" value="${esc(value || '')}" class="${input}"><p data-error class="mt-1 hidden text-xs text-accent-700"></p></div>`;
+  return `<form data-profile novalidate class="rounded-lg border border-background-200 bg-white p-5 md:p-6">
+    <div class="flex flex-wrap items-start justify-between gap-3"><div><h2 class="font-heading text-lg font-bold text-foreground-950">Hồ sơ cá nhân</h2><p class="mt-1 text-sm text-foreground-600">Thông tin này được dùng để chủ sân liên hệ xác nhận khi bạn đặt sân.</p></div><span class="inline-flex items-center gap-1.5 rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-700"><i class="ri-verified-badge-line" aria-hidden="true"></i>Tài khoản đang hoạt động</span></div>
+    <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+      ${field('name', 'Họ và tên', user.fullName)}${field('phone', 'Số điện thoại', user.phone, 'tel')}
+      ${field('email', 'Email', user.email, 'email')}${user.role === 'owner' ? field('businessName', 'Tên sân / cơ sở', user.businessName, 'text', false) : '<div></div>'}
+      ${field('address', 'Địa chỉ liên hệ', user.address, 'text', false, 'sm:col-span-2')}
+    </div>
+    <div class="mt-6 flex flex-col-reverse gap-2.5 border-t border-background-200 pt-5 sm:flex-row sm:items-center sm:justify-between"><p class="text-xs text-foreground-500">Tham gia từ ${formatShortDate((user.createdAt || '').slice(0, 10))}</p><button type="submit" class="cursor-pointer whitespace-nowrap rounded-md bg-primary-500 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-600">Lưu thay đổi</button></div>
+  </form>`;
+}
+
+function renderPassword() {
+  if (!user)
+    return `<div class="rounded-lg border border-background-200 bg-white p-6 text-center"><span class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary-50 text-primary-600"><i class="ri-lock-password-line text-2xl"></i></span><p class="mt-4 font-heading text-base font-bold text-foreground-950">Đăng nhập để đổi mật khẩu</p><a href="${url('/dang-nhap?redirect=/tai-khoan?tab=password')}" class="mt-4 inline-block rounded-md bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-600">Đăng nhập ngay</a></div>`;
+  const input = 'w-full rounded-md border border-background-300 bg-white px-3 py-2.5 text-sm text-foreground-950 focus:border-primary-400 focus:outline-none';
+  const field = (name, label) => `<div class="min-w-0" data-field="${name}"><label class="mb-1.5 block text-sm font-medium text-foreground-800">${label} <span class="text-accent-600">*</span></label><input name="${name}" type="password" class="${input}"><p data-error class="mt-1 hidden text-xs text-accent-700"></p></div>`;
+  return `<form data-password class="rounded-lg border border-background-200 bg-white p-5 md:p-6">
+    <h2 class="font-heading text-lg font-bold text-foreground-950">Đổi mật khẩu</h2>
+    <p class="mt-1 text-sm text-foreground-600">Mật khẩu mới cần ít nhất 6 ký tự. Nên thay đổi định kỳ để bảo vệ tài khoản.</p>
+    <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">${field('current', 'Mật khẩu hiện tại')}${field('password', 'Mật khẩu mới')}${field('confirm', 'Nhập lại mật khẩu mới')}</div>
+    <div class="mt-5 flex justify-end border-t border-background-200 pt-4"><button type="submit" class="cursor-pointer whitespace-nowrap rounded-md bg-primary-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-600">Cập nhật mật khẩu</button></div>
+  </form>`;
+}
+
+function renderRecurring() {
+  if (!user)
+    return `<div class="rounded-lg border border-background-200 bg-white p-6 text-center"><span class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary-50 text-primary-600"><i class="ri-calendar-2-line text-2xl"></i></span><p class="mt-4 font-heading text-base font-bold text-foreground-950">Đăng nhập để quản lý lịch cố định</p><p class="mt-1 text-sm text-foreground-600">Giữ sân cố định hằng tuần cho đội bóng hoặc nhóm cầu lông của bạn.</p><a href="${url('/dang-nhap?redirect=/tai-khoan?tab=recurring')}" class="mt-4 inline-block rounded-md bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-600">Đăng nhập</a></div>`;
+  if (st.recurring === null) {
+    api('account', 'recurring_list').then((r) => (st.recurring = r)).catch(() => (st.recurring = [])).finally(render);
+    return loadingBlock('Đang tải lịch cố định...');
+  }
+  const stBadge = { active: ['Đang giữ lịch', 'bg-primary-50 text-primary-700'], paused: ['Tạm dừng', 'bg-accent-50 text-accent-800'], cancelled: ['Đã hủy', 'bg-background-200 text-foreground-600'] };
+  const input = 'w-full rounded-md border border-background-300 bg-white px-3 py-2 text-sm text-foreground-950 focus:border-primary-400 focus:outline-none';
   return `<div class="flex flex-col gap-4">
-    <form data-profile novalidate class="rounded-lg border border-background-200 bg-white p-5 md:p-6">
-      <div class="flex flex-wrap items-start justify-between gap-3"><div><h2 class="font-heading text-lg font-bold text-foreground-950">Thông tin cá nhân</h2><p class="mt-1 text-sm text-foreground-600">Thông tin này được dùng để chủ sân liên hệ xác nhận khi bạn đặt sân.</p></div><span class="inline-flex items-center gap-1.5 rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-700"><i class="ri-verified-badge-line" aria-hidden="true"></i>Tài khoản đang hoạt động</span></div>
-      <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        ${field('name', 'Họ và tên', user.fullName)}${field('phone', 'Số điện thoại', user.phone, 'tel')}
-        ${field('email', 'Email', user.email, 'email')}${user.role === 'owner' ? field('businessName', 'Tên sân / cơ sở', user.businessName, 'text', false) : '<div></div>'}
-        ${field('address', 'Địa chỉ liên hệ', user.address, 'text', false, 'sm:col-span-2')}
+    <div class="flex flex-wrap items-end justify-between gap-3 rounded-lg border border-background-200 bg-white p-5">
+      <div><h2 class="font-heading text-lg font-bold text-foreground-950">Lịch cố định của tôi</h2><p class="mt-1 text-sm text-foreground-600">Đặt cố định theo các thứ trong tuần để giữ đúng khung giờ đẹp cho đội bóng / nhóm cầu lông.</p></div>
+      <button type="button" data-rec-new class="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-primary-500 px-4 py-2.5 text-xs font-bold text-white hover:bg-primary-600"><i class="ri-add-line"></i>Đăng ký lịch cố định</button>
+    </div>
+    ${st.recurring.length ? `<div class="flex flex-col gap-3">${st.recurring.map((r) => {
+      const [lbl, cls] = stBadge[r.status] || stBadge.active;
+      return `<article class="rounded-lg border border-background-200 bg-white p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2"><h3 class="font-heading text-base font-bold text-foreground-950">${esc(r.courtName)}</h3><span class="rounded-full px-2.5 py-0.5 text-[11px] font-bold ${cls}">${lbl}</span></div>
+          <p class="mt-1.5 text-xs text-foreground-700"><i class="ri-calendar-2-line mr-1 text-primary-600"></i><b>${(r.weekdays || []).map((d) => WEEKDAY_SHORT[d] || `T${d + 1}`).join(', ')}</b> · Khung <b>${esc(r.startSlot)}</b> (${r.durationMinutes} phút)</p>
+          <p class="mt-1 text-xs text-foreground-500">Hiệu lực: ${formatShortDate(r.startDate)} – ${formatShortDate(r.endDate)} · Dự kiến ${formatVnd(r.pricePerSession)}/buổi</p>
+          ${r.note ? `<p class="mt-1 text-xs text-foreground-600 italic">${esc(r.note)}</p>` : ''}
+        </div>
+        <div class="flex shrink-0 items-center gap-2">
+          ${r.status === 'active' ? `<button type="button" data-rec-st="${r.id}:paused" class="cursor-pointer rounded-md border border-background-300 px-3 py-1.5 text-xs font-semibold text-foreground-700 hover:border-primary-400">Tạm dừng</button>` : r.status === 'paused' ? `<button type="button" data-rec-st="${r.id}:active" class="cursor-pointer rounded-md bg-primary-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-600">Tiếp tục</button>` : ''}
+          ${r.status !== 'cancelled' ? `<button type="button" data-rec-st="${r.id}:cancelled" class="cursor-pointer rounded-md border border-accent-300 px-3 py-1.5 text-xs font-semibold text-accent-700 hover:bg-accent-50">Hủy lịch</button>` : ''}
+        </div>
+      </article>`;
+    }).join('')}</div>` : emptyState('ri-calendar-2-line', 'Chưa có lịch cố định nào', 'Bấm "Đăng ký lịch cố định" để chọn sân và khung giờ lặp lại hằng tuần cho đội của bạn.')}
+  </div>`;
+}
+
+function renderVouchers() {
+  if (!user)
+    return `<div class="rounded-lg border border-background-200 bg-white p-6 text-center"><span class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary-50 text-primary-600"><i class="ri-coupon-3-line text-2xl"></i></span><p class="mt-4 font-heading text-base font-bold text-foreground-950">Đăng nhập để mở Ví voucher</p><p class="mt-1 text-sm text-foreground-600">Lưu trữ mọi mã giảm giá và quà trúng từ Vòng quay ưu đãi.</p><a href="${url('/dang-nhap?redirect=/tai-khoan?tab=vouchers')}" class="mt-4 inline-block rounded-md bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-600">Đăng nhập</a></div>`;
+  if (st.vouchers === null) {
+    api('account', 'vouchers').then((v) => (st.vouchers = v)).catch(() => (st.vouchers = [])).finally(render);
+    return loadingBlock('Đang tải ví voucher...');
+  }
+  const srcLabel = { wheel: 'Vòng quay ưu đãi', promo: 'Trang ưu đãi', system: 'Hệ thống' };
+  return `<div class="flex flex-col gap-4">
+    <div class="flex flex-wrap items-end justify-between gap-3 rounded-lg border border-background-200 bg-white p-5">
+      <div><h2 class="font-heading text-lg font-bold text-foreground-950">Ví voucher</h2><p class="mt-1 text-sm text-foreground-600">Các mã ưu đãi đã lưu hoặc quay trúng. Sao chép và áp dụng ngay khi đặt sân.</p></div>
+      <div class="flex gap-2">
+        <a href="${url('/uu-dai#vong-quay')}" class="inline-flex items-center gap-1.5 rounded-md bg-accent-500 px-3.5 py-2 text-xs font-bold text-background-950 hover:bg-accent-600"><i class="ri-gift-line"></i>Quay thêm voucher</a>
+        <a href="${url('/uu-dai')}" class="inline-flex items-center gap-1.5 rounded-md border border-background-300 px-3.5 py-2 text-xs font-semibold text-foreground-800 hover:border-primary-400">Săn ưu đãi</a>
       </div>
-      <div class="mt-6 flex flex-col-reverse gap-2.5 border-t border-background-200 pt-5 sm:flex-row sm:items-center sm:justify-between"><p class="text-xs text-foreground-500">Tham gia từ ${formatShortDate((user.createdAt || '').slice(0, 10))}</p><button type="submit" class="cursor-pointer whitespace-nowrap rounded-md bg-primary-500 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-600">Lưu thay đổi</button></div>
-    </form>
-    <form data-password class="rounded-lg border border-background-200 bg-white p-5 md:p-6">
-      <h2 class="font-heading text-base font-bold text-foreground-950">Đổi mật khẩu</h2>
-      <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">${field('current', 'Mật khẩu hiện tại', '', 'password')}${field('password', 'Mật khẩu mới', '', 'password')}${field('confirm', 'Nhập lại mật khẩu mới', '', 'password')}</div>
-      <div class="mt-4 flex justify-end"><button type="submit" class="cursor-pointer whitespace-nowrap rounded-md border border-background-300 px-5 py-2.5 text-sm font-semibold text-foreground-800 hover:border-primary-400 hover:text-primary-700">Cập nhật mật khẩu</button></div>
-    </form></div>`;
+    </div>
+    ${st.vouchers.length ? `<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">${st.vouchers.map((v) => `<article class="flex flex-col rounded-lg border border-background-200 bg-white p-4">
+      <div class="flex items-start justify-between gap-2">
+        <span class="rounded bg-primary-50 px-2 py-0.5 font-mono text-xs font-extrabold text-primary-700 border border-primary-200">${esc(v.code)}</span>
+        <span class="rounded-full bg-background-100 px-2 py-0.5 text-[10px] font-semibold text-foreground-600">${srcLabel[v.source] || 'Ưu đãi'}</span>
+      </div>
+      <h3 class="mt-2.5 font-heading text-sm font-bold text-foreground-950">${esc(v.title)}</h3>
+      <p class="mt-1 text-xs text-foreground-600">${esc(v.description || '')}</p>
+      <p class="mt-2 text-[11px] text-foreground-500">${v.expiresAt ? `HSD: ${formatShortDate(v.expiresAt)}` : 'Không giới hạn hạn dùng'}${v.minOrder ? ` · Đơn từ ${formatVnd(v.minOrder)}` : ''}</p>
+      <div class="mt-auto flex gap-2 pt-3">
+        <button type="button" data-copy-voucher="${esc(v.code)}" class="flex-1 cursor-pointer rounded-md border border-background-300 px-3 py-2 text-xs font-semibold text-foreground-800 hover:border-primary-400"><i class="ri-file-copy-line mr-1"></i>Sao chép</button>
+        <a href="${url(`/dat-san?promo=${encodeURIComponent(v.code)}`)}" class="flex-1 text-center rounded-md bg-primary-500 px-3 py-2 text-xs font-bold text-white hover:bg-primary-600">Dùng ngay</a>
+      </div>
+    </article>`).join('')}</div>` : emptyState('ri-coupon-3-line', 'Ví voucher đang trống', 'Hãy ghé trang Ưu đãi hoặc Vòng quay ưu đãi để săn mã giảm giá lưu vào ví nhé.')}
+  </div>`;
+}
+
+function renderNotifications() {
+  if (!user)
+    return `<div class="rounded-lg border border-background-200 bg-white p-6 text-center"><span class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary-50 text-primary-600"><i class="ri-notification-3-line text-2xl"></i></span><p class="mt-4 font-heading text-base font-bold text-foreground-950">Đăng nhập để xem thông báo</p><a href="${url('/dang-nhap?redirect=/tai-khoan?tab=notifications')}" class="mt-4 inline-block rounded-md bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-600">Đăng nhập</a></div>`;
+  if (st.notifications === null) {
+    api('account', 'notifications').then((n) => (st.notifications = n)).catch(() => (st.notifications = [])).finally(render);
+    return loadingBlock('Đang tải thông báo...');
+  }
+  const unread = st.notifications.filter((n) => !n.isRead).length;
+  const iconOf = { booking: 'ri-calendar-check-line text-primary-600', payment: 'ri-bank-card-line text-accent-600', promo: 'ri-coupon-3-line text-secondary-700', system: 'ri-notification-3-line text-foreground-600' };
+  return `<div class="flex flex-col gap-4">
+    <div class="flex flex-wrap items-end justify-between gap-3 rounded-lg border border-background-200 bg-white p-5">
+      <div><h2 class="font-heading text-lg font-bold text-foreground-950">Thông báo</h2><p class="mt-1 text-sm text-foreground-600">Cập nhật trạng thái duyệt đơn, xác nhận tiền cọc, lịch cố định và ưu đãi mới.</p></div>
+      ${unread ? `<button type="button" data-nt-read="all" class="cursor-pointer rounded-md border border-background-300 px-3.5 py-2 text-xs font-semibold text-foreground-800 hover:border-primary-400"><i class="ri-check-double-line mr-1"></i>Đánh dấu đã đọc tất cả (${unread})</button>` : ''}
+    </div>
+    ${st.notifications.length ? `<div class="overflow-hidden rounded-lg border border-background-200 bg-white divide-y divide-background-200">${st.notifications.map((n) => `<div class="flex items-start gap-3 p-4 ${n.isRead ? '' : 'bg-primary-50/40'}">
+      <span class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-background-100"><i class="${iconOf[n.type] || iconOf.system} text-lg"></i></span>
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-2"><p class="text-sm font-bold text-foreground-950">${esc(n.title)}</p>${!n.isRead ? '<span class="h-2 w-2 rounded-full bg-primary-500"></span>' : ''}</div>
+        <p class="mt-0.5 text-xs leading-relaxed text-foreground-600">${esc(n.body)}</p>
+        <div class="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-foreground-400">
+          <span>${formatDateTime(n.createdAt)}</span>
+          ${n.link ? `<a href="${url(n.link)}" class="font-semibold text-primary-600 hover:underline">Xem chi tiết</a>` : ''}
+          ${!n.isRead ? `<button type="button" data-nt-read="${n.id}" class="cursor-pointer font-semibold text-foreground-600 hover:text-primary-700">Đánh dấu đã đọc</button>` : ''}
+        </div>
+      </div>
+    </div>`).join('')}</div>` : emptyState('ri-notification-off-line', 'Chưa có thông báo nào', 'Khi có cập nhật về đơn đặt sân hoặc ưu đãi mới, thông báo sẽ hiện tại đây.')}
+  </div>`;
+}
+
+function openRecurringModal() {
+  const courts = (PAGE.courts || []).filter((c) => c.status === 'active');
+  const today = APP.today || new Date().toISOString().slice(0, 10);
+  const nextMonth = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+  const input = 'w-full rounded-md border border-background-300 bg-white px-3 py-2 text-sm text-foreground-950 focus:border-primary-400 focus:outline-none';
+  const m = openModal({
+    size: 'max-w-lg',
+    html: `<div class="flex items-center justify-between border-b border-background-200 px-5 py-4"><h2 class="font-heading text-base font-extrabold text-foreground-950">Đăng ký lịch cố định</h2><button type="button" data-close class="flex h-8 w-8 items-center justify-center rounded-md text-foreground-500 hover:bg-background-100"><i class="ri-close-line text-lg"></i></button></div>
+    <form id="rec-form" class="space-y-3.5 p-5">
+      <div><label class="mb-1 block text-xs font-semibold text-foreground-700">Chọn sân</label><select name="courtId" class="${input}">${courts.map((c) => `<option value="${esc(c.id)}">${esc(c.name)} (${formatVnd(c.pricePerHour)}/giờ)</option>`).join('')}</select></div>
+      <div><label class="mb-1 block text-xs font-semibold text-foreground-700">Các ngày chơi trong tuần</label><div class="flex flex-wrap gap-2">${[1, 2, 3, 4, 5, 6, 7].map((d) => `<label class="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-background-300 px-2.5 py-1.5 text-xs font-semibold"><input type="checkbox" name="wd" value="${d}" ${d === 2 || d === 5 ? 'checked' : ''} class="accent-primary-500">${WEEKDAY_SHORT[d]}</label>`).join('')}</div></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="mb-1 block text-xs font-semibold text-foreground-700">Giờ bắt đầu</label><select name="startSlot" class="${input}">${['06:00','07:00','16:00','17:00','18:00','19:00','20:00','21:00'].map((t) => `<option ${t === '18:00' ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+        <div><label class="mb-1 block text-xs font-semibold text-foreground-700">Thời lượng</label><select name="durationMinutes" class="${input}"><option value="60">60 phút</option><option value="90">90 phút</option><option value="120" selected>120 phút</option></select></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="mb-1 block text-xs font-semibold text-foreground-700">Từ ngày</label><input type="date" name="startDate" value="${today}" min="${today}" class="${input}"></div>
+        <div><label class="mb-1 block text-xs font-semibold text-foreground-700">Đến ngày</label><input type="date" name="endDate" value="${nextMonth}" min="${today}" class="${input}"></div>
+      </div>
+      <div><label class="mb-1 block text-xs font-semibold text-foreground-700">Ghi chú cho chủ sân</label><input name="note" class="${input}" placeholder="VD: Đội FC Ea Tam, cần thêm áo bib..."></div>
+      <div class="flex justify-end gap-2 border-t border-background-200 pt-4"><button type="button" data-close class="rounded-md border border-background-300 px-4 py-2 text-xs font-semibold">Hủy</button><button type="submit" class="rounded-md bg-primary-500 px-4 py-2 text-xs font-bold text-white hover:bg-primary-600">Gửi đăng ký</button></div>
+    </form>`,
+  });
+  m.el.querySelector('#rec-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    const weekdays = [...f.querySelectorAll('[name=wd]:checked')].map((i) => Number(i.value));
+    if (!weekdays.length) return toast('Chọn ít nhất 1 ngày trong tuần.', 'error');
+    try {
+      await api('account', 'recurring_create', {
+        courtId: f.courtId.value, weekdays, startSlot: f.startSlot.value,
+        durationMinutes: Number(f.durationMinutes.value), startDate: f.startDate.value, endDate: f.endDate.value, note: f.note.value,
+      });
+      toast('Đã đăng ký lịch cố định thành công!');
+      st.recurring = null;
+      m.close();
+      render();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+}
+
+// ---------------- Bộ đếm ngược giữ sân ----------------
+let countdownInterval = null;
+function tickCountdowns() {
+  const nodes = document.querySelectorAll('[data-countdown]');
+  if (!nodes.length) {
+    if (countdownInterval) {
+      clearInterval(countdownInterval);
+      countdownInterval = null;
+    }
+    return;
+  }
+  let hasExpired = false;
+  nodes.forEach((el) => {
+    const expiresAt = el.getAttribute('data-countdown');
+    if (!expiresAt) return;
+    const sec = remainingHoldSeconds(expiresAt);
+    el.textContent = formatCountdown(sec);
+    if (sec <= 0) hasExpired = true;
+  });
+  if (hasExpired) {
+    clearInterval(countdownInterval);
+    countdownInterval = null;
+    load();
+  }
+}
+
+function startCountdownTicker() {
+  if (countdownInterval) clearInterval(countdownInterval);
+  const nodes = document.querySelectorAll('[data-countdown]');
+  if (nodes.length) {
+    countdownInterval = setInterval(tickCountdowns, 1000);
+  }
 }
 
 // ---------------- Vẽ trang ----------------
@@ -228,15 +447,28 @@ function render() {
     .map(([i, t]) => `<div class="flex items-center gap-2 rounded-md border border-background-200 bg-background-50 px-3.5 py-2"><i class="${i}" aria-hidden="true"></i><span class="text-xs text-foreground-700">${t}</span></div>`)
     .join('');
   $$('#account-nav [data-tab]').forEach((a) => {
-    const active = a.dataset.tab === st.tab;
+    const active = a.dataset.tab === st.tab || (st.tab === 'invoices' && a.dataset.tab === 'history');
     a.className = `flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium transition-colors lg:justify-between ${active ? 'bg-primary-50 text-primary-700' : 'text-foreground-600 hover:bg-background-100 hover:text-foreground-950'}`;
-    const count = a.dataset.tab === 'upcoming' ? g.upcoming.length : a.dataset.tab === 'history' ? g.history.length : 0;
+    const unreadNt = Array.isArray(st.notifications) ? st.notifications.filter((n) => !n.isRead).length : 0;
+    const count = a.dataset.tab === 'history' ? g.upcoming.length + g.history.length : a.dataset.tab === 'notifications' ? unreadNt : a.dataset.tab === 'vouchers' && Array.isArray(st.vouchers) ? st.vouchers.length : 0;
     $('[data-count]', a).innerHTML = count ? `<span class="rounded-full px-1.5 py-0.5 text-[11px] font-bold ${active ? 'bg-primary-500 text-white' : 'bg-background-200 text-foreground-700'}">${count}</span>` : '';
   });
-  const views = { overview: renderOverview, upcoming: renderUpcoming, history: renderHistory, invoices: renderInvoices, favorites: renderFavorites, profile: renderProfile };
-  main.innerHTML = views[st.tab](g);
+  const views = {
+    overview: renderOverview,
+    upcoming: renderUpcoming,
+    history: renderHistory,
+    invoices: renderInvoices,
+    recurring: renderRecurring,
+    favorites: renderFavorites,
+    vouchers: renderVouchers,
+    notifications: renderNotifications,
+    profile: renderProfile,
+    password: renderPassword,
+  };
+  main.innerHTML = (views[st.tab] || renderHistory)(g);
   const grid = $('[data-fav-grid]');
   if (grid) bindFavoriteButtons(grid);
+  startCountdownTicker();
 }
 
 function goTab(tab) {
@@ -248,12 +480,13 @@ function goTab(tab) {
 
 // ---------------- Hộp thoại ----------------
 function openDetail(b) {
-  const confirmed = ['confirmed', 'completed'].includes(b.status) || ['paid', 'deposit_paid'].includes(b.paymentStatus);
-  const active = b.status === 'pending' || b.status === 'confirmed';
-  const canCancel = active && isBeforeCancelCutoff(b.date, b.slots);
+  const isApprovedWaitingDeposit = Boolean(b.approvedAt && b.paymentStatus === 'unpaid' && b.status !== 'cancelled');
+  const confirmed = ['confirmed', 'completed'].includes(b.status) && ['paid', 'deposit_paid'].includes(b.paymentStatus);
+  const active = (b.status === 'pending' || b.status === 'confirmed') && !isApprovedWaitingDeposit;
+  const canCancel = (active || isApprovedWaitingDeposit) && isBeforeCancelCutoff(b.date, b.slots);
   const steps = [
     ['Yêu cầu đặt sân đã gửi', `Tạo ngày ${formatShortDate((b.createdAt || b.date).slice(0, 10))}`, true],
-    ['Chủ sân xác nhận', b.status === 'cancelled' ? 'Đơn đã hủy trước khi xác nhận' : b.status === 'pending' ? 'Đang chờ chủ sân phản hồi (trong 15 phút)' : 'Chủ sân đã xác nhận qua điện thoại', ['confirmed', 'completed'].includes(b.status)],
+    ['Chủ sân xác nhận', b.status === 'cancelled' ? 'Đơn đã hủy trước khi xác nhận' : b.status === 'pending' ? 'Đang chờ chủ sân phản hồi (trong 15 phút)' : 'Chủ sân đã xác nhận và duyệt đơn', Boolean(b.approvedAt || ['confirmed', 'completed'].includes(b.status))],
     [b.status === 'cancelled' ? 'Đơn đã hủy' : 'Hoàn thành lượt chơi', b.status === 'cancelled' ? b.cancelReason || 'Khách hàng đã hủy đơn' : b.status === 'completed' ? 'Buổi chơi đã kết thúc, cảm ơn bạn đã sử dụng dịch vụ' : `Dự kiến ${formatLongDate(b.date)}`, b.status === 'completed'],
   ];
   const dd = (l, v) => `<div><dt class="text-xs text-foreground-500">${l}</dt><dd class="text-sm font-medium text-foreground-900">${v}</dd></div>`;
@@ -262,9 +495,13 @@ function openDetail(b) {
     html: `<div class="flex items-start justify-between gap-3 border-b border-background-200 px-5 py-4"><div><h2 class="font-heading text-lg font-extrabold text-foreground-950">Chi tiết đơn đặt sân</h2><p class="mt-0.5 font-mono text-xs text-foreground-500">${esc(b.code)}</p></div><button type="button" data-close aria-label="Đóng" class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md text-foreground-500 hover:bg-background-100"><i class="ri-close-line text-xl" aria-hidden="true"></i></button></div>
     <div class="px-5 py-4">
       <div class="flex flex-col gap-4 rounded-lg border border-primary-200 bg-primary-50/40 p-4 sm:flex-row sm:items-center">
-        ${confirmed ? `<div class="mx-auto h-[150px] w-[150px] shrink-0 overflow-hidden rounded-md border border-background-200 bg-white p-2 sm:mx-0"><img src="${ticketQrUrl(b)}" alt="Vé QR ${esc(b.code)}" class="h-full w-full object-contain"></div>` : `<div class="mx-auto flex h-[150px] w-[150px] shrink-0 flex-col items-center justify-center gap-2 rounded-md border border-dashed border-accent-300 bg-white px-3 text-center sm:mx-0"><i class="ri-qr-scan-2-line text-3xl text-accent-500" aria-hidden="true"></i><p class="text-[11px] text-foreground-600">Vé QR mở khi đơn được xác nhận</p></div>`}
-        <div class="min-w-0 flex-1"><p class="text-xs font-semibold uppercase tracking-wide text-primary-700">Vé điện tử của bạn</p><p class="mt-1 font-heading text-lg font-extrabold text-foreground-950">${esc(b.courtName)}</p><p class="mt-0.5 text-sm text-foreground-700">${b.slots[0]} - ${slotEndTime(b.slots[b.slots.length - 1])} · ${formatLongDate(b.date)}</p><p class="mt-1 text-xs text-foreground-500">Đưa mã này cho nhân viên sân khi tới nhận sân.</p>
-          ${confirmed ? `<button type="button" data-dl class="mt-3 inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-primary-500 px-3.5 py-2 text-xs font-semibold text-white hover:bg-primary-600"><i class="ri-download-2-line" aria-hidden="true"></i>Tải vé về máy</button>` : ''}</div>
+        ${confirmed
+          ? `<div class="mx-auto h-[150px] w-[150px] shrink-0 overflow-hidden rounded-md border border-background-200 bg-white p-2 sm:mx-0"><img src="${ticketQrUrl(b)}" alt="Vé QR ${esc(b.code)}" class="h-full w-full object-contain"></div>`
+          : isApprovedWaitingDeposit
+          ? `<div class="mx-auto flex h-[150px] w-[150px] shrink-0 flex-col items-center justify-center gap-2 rounded-md border border-accent-300 bg-accent-50/50 px-3 text-center sm:mx-0"><i class="ri-bank-card-line text-3xl text-accent-600 animate-pulse" aria-hidden="true"></i><p class="text-[11px] font-bold text-accent-900">Chờ chuyển cọc</p></div>`
+          : `<div class="mx-auto flex h-[150px] w-[150px] shrink-0 flex-col items-center justify-center gap-2 rounded-md border border-dashed border-accent-300 bg-white px-3 text-center sm:mx-0"><i class="ri-qr-scan-2-line text-3xl text-accent-500" aria-hidden="true"></i><p class="text-[11px] text-foreground-600">Vé QR mở khi hoàn tất chuyển cọc</p></div>`}
+        <div class="min-w-0 flex-1"><p class="text-xs font-semibold uppercase tracking-wide text-primary-700">Vé điện tử của bạn</p><p class="mt-1 font-heading text-lg font-extrabold text-foreground-950">${esc(b.courtName)}</p><p class="mt-0.5 text-sm text-foreground-700">${b.slots[0]} - ${slotEndTime(b.slots[b.slots.length - 1])} · ${formatLongDate(b.date)}</p><p class="mt-1 text-xs text-foreground-500">${confirmed ? 'Đưa mã này cho nhân viên sân khi tới nhận sân.' : isApprovedWaitingDeposit ? 'Chủ sân đã duyệt! Vui lòng chuyển cọc để nhận vé điện tử check-in.' : 'Chủ sân đang duyệt đơn. Vé QR sẽ mở sau khi hoàn tất cọc.'}</p>
+          ${confirmed ? `<button type="button" data-dl class="mt-3 inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-primary-500 px-3.5 py-2 text-xs font-semibold text-white hover:bg-primary-600"><i class="ri-download-2-line" aria-hidden="true"></i>Tải vé về máy</button>` : isApprovedWaitingDeposit ? `<a href="${url(`/don-dat-san/${b.code}`)}" class="mt-3 inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-accent-500 px-3.5 py-2 text-xs font-bold text-white hover:bg-accent-600 animate-pulse"><i class="ri-bank-card-line" aria-hidden="true"></i>Chuyển cọc ngay</a>` : ''}</div>
       </div>
       <dl class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">${dd('Mã đơn', `<span class="font-mono text-xs">${esc(b.code)}</span>`)}${dd('Loại sân', esc(b.sportLabel))}${dd('Ngày chơi', formatLongDate(b.date))}${dd('Khung giờ', `${b.slots[0]} - ${slotEndTime(b.slots[b.slots.length - 1])}`)}${dd('Thời lượng', `${b.slots.length} giờ`)}${dd('Giá trung bình', `${formatVnd(Math.round(b.totalPrice / Math.max(1, b.slots.length)))}/giờ`)}</dl>
       <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -379,6 +616,29 @@ document.addEventListener('click', (e) => {
   if (t.closest('[data-export]')) return exportInvoices(st.invoices, 'hoa-don-cua-toi.csv');
   const inv = t.closest('[data-invoice]');
   if (inv) openInvoiceModal(st.invoices.find((i) => i.id === inv.dataset.invoice));
+  if (t.closest('[data-rec-new]')) return openRecurringModal();
+  const rst = t.closest('[data-rec-st]');
+  if (rst) {
+    const [id, status] = rst.dataset.recSt.split(':');
+    api('account', 'recurring_status', { id, status }).then(() => {
+      toast('Đã cập nhật trạng thái lịch cố định.');
+      st.recurring = null;
+      render();
+    }).catch((err) => toast(err.message, 'error'));
+    return;
+  }
+  const cv = t.closest('[data-copy-voucher]');
+  if (cv) {
+    copyText(cv.dataset.copyVoucher).then((ok) => ok && toast(`Đã sao chép mã ${cv.dataset.copyVoucher}`));
+    return;
+  }
+  const nr = t.closest('[data-nt-read]');
+  if (nr) {
+    api('account', 'notification_read', { id: nr.dataset.ntRead }).then(() => {
+      st.notifications = null;
+      render();
+    }).catch((err) => toast(err.message, 'error'));
+  }
 });
 
 main.addEventListener('submit', async (e) => {

@@ -16,7 +16,7 @@ function () {
   <?php foreach ([['ri-group-line', 'Chia đội công bằng', 'Xáo trộn ngẫu nhiên, chia đều 2 đội hoặc ghép đôi đánh cầu lông.'], ['ri-dice-line', 'Chọn sân thay bạn', 'Lọc theo môn, khu vực, khung giờ rồi để hệ thống chọn giúp.'], ['ri-gift-line', 'Quay ưu đãi', 'Giảm 5 - 20%, tặng nước hoặc cộng thêm 30 phút chơi.']] as $h): ?>
     <div class="flex items-start gap-2.5 rounded-md border border-background-200 bg-background-50 px-3.5 py-3"><span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-50 text-primary-700"><i class="<?= $h[0] ?> text-base" aria-hidden="true"></i></span><div class="min-w-0"><p class="text-sm font-semibold text-foreground-950"><?= $h[1] ?></p><p class="mt-0.5 text-xs leading-relaxed text-foreground-500"><?= $h[2] ?></p></div></div>
   <?php endforeach; ?>
-</div>
+</div> 
 <?php });
     $sel = 'mt-1.5 w-full box-border cursor-pointer rounded-md border border-background-300 bg-background-50 px-3 py-2.5 text-sm text-foreground-950 focus:border-primary-400 focus:outline-none';
     ?>
