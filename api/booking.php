@@ -18,6 +18,82 @@ const EXTRA_SERVICES = [
     'cau' => ['Ống cầu lông (3 quả)', 45000],
 ]; 
 
+/** Phân giải dịch vụ thêm & biến thể đa thuộc tính */
+function resolve_booking_extras(array $rawExtras): array
+{
+    $items = [];
+    $total = 0;
+    foreach ($rawExtras as $item) {
+        if (is_string($item)) {
+            $sid = trim($item);
+            if (isset(EXTRA_SERVICES[$sid])) {
+                $p = (int) EXTRA_SERVICES[$sid][1];
+                $items[] = [
+                    'id' => $sid, 'variantId' => '', 'label' => EXTRA_SERVICES[$sid][0],
+                    'variantName' => '', 'price' => $p, 'quantity' => 1, 'total' => $p,
+                ];
+                $total += $p;
+                continue;
+            }
+            $svc = q_one('SELECT * FROM owner_services WHERE id = ?', [$sid]);
+            if ($svc) {
+                $p = (int) $svc['price'];
+                $items[] = [
+                    'id' => $svc['id'], 'variantId' => '', 'label' => $svc['name'],
+                    'variantName' => '', 'price' => $p, 'quantity' => 1, 'total' => $p,
+                ];
+                $total += $p;
+            }
+            continue;
+        }
+
+        if (is_array($item)) {
+            $sid = trim((string) ($item['id'] ?? ''));
+            $vid = trim((string) ($item['variantId'] ?? ''));
+            $qty = max(1, (int) ($item['quantity'] ?? 1));
+
+            if ($vid) {
+                $var = q_one('SELECT v.*, s.name as service_name FROM service_variants v JOIN owner_services s ON v.service_id = s.id WHERE v.id = ?', [$vid]);
+                if ($var) {
+                    $p = (int) $var['price'];
+                    $t = $p * $qty;
+                    $items[] = [
+                        'id' => $var['service_id'], 'variantId' => $var['id'], 'sku' => $var['sku'],
+                        'label' => $var['service_name'], 'variantName' => $var['name'],
+                        'price' => $p, 'quantity' => $qty, 'total' => $t,
+                    ];
+                    $total += $t;
+                    continue;
+                }
+            }
+
+            if ($sid) {
+                $svc = q_one('SELECT * FROM owner_services WHERE id = ?', [$sid]);
+                if ($svc) {
+                    $p = (int) $svc['price'];
+                    $t = $p * $qty;
+                    $items[] = [
+                        'id' => $svc['id'], 'variantId' => '', 'label' => $svc['name'],
+                        'variantName' => '', 'price' => $p, 'quantity' => $qty, 'total' => $t,
+                    ];
+                    $total += $t;
+                    continue;
+                }
+                if (isset(EXTRA_SERVICES[$sid])) {
+                    $p = (int) EXTRA_SERVICES[$sid][1];
+                    $t = $p * $qty;
+                    $items[] = [
+                        'id' => $sid, 'variantId' => '', 'label' => EXTRA_SERVICES[$sid][0],
+                        'variantName' => '', 'price' => $p, 'quantity' => $qty, 'total' => $t,
+                    ];
+                    $total += $t;
+                }
+            }
+        }
+    }
+    return ['items' => $items, 'total' => $total];
+} 
+
 function t2m(string $t): int
 {
     [$h, $m] = array_map('intval', explode(':', $t) + [0, 0]);
@@ -121,8 +197,8 @@ run_api([
         $promo = find_active_promo($code);
         if (!$promo) fail('Mã không tồn tại hoặc đã ngừng áp dụng.');
         if ($promo['ownerId'] && $court['ownerId'] && $promo['ownerId'] !== $court['ownerId']) fail('Mã này chỉ áp dụng cho sân của ' . $promo['ownerName'] . '.');
-        $extras = array_sum(array_map(fn($id) => EXTRA_SERVICES[$id][1] ?? 0, in_arr('extras')));
-        $subtotal = court_price($court, $start, $duration) + $extras;
+        $parsedExtras = resolve_booking_extras(in_arr('extras'));
+        $subtotal = court_price($court, $start, $duration) + $parsedExtras['total'];
         $err = promo_check($promo, $date, $start, $subtotal);
         if ($err) fail($err);
         return ['promotion' => $promo, 'discount' => promo_discount($promo, $subtotal)];
@@ -155,8 +231,8 @@ run_api([
         $clash = array_values(array_intersect($slots, taken_slots($court['id'], $date)));
         if ($clash) fail('Khung giờ ' . implode(', ', $clash) . ' vừa có người đặt. Vui lòng chọn khung giờ khác.');
 
-        $extraIds = array_values(array_filter(in_arr('extras'), fn($id) => isset(EXTRA_SERVICES[$id])));
-        $extrasTotal = array_sum(array_map(fn($id) => EXTRA_SERVICES[$id][1], $extraIds));
+        $parsedExtras = resolve_booking_extras(in_arr('extras'));
+        $extrasTotal = $parsedExtras['total'];
         $courtFee = court_price($court, $start, $duration);
         $subtotal = $courtFee + $extrasTotal;
         $discount = 0;
@@ -182,9 +258,20 @@ run_api([
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [
             $id, $bookingCode, 'online', $court['id'], $court['name'], $court['sport'], $court['area'], $court['image'], $u['id'] ?? null,
             $name, $phone, $email ?: null, $date, $start, $duration, j($slots), $court['pricePerHour'], $subtotal, $discount, $promoCode,
-            $total, $deposit, j(array_map(fn($x) => ['id' => $x, 'label' => EXTRA_SERVICES[$x][0], 'price' => EXTRA_SERVICES[$x][1]], $extraIds)),
+            $total, $deposit, j($parsedExtras['items']),
             $mode === 'full' ? 'vietqr-full' : 'vietqr-deposit', 'unpaid', 'pending', null, null, $note ?: null,
         ]);
+
+        // Cập nhật tồn kho dịch vụ / biến thể đã chọn
+        foreach ($parsedExtras['items'] as $it) {
+            $qty = (int) ($it['quantity'] ?? 1);
+            if (!empty($it['variantId'])) {
+                q('UPDATE service_variants SET stock = GREATEST(0, stock - ?) WHERE id = ?', [$qty, $it['variantId']]);
+                q('UPDATE owner_services SET stock = GREATEST(0, stock - ?) WHERE id = ?', [$qty, $it['id']]);
+            } elseif (!empty($it['id'])) {
+                q('UPDATE owner_services SET stock = GREATEST(0, stock - ?) WHERE id = ?', [$qty, $it['id']]);
+            }
+        }
         return booking_by_code($bookingCode);
     },
 

@@ -309,10 +309,22 @@ async function renderInventoryView(mode) {
   const typeLabel = { import: ['Nhập kho', 'bg-primary-50 text-primary-700', '+'], export: ['Xuất kho', 'bg-accent-50 text-accent-800', '-'], adjust: ['Kiểm kê', 'bg-secondary-50 text-secondary-800', '='] };
 
   if (mode === 'import') {
+    const serviceOptions = services.map((s) => {
+      if (s.hasVariants && s.variants && s.variants.length > 0) {
+        return `<optgroup label="${esc(s.name)} (Đa thuộc tính)">
+          ${s.variants.map((v) => `<option value="${esc(s.id)}:::${esc(v.id)}">${esc(s.name)} — ${esc(v.name)} (Tồn: ${v.stock} ${esc(s.unit)})</option>`).join('')}
+        </optgroup>`;
+      }
+      return `<option value="${esc(s.id)}:::">${esc(s.name)} (Tồn: ${s.stock} ${esc(s.unit)})</option>`;
+    }).join('');
+
     main().innerHTML = `<div class="grid grid-cols-1 gap-5 lg:grid-cols-[380px_1fr]">
       <form id="inv-form" class="${CARD} p-5 space-y-3.5 h-fit">
         <h3 class="font-heading text-base font-bold text-foreground-950">Tạo phiếu nhập / xuất kho</h3>
-        <div><label class="${LABEL}">Dịch vụ / mặt hàng</label><select name="serviceId" class="${INPUT}">${services.map((s) => `<option value="${esc(s.id)}">${esc(s.name)} (Tồn: ${s.stock} ${esc(s.unit)})</option>`).join('')}</select></div>
+        <div>
+          <label class="${LABEL}">Dịch vụ / mặt hàng &amp; Phân loại</label>
+          <select name="serviceIdCombined" class="${INPUT}">${serviceOptions}</select>
+        </div>
         <div class="grid grid-cols-2 gap-3">
           <div><label class="${LABEL}">Loại phiếu</label><select name="type" class="${INPUT}"><option value="import">Nhập kho (+)</option><option value="export">Xuất kho (-)</option><option value="adjust">Đặt lại số tồn (=)</option></select></div>
           <div><label class="${LABEL}">Số lượng</label><input type="number" name="quantity" min="1" value="24" class="${INPUT}"></div>
@@ -335,8 +347,16 @@ async function renderInventoryView(mode) {
     main().querySelector('#inv-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const f = formData(e.target);
+      const [serviceId, variantId] = (f.serviceIdCombined || '').split(':::');
       try {
-        await api('owner', 'inventory_adjust', { ...f, quantity: Number(f.quantity), unitCost: Number(f.unitCost) || 0 });
+        await api('owner', 'inventory_adjust', {
+          serviceId,
+          variantId: variantId || '',
+          type: f.type,
+          quantity: Number(f.quantity),
+          unitCost: Number(f.unitCost) || 0,
+          note: f.note || '',
+        });
         toast('Đã cập nhật phiếu kho & số tồn!');
         renderSitemapServices();
       } catch (err) { toast(err.message, 'error'); }
@@ -352,12 +372,35 @@ async function renderInventoryView(mode) {
       ${sectionTitle('Bảng kiểm soát tồn kho hiện tại')}
       <div class="overflow-x-auto"><table class="w-full min-w-[600px] text-sm">
         <thead class="bg-background-100 text-left text-xs font-semibold uppercase text-foreground-500"><tr><th class="px-4 py-3">Mặt hàng</th><th class="px-4 py-3 text-right">Giá bán</th><th class="px-4 py-3 text-right">Tồn kho</th><th class="px-4 py-3">Tình trạng</th></tr></thead>
-        <tbody class="divide-y divide-background-200">${services.map((s) => `<tr>
-          <td class="px-4 py-3 font-semibold">${esc(s.name)} <span class="text-xs font-normal text-foreground-500">(${esc(s.unit)})</span></td>
-          <td class="px-4 py-3 text-right">${money(s.price)}</td>
-          <td class="px-4 py-3 text-right font-heading font-extrabold ${s.stock <= 10 ? 'text-accent-700' : 'text-primary-700'}">${s.stock}</td>
-          <td class="px-4 py-3">${s.stock === 0 ? '<span class="rounded-full bg-accent-100 px-2 py-0.5 text-[11px] font-bold text-accent-800">Hết hàng</span>' : s.stock <= 10 ? '<span class="rounded-full bg-accent-50 px-2 py-0.5 text-[11px] font-bold text-accent-700">Sắp hết</span>' : '<span class="rounded-full bg-primary-50 px-2 py-0.5 text-[11px] font-bold text-primary-700">Đủ hàng</span>'}</td>
-        </tr>`).join('')}</tbody>
+        <tbody class="divide-y divide-background-200">${services.map((s) => {
+          const hasVars = s.hasVariants && s.variants && s.variants.length > 0;
+          return `
+            <tr>
+              <td class="px-4 py-3 font-semibold">
+                <div class="flex items-center gap-1.5">
+                  <span>${esc(s.name)}</span>
+                  ${hasVars ? `<span class="rounded bg-primary-100 px-1.5 py-0.5 text-[10px] font-bold text-primary-800">${s.variants.length} phân loại</span>` : ''}
+                </div>
+                <span class="text-xs font-normal text-foreground-500">(${esc(s.unit)})</span>
+              </td>
+              <td class="px-4 py-3 text-right">${hasVars ? `<span class="text-xs text-foreground-500">từ </span>` : ''}${money(s.price)}</td>
+              <td class="px-4 py-3 text-right font-heading font-extrabold ${s.stock <= 10 ? 'text-accent-700' : 'text-primary-700'}">${s.stock}</td>
+              <td class="px-4 py-3">${s.stock === 0 ? '<span class="rounded-full bg-accent-100 px-2 py-0.5 text-[11px] font-bold text-accent-800">Hết hàng</span>' : s.stock <= 10 ? '<span class="rounded-full bg-accent-50 px-2 py-0.5 text-[11px] font-bold text-accent-700">Sắp hết</span>' : '<span class="rounded-full bg-primary-50 px-2 py-0.5 text-[11px] font-bold text-primary-700">Đủ hàng</span>'}</td>
+            </tr>
+            ${hasVars ? s.variants.map((v) => `
+              <tr class="bg-background-50/60 text-xs">
+                <td class="px-4 py-2 pl-8 text-foreground-700 flex items-center gap-1.5">
+                  <i class="ri-corner-down-right-line text-foreground-400"></i>
+                  <b>${esc(v.name)}</b>
+                  <span class="font-mono text-[10px] text-foreground-400">(${esc(v.sku || 'N/A')})</span>
+                </td>
+                <td class="px-4 py-2 text-right text-foreground-700">${money(v.price)}</td>
+                <td class="px-4 py-2 text-right font-bold ${v.stock <= 5 ? 'text-accent-700' : 'text-foreground-800'}">${v.stock}</td>
+                <td class="px-4 py-2 text-foreground-500">${v.stock === 0 ? 'Hết' : v.stock <= 5 ? 'Ít hàng' : 'Sẵn sàng'}</td>
+              </tr>
+            `).join('') : ''}
+          `;
+        }).join('')}</tbody>
       </table></div>
     </section>`;
   }
