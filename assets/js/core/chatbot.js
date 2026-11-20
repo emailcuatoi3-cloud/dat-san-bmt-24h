@@ -72,10 +72,17 @@ if (root && aiCfg.enabled !== false) {
     };
   }
 
+  function formatAiText(str) {
+    if (!str) return '';
+    return esc(str)
+      .replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-foreground-950">$1</strong>')
+      .replace(/^\s*[\*\-]\s+(.+)$/gm, '&bull; $1');
+  }
+
   function messageHtml(m) {
     const user = m.from === 'user';
     return `<div class="flex ${user ? 'justify-end' : 'justify-start'}"><div class="max-w-[86%] rounded-lg px-3 py-2 text-sm leading-relaxed ${user ? 'rounded-br-sm bg-primary-500 text-white' : 'rounded-bl-sm border border-background-200 bg-background-50 text-foreground-800'}">
-      <p>${esc(m.text)}</p>
+      <div class="whitespace-pre-wrap">${user ? esc(m.text) : formatAiText(m.text)}</div>
       ${m.courts ? `<div class="mt-2.5 space-y-2">${m.courts.map((c) => `<a href="${url(`/dat-san/${c.slug}`)}" class="flex items-center gap-2.5 rounded-md border border-background-200 bg-background-100 p-2 transition-colors hover:border-primary-400"><span class="h-11 w-11 shrink-0 overflow-hidden rounded-md"><img src="${esc(c.image)}" alt="${esc(c.name)}" class="h-full w-full object-cover object-top"></span><span class="min-w-0 flex-1"><span class="block truncate text-xs font-semibold text-foreground-950">${esc(c.name)}</span><span class="block text-[11px] text-foreground-500">${formatVnd(c.pricePerHour)}/giờ • ${esc(c.area)}</span></span><i class="ri-arrow-right-s-line text-foreground-400" aria-hidden="true"></i></a>`).join('')}</div>` : ''}
       ${m.links ? `<div class="mt-2 flex flex-wrap gap-1.5">${m.links.map(([l, to]) => `<a href="${url(to)}" class="rounded-full border border-primary-300 bg-primary-50 px-2.5 py-1 text-[11px] font-semibold text-primary-700 transition-colors hover:bg-primary-100">${esc(l)}</a>`).join('')}</div>` : ''}
     </div></div>`;
@@ -96,27 +103,57 @@ if (root && aiCfg.enabled !== false) {
             : ''
         }</div>
         <div class="border-t border-background-200 px-3 py-2.5">
-          <div class="flex flex-wrap gap-1.5">${QUICK.map((q) => `<button type="button" data-quick="${q}" class="cursor-pointer whitespace-nowrap rounded-full border border-background-300 bg-background-50 px-2.5 py-1 text-[11px] font-medium text-foreground-700 transition-colors hover:border-primary-400 hover:text-primary-700">${q}</button>`).join('')}</div>
-          <form data-chat-form class="mt-2 flex items-center gap-2"><input type="text" name="q" placeholder="Nhập câu hỏi của bạn..." aria-label="Câu hỏi gửi trợ lý" class="min-w-0 flex-1 rounded-full border border-background-300 bg-background-50 px-3 py-2 text-sm text-foreground-950 placeholder:text-foreground-500 focus:border-primary-400 focus:outline-none"><button type="submit" aria-label="Gửi câu hỏi" class="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-primary-500 text-white transition-colors hover:bg-primary-600"><i class="ri-send-plane-2-line text-base" aria-hidden="true"></i></button></form>
+          <div class="flex flex-wrap gap-1.5">${QUICK.map((q) => `<button type="button" data-quick="${q}" ${st.typing ? 'disabled' : ''} class="cursor-pointer whitespace-nowrap rounded-full border border-background-300 bg-background-50 px-2.5 py-1 text-[11px] font-medium text-foreground-700 transition-colors hover:border-primary-400 hover:text-primary-700 disabled:opacity-50 disabled:cursor-not-allowed">${q}</button>`).join('')}</div>
+          <form data-chat-form class="mt-2 flex items-center gap-2"><input type="text" name="q" placeholder="${st.typing ? 'Trợ lý đang suy nghĩ...' : 'Nhập câu hỏi của bạn...'}" ${st.typing ? 'disabled' : ''} aria-label="Câu hỏi gửi trợ lý" class="min-w-0 flex-1 rounded-full border border-background-300 bg-background-50 px-3 py-2 text-sm text-foreground-950 placeholder:text-foreground-500 focus:border-primary-400 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"><button type="submit" ${st.typing ? 'disabled' : ''} aria-label="Gửi câu hỏi" class="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-primary-500 text-white transition-colors hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed"><i class="ri-send-plane-2-line text-base" aria-hidden="true"></i></button></form>
         </div></section>`
         : ''
     }<button type="button" data-chat-toggle aria-label="Mở trợ lý tư vấn đặt sân" aria-expanded="${st.open}" class="fixed bottom-4 right-4 z-[96] flex h-14 w-14 cursor-pointer items-center justify-center rounded-full bg-primary-500 text-white shadow-lg transition-transform hover:scale-105 hover:bg-primary-600 ${st.open ? 'hidden' : ''}"><i class="ri-customer-service-2-line text-2xl" aria-hidden="true"></i><span class="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-accent-500 text-[10px] font-bold text-background-950">1</span></button>`;
     const scroll = root.querySelector('[data-chat-scroll]');
     if (scroll) scroll.scrollTop = scroll.scrollHeight;
     const input = root.querySelector('[data-chat-form] input');
-    if (input) input.focus();
+    if (input && !st.typing) input.focus();
   }
 
   async function send(value) {
     const q = value.trim();
-    if (!q) return;
+    if (!q || st.typing) return;
     st.messages.push({ from: 'user', text: q });
     st.typing = true;
     render();
-    const [answer] = await Promise.all([reply(q), new Promise((r) => setTimeout(r, 650))]);
-    st.messages.push({ from: 'bot', ...answer });
-    st.typing = false;
-    render();
+
+    try {
+      // Lấy tối đa 6 tin nhắn trước đó làm ngữ cảnh hội thoại
+      const history = st.messages.slice(-7, -1).map((m) => ({
+        from: m.from,
+        text: m.text,
+      }));
+
+      let answer = null;
+      try {
+        const res = await api('chatbot', 'message', { message: q, history });
+        if (res && res.text) {
+          answer = res;
+        }
+      } catch (apiErr) {
+        console.warn('Backend Chatbot API unreachable, using local fallback:', apiErr);
+      }
+
+      if (!answer) {
+        answer = await reply(q);
+      }
+
+      st.messages.push({ from: 'bot', ...answer });
+    } catch (err) {
+      console.error('Chatbot error:', err);
+      st.messages.push({
+        from: 'bot',
+        text: `Đã xảy ra sự cố tạm thời khi xử lý câu hỏi. Bạn vui lòng liên hệ Hotline ${HOTLINE} để được nhân viên hỗ trợ trực tiếp nhé!`,
+        links: [['Gọi Hotline ' + HOTLINE, '/lien-he']],
+      });
+    } finally {
+      st.typing = false;
+      render();
+    }
   }
 
   root.addEventListener('click', (e) => {
@@ -125,10 +162,11 @@ if (root && aiCfg.enabled !== false) {
       return render();
     }
     const q = e.target.closest('[data-quick]');
-    if (q) send(q.dataset.quick);
+    if (q && !st.typing) send(q.dataset.quick);
   });
   root.addEventListener('submit', (e) => {
     e.preventDefault();
+    if (st.typing) return;
     send(e.target.q.value);
   });
   window.addEventListener('bmt24h-open-chatbot', () => {

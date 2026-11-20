@@ -1450,43 +1450,154 @@ async function renderSitemapAi() {
   const cfg = await get('sys_settings', 'settings_get');
   let qaList = Array.isArray(cfg.ai_custom_qa_list) ? [...cfg.ai_custom_qa_list] : [];
   const quickText = (cfg.ai_quick_replies_list || []).join('\n');
-  main().innerHTML = `<div class="grid grid-cols-1 gap-5 lg:grid-cols-[1.15fr_1fr]">
-    <form id="ai-cfg-form" class="${CARD} p-6 space-y-4">
-      <div class="flex items-center justify-between gap-3"><h3 class="font-heading text-base font-bold text-foreground-950">Cấu hình Chatbot Trợ lý AI</h3>
-        <label class="inline-flex cursor-pointer items-center gap-2 text-xs font-bold text-primary-700"><input type="checkbox" name="ai_enabled" ${cfg.ai_enabled !== '0' ? 'checked' : ''} class="h-4 w-4 accent-primary-500">Bật Chatbot trên website</label></div>
-      <div><label class="${LABEL}">Tên hiển thị của Trợ lý AI</label><input name="ai_bot_name" value="${esc(cfg.ai_bot_name || '')}" class="${INPUT}"></div>
-      <div><label class="${LABEL}">Lời chào mở đầu</label><textarea name="ai_greeting" rows="2" class="${INPUT}">${esc(cfg.ai_greeting || '')}</textarea></div>
-      <div><label class="${LABEL}">Các nút gợi ý nhanh (mỗi dòng 1 câu)</label><textarea name="ai_quick_replies" rows="4" class="${INPUT}">${esc(quickText)}</textarea></div>
-      <div><label class="${LABEL}">Câu trả lời mặc định (khi AI chưa hiểu câu hỏi)</label><textarea name="ai_fallback_reply" rows="2" class="${INPUT}">${esc(cfg.ai_fallback_reply || '')}</textarea></div>
-      <div class="flex justify-end"><button type="submit" class="${BTN}"><i class="ri-save-line"></i>Lưu cấu hình Chatbot AI</button></div>
-    </form>
-    <section class="${CARD} p-6 space-y-4">
-      <div class="flex items-center justify-between gap-2"><h3 class="font-heading text-base font-bold text-foreground-950">Kịch bản Hỏi – Đáp tùy chỉnh (${qaList.length})</h3>
-        <button type="button" id="ai-qa-add" class="${BTN_SM_PRI}"><i class="ri-add-line"></i>Thêm kịch bản</button></div>
-      <p class="text-xs text-foreground-500">Khi khách gõ bất kỳ từ khóa nào khớp, Trợ lý AI sẽ ưu tiên trả lời đúng nội dung này ngay lập tức.</p>
-      <div id="ai-qa-list" class="space-y-2.5">${qaList.map((q, i) => `<div class="rounded-md border border-background-200 bg-background-50 p-3 text-xs">
-        <div class="flex items-start justify-between gap-2"><p class="font-bold text-primary-700"><i class="ri-key-2-line mr-1"></i>${esc(q.keywords)}</p><button type="button" data-qa-del="${i}" class="text-accent-700 hover:underline font-semibold">Xóa</button></div>
-        <p class="mt-1 text-foreground-700 leading-relaxed">${esc(q.answer)}</p>
-      </div>`).join('') || '<p class="text-xs text-foreground-400 italic">Chưa có kịch bản tùy chỉnh.</p>'}</div>
-    </section>
+  const provider = cfg.chatbot_provider || cfg.ai_provider || 'gemini';
+  const isKeyConfigured = Boolean(cfg.chatbot_key_configured || cfg.ai_key_configured);
+  const currentModel = cfg.chatbot_model || cfg.ai_model || (provider === 'openai' ? 'gpt-4o-mini' : 'gemini-1.5-flash');
+
+  main().innerHTML = `<div class="space-y-5">
+    <div class="${CARD} p-5">
+      <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div class="flex items-center gap-4">
+          <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary-100 text-primary-600 text-2xl">
+            <i class="ri-robot-2-line"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="font-heading text-base font-bold text-foreground-950">Trạng thái Nhà cung cấp AI</h3>
+              <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${isKeyConfigured ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">
+                <i class="${isKeyConfigured ? 'ri-checkbox-circle-line' : 'ri-error-warning-line'}"></i>
+                ${isKeyConfigured ? 'Đã cấu hình API Key' : 'Chế độ Fallback ngoại tuyến'}
+              </span>
+            </div>
+            <p class="text-xs text-foreground-600 mt-1">
+              Nhà cung cấp: <b class="text-foreground-900">${provider === 'openai' ? 'OpenAI (ChatGPT)' : 'Google Gemini'}</b> &bull; Model: <code class="rounded bg-background-200 px-1.5 py-0.5 text-xs text-primary-800 font-mono">${esc(currentModel)}</code>
+            </p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" id="btn-ai-test" class="${BTN_OUT} text-xs">
+            <i class="ri-refresh-line"></i> Kiểm tra kết nối AI
+          </button>
+        </div>
+      </div>
+      <div id="ai-test-result" class="mt-3 hidden rounded-lg border p-3 text-xs"></div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-5 lg:grid-cols-[1.15fr_1fr]">
+      <form id="ai-cfg-form" class="${CARD} p-6 space-y-4">
+        <div class="flex items-center justify-between gap-3"><h3 class="font-heading text-base font-bold text-foreground-950">Cấu hình Chatbot Trợ lý AI</h3>
+          <label class="inline-flex cursor-pointer items-center gap-2 text-xs font-bold text-primary-700"><input type="checkbox" name="ai_enabled" ${cfg.ai_enabled !== '0' ? 'checked' : ''} class="h-4 w-4 accent-primary-500">Bật Chatbot trên website</label></div>
+        
+        <div class="rounded-lg border border-background-200 bg-background-50 p-4 space-y-3">
+          <h4 class="text-xs font-bold text-foreground-900 uppercase tracking-wide">Nhà cung cấp LLM</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="${LABEL}">Nhà cung cấp (Provider)</label>
+              <select name="ai_provider" class="${INPUT}">
+                <option value="gemini" ${provider === 'gemini' ? 'selected' : ''}>Google Gemini (Khuyên dùng)</option>
+                <option value="openai" ${provider === 'openai' ? 'selected' : ''}>OpenAI (ChatGPT)</option>
+              </select>
+            </div>
+            <div>
+              <label class="${LABEL}">Tên Model (Tùy chọn)</label>
+              <input name="ai_model" value="${esc(cfg.ai_model || '')}" placeholder="Mặc định: ${provider === 'openai' ? 'gpt-4o-mini' : 'gemini-1.5-flash'}" class="${INPUT}">
+            </div>
+          </div>
+          <div>
+            <label class="${LABEL}">API Key ${isKeyConfigured ? '<span class="text-emerald-700 font-normal">(Đã cấu hình trong hệ thống)</span>' : '<span class="text-amber-700 font-normal">(Chưa cấu hình — đang chạy Fallback)</span>'}</label>
+            <input type="password" name="ai_api_key" placeholder="${isKeyConfigured ? '•••••••••••••••••••••••••••••••• (Nhập để thay đổi)' : 'Dán API Key (Google AI Studio hoặc OpenAI)...'}" class="${INPUT}">
+            <p class="text-[11px] text-foreground-500 mt-1">Để trống nếu giữ nguyên khóa hiện tại. Hoặc cấu hình qua biến môi trường <code>CHATBOT_API_KEY</code> trong <code>.env</code>.</p>
+          </div>
+        </div>
+
+        <div><label class="${LABEL}">Tên hiển thị của Trợ lý AI</label><input name="ai_bot_name" value="${esc(cfg.ai_bot_name || '')}" class="${INPUT}"></div>
+        <div><label class="${LABEL}">Lời chào mở đầu</label><textarea name="ai_greeting" rows="2" class="${INPUT}">${esc(cfg.ai_greeting || '')}</textarea></div>
+        <div><label class="${LABEL}">Các nút gợi ý nhanh (mỗi dòng 1 câu)</label><textarea name="ai_quick_replies" rows="4" class="${INPUT}">${esc(quickText)}</textarea></div>
+        <div><label class="${LABEL}">Câu trả lời mặc định (khi AI chưa hiểu câu hỏi)</label><textarea name="ai_fallback_reply" rows="2" class="${INPUT}">${esc(cfg.ai_fallback_reply || '')}</textarea></div>
+        <div class="flex justify-end"><button type="submit" class="${BTN}"><i class="ri-save-line"></i>Lưu cấu hình Chatbot AI</button></div>
+      </form>
+      <section class="${CARD} p-6 space-y-4">
+        <div class="flex items-center justify-between gap-2"><h3 class="font-heading text-base font-bold text-foreground-950">Kịch bản Hỏi – Đáp tùy chỉnh (${qaList.length})</h3>
+          <button type="button" id="ai-qa-add" class="${BTN_SM_PRI}"><i class="ri-add-line"></i>Thêm kịch bản</button></div>
+        <p class="text-xs text-foreground-500">Khi khách gõ bất kỳ từ khóa nào khớp, Trợ lý AI sẽ ưu tiên trả lời đúng nội dung này ngay lập tức.</p>
+        <div id="ai-qa-list" class="space-y-2.5">${qaList.map((q, i) => `<div class="rounded-md border border-background-200 bg-background-50 p-3 text-xs">
+          <div class="flex items-start justify-between gap-2"><p class="font-bold text-primary-700"><i class="ri-key-2-line mr-1"></i>${esc(q.keywords)}</p><button type="button" data-qa-del="${i}" class="text-accent-700 hover:underline font-semibold">Xóa</button></div>
+          <p class="mt-1 text-foreground-700 leading-relaxed">${esc(q.answer)}</p>
+        </div>`).join('') || '<p class="text-xs text-foreground-400 italic">Chưa có kịch bản tùy chỉnh.</p>'}</div>
+      </section>
+    </div>
   </div>`;
+
   const saveQa = async () => {
     delete C.sys_settings;
     await run(api('admin', 'settings_save', { ai_custom_qa: qaList }), 'Đã cập nhật kịch bản Chatbot AI.', 'sys_settings');
     render();
   };
+
+  const btnTest = main().querySelector('#btn-ai-test');
+  const resultBox = main().querySelector('#ai-test-result');
+  if (btnTest) {
+    btnTest.onclick = async () => {
+      btnTest.disabled = true;
+      btnTest.innerHTML = '<i class="ri-loader-4-line animate-spin"></i> Đang kiểm tra...';
+      resultBox.classList.add('hidden');
+      try {
+        const form = main().querySelector('#ai-cfg-form');
+        const formProvider = form ? form.ai_provider.value : provider;
+        const formModel = form ? form.ai_model.value : '';
+        const formKey = form ? form.ai_api_key.value : '';
+
+        const res = await api('admin', 'ai_test', {
+          ai_provider: formProvider,
+          ai_model: formModel,
+          ai_api_key: formKey,
+        });
+
+        resultBox.classList.remove('hidden');
+        if (res.connected) {
+          resultBox.className = 'mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 space-y-1';
+          resultBox.innerHTML = `<div class="font-bold flex items-center gap-1.5"><i class="ri-checkbox-circle-fill text-emerald-600"></i> ${esc(res.message || 'Kết nối thành công!')}</div>${res.latency_ms ? `<div>Độ trễ phản hồi: <b>${res.latency_ms}ms</b></div>` : ''}`;
+          toast('Kết nối API AI hoạt động tốt!', 'success');
+        } else if (res.fallback) {
+          resultBox.className = 'mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 space-y-1';
+          resultBox.innerHTML = `<div class="font-bold flex items-center gap-1.5"><i class="ri-error-warning-fill text-amber-600"></i> Chế độ Fallback ngoại tuyến</div><div>${esc(res.message || res.error || 'Chatbot sẵn sàng hoạt động ở chế độ giải đáp cơ bản.')}</div>`;
+          toast('Chatbot đang hoạt động ở chế độ Fallback.', 'warning');
+        } else {
+          resultBox.className = 'mt-3 rounded-lg border border-accent-200 bg-accent-50 p-3 text-xs text-accent-800 space-y-1';
+          resultBox.innerHTML = `<div class="font-bold flex items-center gap-1.5"><i class="ri-close-circle-fill text-accent-600"></i> Kiểm tra kết nối thất bại</div><div>${esc(res.error || 'Không thể kết nối tới nhà cung cấp AI.')}</div>`;
+          toast('Không thể kết nối tới nhà cung cấp AI.', 'error');
+        }
+      } catch (err) {
+        resultBox.classList.remove('hidden');
+        resultBox.className = 'mt-3 rounded-lg border border-accent-200 bg-accent-50 p-3 text-xs text-accent-800';
+        resultBox.innerHTML = `<div class="font-bold">Lỗi kiểm tra kết nối:</div><div>${esc(err.message || 'Lỗi mạng hoặc máy chủ không phản hồi')}</div>`;
+        toast(err.message || 'Lỗi kiểm tra kết nối', 'error');
+      } finally {
+        btnTest.disabled = false;
+        btnTest.innerHTML = '<i class="ri-refresh-line"></i> Kiểm tra kết nối AI';
+      }
+    };
+  }
+
   main().querySelector('#ai-cfg-form').onsubmit = async (e) => {
     e.preventDefault();
     const f = e.target;
     const quick = f.ai_quick_replies.value.split('\n').map((s) => s.trim()).filter(Boolean);
-    delete C.sys_settings;
-    await run(api('admin', 'settings_save', {
+    const postData = {
       ai_enabled: f.ai_enabled.checked ? '1' : '0',
       ai_bot_name: f.ai_bot_name.value.trim(),
       ai_greeting: f.ai_greeting.value.trim(),
       ai_quick_replies: quick,
       ai_fallback_reply: f.ai_fallback_reply.value.trim(),
-    }), 'Đã lưu cấu hình Chatbot AI (áp dụng ngay trên trang khách hàng).');
+      ai_provider: f.ai_provider.value.trim(),
+      ai_model: f.ai_model.value.trim(),
+    };
+    if (f.ai_api_key && f.ai_api_key.value.trim()) {
+      postData.ai_api_key = f.ai_api_key.value.trim();
+    }
+    delete C.sys_settings;
+    await run(api('admin', 'settings_save', postData), 'Đã lưu cấu hình Chatbot AI (áp dụng ngay trên hệ thống).', 'sys_settings');
+    render();
   };
   main().querySelector('#ai-qa-add').onclick = () => {
     const m = modal('Thêm kịch bản Hỏi – Đáp AI', `<form id="qa-f" class="space-y-3">
