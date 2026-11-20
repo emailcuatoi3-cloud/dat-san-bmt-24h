@@ -181,12 +181,11 @@ const BOOKING_SELECT = 'SELECT b.*, c.slug AS court_slug, c.address AS court_add
 /** Tự động hủy các đơn giữ sân quá thời gian chờ cọc trong CSDL để trả lại khung giờ trống ngay lập tức. */
 function auto_cancel_expired_holds(): int
 {
-    $now = date('Y-m-d H:i:s');
     $stmt = q("UPDATE bookings 
-               SET status = 'cancelled', cancel_reason = 'Hết thời gian giữ sân (hệ thống tự động hủy)' 
-               WHERE source = 'online' AND status = 'pending' AND payment_status = 'unpaid' 
-                 AND hold_expires_at IS NOT NULL AND hold_expires_at <= ?", [$now]);
-    return $stmt->rowCount();
+               SET status = 'cancelled', cancel_reason = 'Hết thời gian giữ chỗ do chưa thanh toán tiền cọc (hệ thống tự động hủy).' 
+               WHERE source = 'online' AND status IN ('pending', 'confirmed') AND payment_status = 'unpaid' 
+                 AND hold_expires_at IS NOT NULL AND hold_expires_at <= NOW()");
+    return $stmt ? $stmt->rowCount() : 0;
 }
 
 /** Đơn đã duyệt và đã hết giờ chơi thì tự chốt Hoàn thành trong CSDL. */
@@ -198,13 +197,6 @@ function auto_complete_bookings(): void
         if (session_ended($r['booking_date'], jd($r['slots']))) $ids[] = $r['id'];
     }
     if ($ids) q('UPDATE bookings SET status = \'completed\' WHERE id IN (' . in_list($ids) . ')', $ids);
-}
-
-function auto_cancel_expired_holds(): void
-{
-    q("UPDATE bookings SET status = 'cancelled', cancel_reason = 'Hết thời gian giữ chỗ (5 phút) do chưa thanh toán tiền cọc.'
-       WHERE source = 'online' AND status IN ('pending', 'confirmed') AND payment_status = 'unpaid'
-         AND hold_expires_at IS NOT NULL AND hold_expires_at <= NOW()");
 }
 
 /**
