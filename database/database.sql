@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost:3306
--- Generation Time: Nov 18, 2026 at 02:23 PM
+-- Generation Time: Nov 20, 2026 at 06:27 AM
 -- Server version: 8.4.3
 -- PHP Version: 8.3.36
 
@@ -178,6 +178,7 @@ INSERT INTO `bookings` (`id`, `code`, `source`, `court_id`, `court_name`, `sport
 ('cb-261116172016-b04880', 'BMT20261116-8152', 'online', 'c06', 'Sân bóng Thắng Lợi', 'football', 'Thắng Lợi', 'https://readdy.ai/api/search-image?query=Premium%20five%20a%20side%20football%20court%20illuminated%20at%20night%2C%20lush%20green%20turf%2C%20glowing%20floodlights%2C%20modern%20clubhouse%20building%20beside%20the%20pitch%2C%20cinematic%20sports%20photography%2C%20no%20people&width=1000&height=700&seq=bmt-court-fb-06a&orientation=landscape', 3, 'Nguyễn Minh Quân', '0912345678', 'khach@bmt24h.vn', '2026-11-27', '15:00', 60, '[\"15:00\"]', 200000, 200000, 0, NULL, 200000, 60000, '[]', 'vietqr-deposit', 'unpaid', NULL, 'cancelled', '2026-11-16 17:21:46', NULL, 'Hết thời gian giữ chỗ (5 phút) do chưa thanh toán tiền cọc.', '2026-11-16 17:26:46', NULL, NULL, '2026-11-16 17:20:16', '2026-11-16 17:28:33'),
 ('cb-261116174126-bc6e88', 'BMT20261116-3515', 'online', 'c07', 'Nhà thi đấu Cầu lông Buôn Ma Thuột', 'badminton', 'Tân Lợi', 'https://readdy.ai/api/search-image?query=Indoor%20badminton%20hall%20with%20several%20courts%2C%20green%20court%20mats%2C%20high%20ceiling%20and%20bright%20even%20lighting%2C%20clean%20modern%20sports%20facility%2C%20wide%20angle%2C%20no%20people&width=1000&height=700&seq=bmt-court-bd-01a&orientation=landscape', 3, 'Nguyễn Minh Quân', '0912345678', 'khach@bmt24h.vn', '2026-11-28', '09:00', 60, '[\"09:00\"]', 90000, 90000, 0, NULL, 90000, 27000, '[]', 'vietqr-deposit', 'unpaid', NULL, 'cancelled', '2026-11-16 17:57:27', NULL, 'Hết thời gian giữ chỗ (5 phút) do chưa thanh toán tiền cọc.', '2026-11-16 18:02:27', NULL, NULL, '2026-11-16 17:41:26', '2026-11-16 18:03:12'),
 ('cb-261116174243-991f4d', 'BMT20261116-6429', 'online', 'c08', 'Cầu lông Tân An Smash', 'badminton', 'Tân An', 'https://readdy.ai/api/search-image?query=Clean%20indoor%20badminton%20courts%20with%20PVC%20floor%20mats%20in%20a%20simple%20sports%20hall%2C%20white%20net%20dividers%2C%20bright%20ceiling%20lights%2C%20no%20people&width=1000&height=700&seq=bmt-court-bd-02a&orientation=landscape', 3, 'Nguyễn Minh Quân', '0912345678', 'khach@bmt24h.vn', '2026-11-18', '09:30', 60, '[\"09:30\"]', 70000, 60000, 0, NULL, 60000, 18000, '[]', 'vietqr-deposit', 'deposit_paid', NULL, 'completed', '2026-11-16 17:45:22', NULL, NULL, '2026-11-16 17:50:22', NULL, NULL, '2026-11-16 17:42:43', '2026-11-18 20:15:00'),
+('cb-261120131543-53c73d', 'BMT20261120-7887', 'online', 'c03', 'Sân bóng Hòa Thắng', 'football', 'Hòa Thắng', 'https://readdy.ai/api/search-image?query=Compact%20neighborhood%20five%20a%20side%20football%20court%20with%20green%20turf%20surrounded%20by%20tropical%20trees%2C%20warm%20late%20afternoon%20sunlight%2C%20simple%20fence%2C%20friendly%20local%20sports%20setting%2C%20no%20people&width=1000&height=700&seq=bmt-court-fb-03a&orientation=landscape', 3, 'Nguyễn Minh Quân', '0912345678', 'khach@bmt24h.vn', '2026-11-21', '19:30', 60, '[\"19:30\"]', 150000, 540000, 0, NULL, 540000, 162000, '[{\"id\":\"sv-bib\",\"variantId\":\"sv-bib-v1\",\"sku\":\"BIB-CAM-L\",\"label\":\"Thuê áo bib\",\"variantName\":\"Màu Cam · Size L\",\"price\":30000,\"quantity\":6,\"total\":180000},{\"id\":\"sv-bib\",\"variantId\":\"sv-bib-v3\",\"sku\":\"BIB-XANH-L\",\"label\":\"Thuê áo bib\",\"variantName\":\"Màu Xanh neon · Size L\",\"price\":30000,\"quantity\":6,\"total\":180000}]', 'vietqr-deposit', 'unpaid', NULL, 'pending', NULL, NULL, NULL, NULL, NULL, NULL, '2026-11-20 13:15:43', '2026-11-20 13:15:43'),
 ('cb-b01', 'BMT20261106-142', 'online', 'c01', 'Sân bóng BMT Arena', 'football', 'Tân Lợi', 'https://readdy.ai/api/search-image?query=Modern%20artificial%20grass%20five%20a%20side%20football%20pitch%20under%20bright%20floodlights%20at%20night%2C%20vivid%20green%20turf%2C%20white%20line%20markings%2C%20green%20net%20fence%2C%20clean%20sports%20photography%2C%20no%20people&width=1000&height=700&seq=bmt-court-fb-01a&orientation=landscape', 3, 'Nguyễn Minh Quân', '0912 345 678', 'minhquan.nguyen@gmail.com', '2026-11-09', '18:00', 120, '[\"18:00\", \"19:00\"]', 180000, 360000, 0, NULL, 360000, 108000, NULL, 'vietqr', 'deposit_paid', NULL, 'completed', NULL, NULL, NULL, NULL, NULL, 'Đội mình 10 người, cần thuê thêm 2 bộ áo bib.', '2026-11-05 09:00:00', '2026-11-10 14:30:13'),
 ('cb-b02', 'BMT20261109-318', 'online', 'c10', 'Cầu lông Victory BMT', 'badminton', 'Thành Công', 'https://readdy.ai/api/search-image?query=Premium%20indoor%20badminton%20club%20with%20eight%20green%20BWF%20mats%2C%20very%20high%20ceiling%2C%20professional%20sports%20lighting%2C%20modern%20interior%20design%2C%20wide%20architectural%20shot%2C%20no%20people&width=1000&height=700&seq=bmt-court-bd-04a&orientation=landscape', 3, 'Nguyễn Minh Quân', '0912 345 678', 'minhquan.nguyen@gmail.com', '2026-11-12', '19:00', 60, '[\"19:00\"]', 100000, 100000, 0, NULL, 100000, 30000, NULL, 'vietqr', 'unpaid', NULL, 'cancelled', '2026-11-16 17:21:47', NULL, 'Hết thời gian giữ chỗ (5 phút) do chưa thanh toán tiền cọc.', '2026-11-16 17:26:47', NULL, 'Nhóm 4 người, cần thuê 2 vợt.', '2026-11-06 09:00:00', '2026-11-16 17:28:33'),
 ('cb-b03', 'BMT20261114-075', 'online', 'c04', 'Sân bóng Tân Thành', 'football', 'Tân Thành', 'https://readdy.ai/api/search-image?query=Seven%20a%20side%20football%20field%20with%20high%20ball%20netting%20around%20the%20pitch%2C%20evening%20floodlights%2C%20green%20turf%2C%20clean%20urban%20sports%20facility%2C%20no%20people&width=1000&height=700&seq=bmt-court-fb-04a&orientation=landscape', 3, 'Nguyễn Minh Quân', '0912 345 678', 'minhquan.nguyen@gmail.com', '2026-11-17', '17:00', 120, '[\"17:00\", \"18:00\"]', 250000, 500000, 0, NULL, 500000, 150000, NULL, 'vietqr', 'deposit_paid', NULL, 'completed', NULL, NULL, NULL, NULL, NULL, 'Trận giao hữu với FC Ea Tam.', '2026-11-04 09:00:00', '2026-11-18 20:15:00'),
@@ -455,7 +456,7 @@ CREATE TABLE `owner_services` (
   `price` int NOT NULL DEFAULT '0',
   `stock` int NOT NULL DEFAULT '0',
   `has_variants` tinyint(1) NOT NULL DEFAULT '0',
-  `attributes_schema` text COLLATE utf8mb4_unicode_ci COMMENT 'JSON: danh sách thuộc tính',
+  `attributes_schema` text COLLATE utf8mb4_unicode_ci,
   `active` tinyint(1) NOT NULL DEFAULT '1',
   `sort_order` int NOT NULL DEFAULT '0'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -465,54 +466,13 @@ CREATE TABLE `owner_services` (
 --
 
 INSERT INTO `owner_services` (`id`, `owner_id`, `name`, `category`, `sport`, `unit`, `price`, `stock`, `has_variants`, `attributes_schema`, `active`, `sort_order`) VALUES
-('sv-ball', 2, 'Thuê bóng thi đấu', 'rental', 'football', 'quả', 20000, 14, 1, '[{\"name\":\"Loại bóng\",\"options\":[\"Bóng số 4 (Sân 5 người)\",\"Bóng số 5 (Sân 7 & 11 người)\"]}]', 1, 3),
-('sv-bib', 2, 'Thuê áo bib', 'rental', 'football', 'bộ', 30000, 65, 1, '[{\"name\":\"Màu sắc\",\"options\":[\"Cam\",\"Xanh neon\",\"Đỏ\"]},{\"name\":\"Kích cỡ\",\"options\":[\"L (Dưới 70kg)\",\"XL (Trên 70kg)\"]}]', 1, 4),
-('sv-racket', 2, 'Thuê vợt cầu lông', 'rental', 'badminton', 'cây', 25000, 20, 1, '[{\"name\":\"Dòng vợt\",\"options\":[\"Yonex Nanoray\",\"Lining Windstorm\"]},{\"name\":\"Độ căng cước\",\"options\":[\"10.5 kg\",\"11.0 kg\"]}]', 1, 5),
+('sv-ball', 2, 'Thuê bóng thi đấu', 'rental', 'football', 'quả', 20000, 12, 1, '[{\"name\":\"Loại bóng\",\"options\":[\"Bóng số 4 (Sân 5 người)\",\"Bóng số 5 (Sân 7 & 11 người)\"]}]', 1, 3),
+('sv-bib', 2, 'Thuê áo bib', 'rental', 'football', 'bộ', 30000, 53, 1, '[{\"name\":\"Màu sắc\",\"options\":[\"Cam\",\"Xanh neon\",\"Đỏ\"]},{\"name\":\"Kích cỡ\",\"options\":[\"L (Dưới 70kg)\",\"XL (Trên 70kg)\"]}]', 1, 4),
+('sv-racket', 2, 'Thuê vợt cầu lông', 'rental', 'badminton', 'cây', 25000, 8, 1, '[{\"name\":\"Dòng vợt\",\"options\":[\"Yonex Nanoray\",\"Lining Windstorm\"]},{\"name\":\"Độ căng cước\",\"options\":[\"10.5 kg\",\"11.0 kg\"]}]', 1, 5),
 ('sv-revive', 2, 'Revive chanh muối', 'drink', 'all', 'chai', 15000, 86, 0, NULL, 1, 1),
 ('sv-shuttle', 2, 'Hộp cầu lông (12 quả)', 'other', 'badminton', 'hộp', 65000, 15, 0, NULL, 1, 6),
 ('sv-sting', 2, 'Sting dâu', 'drink', 'all', 'chai', 12000, 4, 0, NULL, 1, 2),
 ('sv-water', 2, 'Nước suối Aquafina 500ml', 'drink', 'all', 'chai', 10000, 120, 1, '[{\"name\":\"Quy cách & Nhiệt độ\",\"options\":[\"Chai 500ml (Ướp lạnh)\",\"Chai 500ml (Nhiệt độ phòng)\",\"Chai lớn 1.5L (Ướp lạnh)\"]}]', 1, 0);
-
--- --------------------------------------------------------
-
---
--- Table structure for table `service_variants`
---
-
-CREATE TABLE IF NOT EXISTS `service_variants` (
-  `id` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `service_id` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `owner_id` int NOT NULL,
-  `sku` varchar(60) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
-  `name` varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `attributes` text COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'JSON: {"Màu sắc":"Cam", "Kích cỡ":"L"}',
-  `price` int NOT NULL DEFAULT '0',
-  `stock` int NOT NULL DEFAULT '0',
-  `active` tinyint(1) NOT NULL DEFAULT '1',
-  `sort_order` int NOT NULL DEFAULT '0',
-  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `idx_sv_service` (`service_id`),
-  KEY `idx_sv_owner` (`owner_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-INSERT INTO `service_variants` (`id`, `service_id`, `owner_id`, `sku`, `name`, `attributes`, `price`, `stock`, `active`, `sort_order`) VALUES
-('sv-bib-v1', 'sv-bib', 2, 'BIB-CAM-L', 'Màu Cam · Size L', '{\"Màu sắc\":\"Cam\",\"Kích cỡ\":\"L (Dưới 70kg)\"}', 30000, 12, 1, 1),
-('sv-bib-v2', 'sv-bib', 2, 'BIB-CAM-XL', 'Màu Cam · Size XL', '{\"Màu sắc\":\"Cam\",\"Kích cỡ\":\"XL (Trên 70kg)\"}', 30000, 8, 1, 2),
-('sv-bib-v3', 'sv-bib', 2, 'BIB-XANH-L', 'Màu Xanh neon · Size L', '{\"Màu sắc\":\"Xanh neon\",\"Kích cỡ\":\"L (Dưới 70kg)\"}', 30000, 15, 1, 3),
-('sv-bib-v4', 'sv-bib', 2, 'BIB-XANH-XL', 'Màu Xanh neon · Size XL', '{\"Màu sắc\":\"Xanh neon\",\"Kích cỡ\":\"XL (Trên 70kg)\"}', 30000, 10, 1, 4),
-('sv-bib-v5', 'sv-bib', 2, 'BIB-DO-L', 'Màu Đỏ · Size L', '{\"Màu sắc\":\"Đỏ\",\"Kích cỡ\":\"L (Dưới 70kg)\"}', 30000, 10, 1, 5),
-('sv-bib-v6', 'sv-bib', 2, 'BIB-DO-XL', 'Màu Đỏ · Size XL', '{\"Màu sắc\":\"Đỏ\",\"Kích cỡ\":\"XL (Trên 70kg)\"}', 30000, 10, 1, 6),
-('sv-racket-v1', 'sv-racket', 2, 'VOT-YN-105', 'Yonex Nanoray · 10.5 kg', '{\"Dòng vợt\":\"Yonex Nanoray\",\"Độ căng cước\":\"10.5 kg\"}', 25000, 6, 1, 1),
-('sv-racket-v2', 'sv-racket', 2, 'VOT-YN-110', 'Yonex Nanoray · 11.0 kg', '{\"Dòng vợt\":\"Yonex Nanoray\",\"Độ căng cước\":\"11.0 kg\"}', 30000, 4, 1, 2),
-('sv-racket-v3', 'sv-racket', 2, 'VOT-LN-105', 'Lining Windstorm · 10.5 kg', '{\"Dòng vợt\":\"Lining Windstorm\",\"Độ căng cước\":\"10.5 kg\"}', 25000, 5, 1, 3),
-('sv-racket-v4', 'sv-racket', 2, 'VOT-LN-110', 'Lining Windstorm · 11.0 kg', '{\"Dòng vợt\":\"Lining Windstorm\",\"Độ căng cước\":\"11.0 kg\"}', 30000, 5, 1, 4),
-('sv-water-v1', 'sv-water', 2, 'AQ-500-COLD', 'Chai 500ml · Ướp lạnh', '{\"Quy cách & Nhiệt độ\":\"Chai 500ml (Ướp lạnh)\"}', 10000, 60, 1, 1),
-('sv-water-v2', 'sv-water', 2, 'AQ-500-ROOM', 'Chai 500ml · Nhiệt độ phòng', '{\"Quy cách & Nhiệt độ\":\"Chai 500ml (Nhiệt độ phòng)\"}', 10000, 40, 1, 2),
-('sv-water-v3', 'sv-water', 2, 'AQ-1500-COLD', 'Chai lớn 1.5L · Ướp lạnh', '{\"Quy cách & Nhiệt độ\":\"Chai lớn 1.5L (Ướp lạnh)\"}', 20000, 20, 1, 3),
-('sv-ball-v1', 'sv-ball', 2, 'BALL-S4', 'Bóng số 4 (Sân 5 người)', '{\"Loại bóng\":\"Bóng số 4 (Sân 5 người)\"}', 20000, 8, 1, 1),
-('sv-ball-v2', 'sv-ball', 2, 'BALL-S5', 'Bóng số 5 (Sân 7 & 11 người)', '{\"Loại bóng\":\"Bóng số 5 (Sân 7 & 11 người)\"}', 30000, 6, 1, 2);
 
 -- --------------------------------------------------------
 
@@ -760,6 +720,48 @@ INSERT INTO `reviews` (`id`, `booking_id`, `booking_code`, `court_id`, `customer
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `service_variants`
+--
+
+CREATE TABLE `service_variants` (
+  `id` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `service_id` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `owner_id` int NOT NULL,
+  `sku` varchar(60) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `name` varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `attributes` text COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'JSON: {"Màu sắc":"Cam","Kích cỡ":"L"}',
+  `price` int NOT NULL DEFAULT '0',
+  `stock` int NOT NULL DEFAULT '0',
+  `active` tinyint(1) NOT NULL DEFAULT '1',
+  `sort_order` int NOT NULL DEFAULT '0',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `service_variants`
+--
+
+INSERT INTO `service_variants` (`id`, `service_id`, `owner_id`, `sku`, `name`, `attributes`, `price`, `stock`, `active`, `sort_order`, `created_at`, `updated_at`) VALUES
+('sv-ball-v1', 'sv-ball', 2, 'BALL-S4', 'Bóng số 4 (Sân 5 người)', '{\"Loại bóng\":\"Bóng số 4 (Sân 5 người)\"}', 20000, 8, 1, 12, '2026-11-20 12:29:11', '2026-11-20 12:29:11'),
+('sv-ball-v2', 'sv-ball', 2, 'BALL-S5', 'Bóng số 5 (Sân 7 & 11 người)', '{\"Loại bóng\":\"Bóng số 5 (Sân 7 & 11 người)\"}', 30000, 6, 1, 13, '2026-11-20 12:29:11', '2026-11-20 12:29:11'),
+('sv-bib-v1', 'sv-bib', 2, 'BIB-CAM-L', 'Màu Cam · Size L', '{\"Màu sắc\":\"Cam\",\"Kích cỡ\":\"L (Dưới 70kg)\"}', 30000, 6, 1, 1, '2026-11-20 12:29:11', '2026-11-20 13:15:43'),
+('sv-bib-v2', 'sv-bib', 2, 'BIB-CAM-XL', 'Màu Cam · Size XL', '{\"Màu sắc\":\"Cam\",\"Kích cỡ\":\"XL (Trên 70kg)\"}', 30000, 8, 1, 2, '2026-11-20 12:29:11', '2026-11-20 12:29:11'),
+('sv-bib-v3', 'sv-bib', 2, 'BIB-XANH-L', 'Màu Xanh neon · Size L', '{\"Màu sắc\":\"Xanh neon\",\"Kích cỡ\":\"L (Dưới 70kg)\"}', 30000, 9, 1, 3, '2026-11-20 12:29:11', '2026-11-20 13:15:43'),
+('sv-bib-v4', 'sv-bib', 2, 'BIB-XANH-XL', 'Màu Xanh neon · Size XL', '{\"Màu sắc\":\"Xanh neon\",\"Kích cỡ\":\"XL (Trên 70kg)\"}', 30000, 10, 1, 4, '2026-11-20 12:29:11', '2026-11-20 12:29:11'),
+('sv-bib-v5', 'sv-bib', 2, 'BIB-DO-L', 'Màu Đỏ · Size L', '{\"Màu sắc\":\"Đỏ\",\"Kích cỡ\":\"L (Dưới 70kg)\"}', 30000, 10, 1, 5, '2026-11-20 13:06:32', '2026-11-20 13:06:32'),
+('sv-bib-v6', 'sv-bib', 2, 'BIB-DO-XL', 'Màu Đỏ · Size XL', '{\"Màu sắc\":\"Đỏ\",\"Kích cỡ\":\"XL (Trên 70kg)\"}', 30000, 10, 1, 6, '2026-11-20 13:06:32', '2026-11-20 13:06:32'),
+('sv-racket-v1', 'sv-racket', 2, 'VOT-YN-105', 'Yonex Nanoray · 10.5 kg', '{\"Dòng vợt\":\"Yonex Nanoray\",\"Độ căng cước\":\"10.5 kg\"}', 25000, 6, 1, 5, '2026-11-20 12:29:11', '2026-11-20 12:29:11'),
+('sv-racket-v2', 'sv-racket', 2, 'VOT-YN-110', 'Yonex Nanoray · 11.0 kg', '{\"Dòng vợt\":\"Yonex Nanoray\",\"Độ căng cước\":\"11.0 kg\"}', 30000, 4, 1, 6, '2026-11-20 12:29:11', '2026-11-20 12:29:11'),
+('sv-racket-v3', 'sv-racket', 2, 'VOT-LN-105', 'Lining Windstorm · 10.5 kg', '{\"Dòng vợt\":\"Lining Windstorm\",\"Độ căng cước\":\"10.5 kg\"}', 25000, 5, 1, 7, '2026-11-20 12:29:11', '2026-11-20 12:29:11'),
+('sv-racket-v4', 'sv-racket', 2, 'VOT-LN-110', 'Lining Windstorm · 11.0 kg', '{\"Dòng vợt\":\"Lining Windstorm\",\"Độ căng cước\":\"11.0 kg\"}', 30000, 5, 1, 8, '2026-11-20 12:29:11', '2026-11-20 12:29:11'),
+('sv-water-v1', 'sv-water', 2, 'AQ-500-COLD', 'Chai 500ml · Ướp lạnh', '{\"Quy cách & Nhiệt độ\":\"Chai 500ml (Ướp lạnh)\"}', 10000, 60, 1, 9, '2026-11-20 12:29:11', '2026-11-20 12:29:11'),
+('sv-water-v2', 'sv-water', 2, 'AQ-500-ROOM', 'Chai 500ml · Nhiệt độ phòng', '{\"Quy cách & Nhiệt độ\":\"Chai 500ml (Nhiệt độ phòng)\"}', 10000, 40, 1, 10, '2026-11-20 12:29:11', '2026-11-20 12:29:11'),
+('sv-water-v3', 'sv-water', 2, 'AQ-1500-COLD', 'Chai lớn 1.5L · Ướp lạnh', '{\"Quy cách & Nhiệt độ\":\"Chai lớn 1.5L (Ướp lạnh)\"}', 20000, 20, 1, 11, '2026-11-20 12:29:11', '2026-11-20 12:29:11');
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `system_settings`
 --
 
@@ -836,7 +838,8 @@ INSERT INTO `user_vouchers` (`id`, `user_id`, `code`, `title`, `description`, `d
 ('uv-261118204543-e895a1', 2, 'BMT30K', 'Giảm 30K cho đơn từ 300K', 'Áp dụng mọi khung giờ, mọi ngày trong tuần.', 'amount', 30000, 300000, 'promo', 'available', '2026-12-04', '2026-11-18 20:45:43'),
 ('uv-261118204743-8251e6', 2, 'QUAY50K', 'Voucher VIP 50.000đ', 'Áp dụng cho đơn đặt từ 300.000đ', 'amount', 50000, 0, 'wheel', 'available', '2026-12-18', '2026-11-18 20:47:43'),
 ('uv-261118205153-ec80a1', 2, 'QUAY10', 'Giảm 10% tiền sân', 'Áp dụng cho mọi khung giờ từ 100.000đ', 'percent', 10, 0, 'wheel', 'available', '2026-12-18', '2026-11-18 20:51:53'),
-('uv-261118210533-523095', 2, 'THEM30P', 'Tặng 30 phút chơi thêm', 'Áp dụng khi sân còn trống khung liền kề', 'gift', 0, 0, 'wheel', 'available', '2026-12-18', '2026-11-18 21:05:33');
+('uv-261118210533-523095', 2, 'THEM30P', 'Tặng 30 phút chơi thêm', 'Áp dụng khi sân còn trống khung liền kề', 'gift', 0, 0, 'wheel', 'available', '2026-12-18', '2026-11-18 21:05:33'),
+('uv-261120124322-49e0a4', 3, 'NUOCFREE', 'Tặng 2 chai nước suối', 'Đưa mã cho nhân viên sân khi check-in', 'gift', 0, 0, 'wheel', 'available', '2026-12-20', '2026-11-20 12:43:22');
 
 -- --------------------------------------------------------
 
@@ -858,7 +861,8 @@ CREATE TABLE `wheel_spins` (
 --
 
 INSERT INTO `wheel_spins` (`id`, `user_id`, `prize_code`, `prize_title`, `prize_desc`, `spun_at`) VALUES
-('ws-261118210533-328ce9', 2, 'THEM30P', 'Tặng 30 phút chơi thêm', 'Áp dụng khi sân còn trống khung liền kề', '2026-11-18 21:05:33');
+('ws-261118210533-328ce9', 2, 'THEM30P', 'Tặng 30 phút chơi thêm', 'Áp dụng khi sân còn trống khung liền kề', '2026-11-18 21:05:33'),
+('ws-261120124322-38c7ec', 3, 'NUOCFREE', 'Tặng 2 chai nước suối', 'Đưa mã cho nhân viên sân khi check-in', '2026-11-20 12:43:22');
 
 --
 -- Indexes for dumped tables
@@ -1009,6 +1013,14 @@ ALTER TABLE `reviews`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `booking_id` (`booking_id`),
   ADD KEY `idx_court` (`court_id`);
+
+--
+-- Indexes for table `service_variants`
+--
+ALTER TABLE `service_variants`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_sv_service` (`service_id`),
+  ADD KEY `idx_sv_owner` (`owner_id`);
 
 --
 -- Indexes for table `system_settings`
