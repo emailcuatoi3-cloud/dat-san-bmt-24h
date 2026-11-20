@@ -18,3 +18,4 @@ ensure_sitemap_schema();
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/data.php';
 require_once __DIR__ . '/content.php';
+require_once __DIR__ . '/chatbot.php';

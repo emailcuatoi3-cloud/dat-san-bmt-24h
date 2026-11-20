@@ -914,6 +914,16 @@ run_api([
         $cfg = system_settings_all();
         $cfg['ai_quick_replies_list'] = jd($cfg['ai_quick_replies'] ?? '[]');
         $cfg['ai_custom_qa_list'] = jd($cfg['ai_custom_qa'] ?? '[]');
+
+        // Bổ sung siêu dữ liệu nhà cung cấp Chatbot AI
+        $st = chatbot_status();
+        $cfg['chatbot_provider'] = $st['provider'];
+        $cfg['chatbot_key_configured'] = $st['configured'];
+        $cfg['chatbot_model'] = $st['model'];
+        $cfg['chatbot_enabled'] = $st['enabled'];
+        $cfg['ai_provider'] = $st['provider'];
+        $cfg['ai_model'] = $st['model'];
+        $cfg['ai_key_configured'] = $st['configured'];
         return $cfg;
     },
 
@@ -922,18 +932,31 @@ run_api([
         $in = input();
         $allowed = ['site_name', 'hotline', 'support_email', 'site_address', 'bank_id', 'bank_name', 'bank_account', 'bank_holder',
             'deposit_rate', 'hold_minutes', 'cancel_cutoff_hours', 'general_policy', 'ai_enabled', 'ai_bot_name', 'ai_greeting',
-            'ai_quick_replies', 'ai_fallback_reply', 'ai_custom_qa'];
+            'ai_quick_replies', 'ai_fallback_reply', 'ai_custom_qa', 'ai_provider', 'ai_model', 'ai_api_key'];
         $pairs = [];
         foreach ($allowed as $k) {
             if (array_key_exists($k, $in)) {
-                $pairs[$k] = is_array($in[$k]) ? j($in[$k]) : (string) $in[$k];
+                $val = is_array($in[$k]) ? j($in[$k]) : (string) $in[$k];
+                if ($k === 'ai_api_key' && (trim($val) === '' || str_contains($val, '***'))) {
+                    continue;
+                }
+                $pairs[$k] = $val;
             }
         }
         if ($pairs) {
             system_settings_save($pairs);
-            $isAi = isset($pairs['ai_bot_name']) || isset($pairs['ai_enabled']) || isset($pairs['ai_custom_qa']);
+            $isAi = isset($pairs['ai_bot_name']) || isset($pairs['ai_enabled']) || isset($pairs['ai_custom_qa']) || isset($pairs['ai_provider']) || isset($pairs['ai_model']) || isset($pairs['ai_api_key']);
             audit($isAi ? 'ai' : 'settings', $isAi ? 'Cập nhật cấu hình Chatbot AI' : 'Cập nhật cấu hình hệ thống', implode(', ', array_keys($pairs)), '', 'success');
         }
         return true;
+    },
+
+    'ai_test' => function () {
+        need('ai');
+        $raw = input();
+        $provider = !empty($raw['provider']) ? trim((string)$raw['provider']) : (!empty($raw['ai_provider']) ? trim((string)$raw['ai_provider']) : null);
+        $apiKey = !empty($raw['api_key']) ? trim((string)$raw['api_key']) : (!empty($raw['ai_api_key']) ? trim((string)$raw['ai_api_key']) : null);
+        $model = !empty($raw['model']) ? trim((string)$raw['model']) : (!empty($raw['ai_model']) ? trim((string)$raw['ai_model']) : null);
+        return chatbot_test_connection($provider, $apiKey, $model);
     },
 ]);
