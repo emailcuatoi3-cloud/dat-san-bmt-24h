@@ -110,8 +110,6 @@ function activate_sudo(int $seconds = 900): void
     $_SESSION['admin_sudo_until'] = time() + $seconds;
 }
 
-<<<<<<< HEAD
-=======
 /**
  * Lấy URL đích hợp lệ sau khi đăng nhập / đăng ký:
  * Ưu tiên: tham số truyền vào -> $_GET['redirect'] -> HTTP_REFERER -> session -> mặc định '/' (trang chủ).
@@ -162,8 +160,6 @@ function get_auth_redirect_target(?string $explicit = null): string
     // Mặc định về trang chủ (không ép về trang cá nhân hay trang quản trị)
     return '/';
 }
-
->>>>>>> origin/an
 /** Thông tin hồ sơ gọn để gửi cho JavaScript. */
 function public_profile(?array $u): ?array
 {

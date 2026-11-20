@@ -450,9 +450,12 @@ CREATE TABLE `owner_services` (
   `owner_id` int NOT NULL,
   `name` varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,
   `category` enum('drink','rental','food','other') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'drink',
+  `sport` enum('all','football','badminton') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'all',
   `unit` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'cái',
   `price` int NOT NULL DEFAULT '0',
   `stock` int NOT NULL DEFAULT '0',
+  `has_variants` tinyint(1) NOT NULL DEFAULT '0',
+  `attributes_schema` text COLLATE utf8mb4_unicode_ci COMMENT 'JSON: danh sách thuộc tính',
   `active` tinyint(1) NOT NULL DEFAULT '1',
   `sort_order` int NOT NULL DEFAULT '0'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -461,15 +464,55 @@ CREATE TABLE `owner_services` (
 -- Dumping data for table `owner_services`
 --
 
-INSERT INTO `owner_services` (`id`, `owner_id`, `name`, `category`, `unit`, `price`, `stock`, `active`, `sort_order`) VALUES
-('sv-ball', 2, 'Thuê bóng thi đấu', 'rental', 'quả', 20000, 12, 1, 3),
-('sv-bib', 2, 'Thuê áo bib', 'rental', 'bộ', 30000, 6, 1, 4),
-('sv-noodle', 2, 'Mì tôm trứng', 'food', 'tô', 25000, 3, 1, 7),
-('sv-racket', 2, 'Thuê vợt cầu lông', 'rental', 'cây', 25000, 8, 1, 5),
-('sv-revive', 2, 'Revive chanh muối', 'drink', 'chai', 15000, 86, 1, 1),
-('sv-shuttle', 2, 'Hộp cầu lông (12 quả)', 'other', 'hộp', 65000, 15, 1, 6),
-('sv-sting', 2, 'Sting dâu', 'drink', 'chai', 12000, 4, 1, 2),
-('sv-water', 2, 'Nước suối Aquafina 500ml', 'drink', 'chai', 10000, 120, 1, 0);
+INSERT INTO `owner_services` (`id`, `owner_id`, `name`, `category`, `sport`, `unit`, `price`, `stock`, `has_variants`, `attributes_schema`, `active`, `sort_order`) VALUES
+('sv-ball', 2, 'Thuê bóng thi đấu', 'rental', 'football', 'quả', 20000, 14, 1, '[{\"name\":\"Loại bóng\",\"options\":[\"Bóng số 4 (Sân 5 người)\",\"Bóng số 5 (Sân 7 & 11 người)\"]}]', 1, 3),
+('sv-bib', 2, 'Thuê áo bib', 'rental', 'football', 'bộ', 30000, 65, 1, '[{\"name\":\"Màu sắc\",\"options\":[\"Cam\",\"Xanh neon\",\"Đỏ\"]},{\"name\":\"Kích cỡ\",\"options\":[\"L (Dưới 70kg)\",\"XL (Trên 70kg)\"]}]', 1, 4),
+('sv-racket', 2, 'Thuê vợt cầu lông', 'rental', 'badminton', 'cây', 25000, 20, 1, '[{\"name\":\"Dòng vợt\",\"options\":[\"Yonex Nanoray\",\"Lining Windstorm\"]},{\"name\":\"Độ căng cước\",\"options\":[\"10.5 kg\",\"11.0 kg\"]}]', 1, 5),
+('sv-revive', 2, 'Revive chanh muối', 'drink', 'all', 'chai', 15000, 86, 0, NULL, 1, 1),
+('sv-shuttle', 2, 'Hộp cầu lông (12 quả)', 'other', 'badminton', 'hộp', 65000, 15, 0, NULL, 1, 6),
+('sv-sting', 2, 'Sting dâu', 'drink', 'all', 'chai', 12000, 4, 0, NULL, 1, 2),
+('sv-water', 2, 'Nước suối Aquafina 500ml', 'drink', 'all', 'chai', 10000, 120, 1, '[{\"name\":\"Quy cách & Nhiệt độ\",\"options\":[\"Chai 500ml (Ướp lạnh)\",\"Chai 500ml (Nhiệt độ phòng)\",\"Chai lớn 1.5L (Ướp lạnh)\"]}]', 1, 0);
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `service_variants`
+--
+
+CREATE TABLE IF NOT EXISTS `service_variants` (
+  `id` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `service_id` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `owner_id` int NOT NULL,
+  `sku` varchar(60) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `name` varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `attributes` text COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'JSON: {"Màu sắc":"Cam", "Kích cỡ":"L"}',
+  `price` int NOT NULL DEFAULT '0',
+  `stock` int NOT NULL DEFAULT '0',
+  `active` tinyint(1) NOT NULL DEFAULT '1',
+  `sort_order` int NOT NULL DEFAULT '0',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_sv_service` (`service_id`),
+  KEY `idx_sv_owner` (`owner_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO `service_variants` (`id`, `service_id`, `owner_id`, `sku`, `name`, `attributes`, `price`, `stock`, `active`, `sort_order`) VALUES
+('sv-bib-v1', 'sv-bib', 2, 'BIB-CAM-L', 'Màu Cam · Size L', '{\"Màu sắc\":\"Cam\",\"Kích cỡ\":\"L (Dưới 70kg)\"}', 30000, 12, 1, 1),
+('sv-bib-v2', 'sv-bib', 2, 'BIB-CAM-XL', 'Màu Cam · Size XL', '{\"Màu sắc\":\"Cam\",\"Kích cỡ\":\"XL (Trên 70kg)\"}', 30000, 8, 1, 2),
+('sv-bib-v3', 'sv-bib', 2, 'BIB-XANH-L', 'Màu Xanh neon · Size L', '{\"Màu sắc\":\"Xanh neon\",\"Kích cỡ\":\"L (Dưới 70kg)\"}', 30000, 15, 1, 3),
+('sv-bib-v4', 'sv-bib', 2, 'BIB-XANH-XL', 'Màu Xanh neon · Size XL', '{\"Màu sắc\":\"Xanh neon\",\"Kích cỡ\":\"XL (Trên 70kg)\"}', 30000, 10, 1, 4),
+('sv-bib-v5', 'sv-bib', 2, 'BIB-DO-L', 'Màu Đỏ · Size L', '{\"Màu sắc\":\"Đỏ\",\"Kích cỡ\":\"L (Dưới 70kg)\"}', 30000, 10, 1, 5),
+('sv-bib-v6', 'sv-bib', 2, 'BIB-DO-XL', 'Màu Đỏ · Size XL', '{\"Màu sắc\":\"Đỏ\",\"Kích cỡ\":\"XL (Trên 70kg)\"}', 30000, 10, 1, 6),
+('sv-racket-v1', 'sv-racket', 2, 'VOT-YN-105', 'Yonex Nanoray · 10.5 kg', '{\"Dòng vợt\":\"Yonex Nanoray\",\"Độ căng cước\":\"10.5 kg\"}', 25000, 6, 1, 1),
+('sv-racket-v2', 'sv-racket', 2, 'VOT-YN-110', 'Yonex Nanoray · 11.0 kg', '{\"Dòng vợt\":\"Yonex Nanoray\",\"Độ căng cước\":\"11.0 kg\"}', 30000, 4, 1, 2),
+('sv-racket-v3', 'sv-racket', 2, 'VOT-LN-105', 'Lining Windstorm · 10.5 kg', '{\"Dòng vợt\":\"Lining Windstorm\",\"Độ căng cước\":\"10.5 kg\"}', 25000, 5, 1, 3),
+('sv-racket-v4', 'sv-racket', 2, 'VOT-LN-110', 'Lining Windstorm · 11.0 kg', '{\"Dòng vợt\":\"Lining Windstorm\",\"Độ căng cước\":\"11.0 kg\"}', 30000, 5, 1, 4),
+('sv-water-v1', 'sv-water', 2, 'AQ-500-COLD', 'Chai 500ml · Ướp lạnh', '{\"Quy cách & Nhiệt độ\":\"Chai 500ml (Ướp lạnh)\"}', 10000, 60, 1, 1),
+('sv-water-v2', 'sv-water', 2, 'AQ-500-ROOM', 'Chai 500ml · Nhiệt độ phòng', '{\"Quy cách & Nhiệt độ\":\"Chai 500ml (Nhiệt độ phòng)\"}', 10000, 40, 1, 2),
+('sv-water-v3', 'sv-water', 2, 'AQ-1500-COLD', 'Chai lớn 1.5L · Ướp lạnh', '{\"Quy cách & Nhiệt độ\":\"Chai lớn 1.5L (Ướp lạnh)\"}', 20000, 20, 1, 3),
+('sv-ball-v1', 'sv-ball', 2, 'BALL-S4', 'Bóng số 4 (Sân 5 người)', '{\"Loại bóng\":\"Bóng số 4 (Sân 5 người)\"}', 20000, 8, 1, 1),
+('sv-ball-v2', 'sv-ball', 2, 'BALL-S5', 'Bóng số 5 (Sân 7 & 11 người)', '{\"Loại bóng\":\"Bóng số 5 (Sân 7 & 11 người)\"}', 30000, 6, 1, 2);
 
 -- --------------------------------------------------------
 

@@ -9,6 +9,7 @@ render_page([
         'courts' => array_values(array_filter(public_courts(), fn($c) => $c['status'] === 'active')),
         'areas' => court_areas(),
         'priceRanges' => PRICE_RANGES,
+        'services' => services_with_variants(),
         'preset' => [
             'slug' => $params[0] ?? '',
             'date' => $_GET['date'] ?? '',

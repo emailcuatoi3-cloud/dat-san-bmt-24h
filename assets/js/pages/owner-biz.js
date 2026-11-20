@@ -169,28 +169,162 @@ const LOW_STOCK = 5;
 const sv = { cat: 'all', list: null };
 
 function serviceForm(item = null) {
-  const s = item || { category: 'drink', unit: 'chai', price: 0, stock: 0, active: true };
+  const s = item || { category: 'drink', unit: 'chai', price: 0, stock: 0, active: true, hasVariants: false, variants: [] };
+  let variants = Array.isArray(s.variants) ? JSON.parse(JSON.stringify(s.variants)) : [];
+
+  const renderVariantRows = () => {
+    const list = m.el.querySelector('#sv-variant-list');
+    if (!list) return;
+    if (variants.length === 0) {
+      list.innerHTML = `<p class="py-3 text-center text-xs text-foreground-400">Chưa có biến thể nào. Bấm "+ Thêm biến thể" hoặc chọn mẫu nhanh bên dưới.</p>`;
+      return;
+    }
+    list.innerHTML = variants.map((v, i) => `
+      <div class="flex items-center gap-2 rounded-md border border-background-200 bg-background-50 p-2 text-xs" data-vidx="${i}">
+        <input type="text" data-vfield="name" value="${esc(v.name || '')}" placeholder="Tên phân loại (vd: Cam · Size L)" class="${INPUT} flex-1 text-xs py-1 px-2" required>
+        <input type="text" data-vfield="sku" value="${esc(v.sku || '')}" placeholder="Mã SKU" class="${INPUT} w-24 text-xs py-1 px-2">
+        <input type="number" data-vfield="price" min="0" step="1000" value="${v.price || 0}" placeholder="Giá bán" class="${INPUT} w-24 text-xs py-1 px-2">
+        <input type="number" data-vfield="stock" min="0" value="${v.stock || 0}" placeholder="Tồn" class="${INPUT} w-16 text-xs py-1 px-2">
+        <button type="button" data-vdel="${i}" class="text-accent-600 hover:text-accent-800 p-1 text-base"><i class="ri-delete-bin-line"></i></button>
+      </div>
+    `).join('');
+  };
+
   const m = modal(
     item ? 'Sửa dịch vụ' : 'Thêm dịch vụ',
     `<form class="grid grid-cols-2 gap-3">
-      <div class="col-span-2"><label class="${LABEL}">Tên dịch vụ</label><input name="name" value="${esc(s.name || '')}" class="${INPUT}" placeholder="Nước suối Aquafina"></div>
+      <div class="col-span-2"><label class="${LABEL}">Tên dịch vụ</label><input name="name" value="${esc(s.name || '')}" class="${INPUT}" placeholder="Nước suối Aquafina, Áo bib thi đấu..." required></div>
       <div><label class="${LABEL}">Nhóm</label><select name="category" class="${INPUT}">${Object.entries(CATS).map(([k, [l]]) => `<option value="${k}" ${s.category === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div><label class="${LABEL}">Môn áp dụng</label><select name="sport" class="${INPUT}"><option value="all" ${(s.sport === 'all' || !s.sport) ? 'selected' : ''}>Tất cả môn (Dùng chung)</option><option value="football" ${s.sport === 'football' ? 'selected' : ''}>Chỉ sân bóng đá</option><option value="badminton" ${s.sport === 'badminton' ? 'selected' : ''}>Chỉ sân cầu lông</option></select></div>
       <div><label class="${LABEL}">Đơn vị</label><input name="unit" value="${esc(s.unit)}" class="${INPUT}"></div>
-      <div><label class="${LABEL}">Giá bán (đ)</label><input type="number" name="price" min="0" step="1000" value="${s.price}" class="${INPUT}"></div>
-      <div><label class="${LABEL}">Tồn kho</label><input type="number" name="stock" min="0" value="${s.stock}" class="${INPUT}"></div>
+      
+      <!-- Toggle Đa thuộc tính -->
+      <div class="col-span-2 rounded-lg border border-primary-200 bg-primary-50/70 p-3">
+        <label class="flex cursor-pointer items-center justify-between gap-2">
+          <div>
+            <span class="text-sm font-bold text-primary-950 flex items-center gap-1.5"><i class="ri-git-merge-line text-primary-600"></i>Sản phẩm có Đa thuộc tính (biến thể)</span>
+            <p class="text-[11px] text-primary-800/80 mt-0.5">Bật khi mặt hàng có nhiều màu sắc, kích cỡ (size), dòng sản phẩm với giá và tồn kho riêng.</p>
+          </div>
+          <input type="checkbox" id="sv-has-vars" ${s.hasVariants ? 'checked' : ''} class="h-5 w-5 accent-primary-600 cursor-pointer">
+        </label>
+        
+        <div id="sv-vars-container" class="${s.hasVariants ? '' : 'hidden'} mt-3 border-t border-primary-200/80 pt-3">
+          <div class="flex items-center justify-between gap-2 mb-2">
+            <span class="text-xs font-bold text-foreground-900">Danh sách biến thể / phân loại:</span>
+            <div class="flex items-center gap-1.5">
+              <button type="button" id="sv-btn-add-var" class="rounded bg-primary-500 px-2 py-1 text-[11px] font-bold text-white hover:bg-primary-600"><i class="ri-add-line"></i>Thêm biến thể</button>
+            </div>
+          </div>
+          <div id="sv-variant-list" class="space-y-1.5 max-h-52 overflow-y-auto pr-1"></div>
+          <div class="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px] text-foreground-500">
+            <span>Mẫu nhanh:</span>
+            <button type="button" data-preset="bib" class="rounded bg-white px-2 py-0.5 border border-primary-300 text-primary-700 hover:bg-primary-50">Áo bib (Cam, Xanh · L, XL)</button>
+            <button type="button" data-preset="racket" class="rounded bg-white px-2 py-0.5 border border-primary-300 text-primary-700 hover:bg-primary-50">Vợt (Yonex, Lining)</button>
+            <button type="button" data-preset="water" class="rounded bg-white px-2 py-0.5 border border-primary-300 text-primary-700 hover:bg-primary-50">Nước (Lạnh, Thường, 1.5L)</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="sv-single-price"><label class="${LABEL}">Giá bán / thuê chuẩn (đ)</label><input type="number" name="price" min="0" step="1000" value="${s.price}" class="${INPUT}"></div>
+      <div id="sv-single-stock"><label class="${LABEL}">Tồn kho ban đầu</label><input type="number" name="stock" min="0" value="${s.stock}" class="${INPUT}"></div>
       <label class="col-span-2 flex items-center gap-2 text-sm"><input type="checkbox" name="active" ${s.active ? 'checked' : ''} class="accent-primary-500">Đang bán</label>
     </form>`,
     `<button type="button" data-close class="${BTN_OUT}">Hủy</button><button type="button" data-ok class="${BTN}">Lưu</button>`,
+    'max-w-2xl'
   );
+
+  const hasVarsEl = m.el.querySelector('#sv-has-vars');
+  const varsContEl = m.el.querySelector('#sv-vars-container');
+  const addVarBtn = m.el.querySelector('#sv-btn-add-var');
+
+  hasVarsEl.addEventListener('change', () => {
+    varsContEl.classList.toggle('hidden', !hasVarsEl.checked);
+    if (hasVarsEl.checked && variants.length === 0) {
+      variants.push({ name: 'Tiêu chuẩn', sku: 'SKU-01', price: Number(m.el.querySelector('input[name="price"]').value) || 0, stock: Number(m.el.querySelector('input[name="stock"]').value) || 10, active: true });
+      renderVariantRows();
+    }
+  });
+
+  addVarBtn.addEventListener('click', () => {
+    variants.push({ name: '', sku: `SKU-${variants.length + 1}`, price: Number(m.el.querySelector('input[name="price"]').value) || 0, stock: 10, active: true });
+    renderVariantRows();
+  });
+
+  m.el.addEventListener('click', (ev) => {
+    const delBtn = ev.target.closest('[data-vdel]');
+    if (delBtn) {
+      const idx = Number(delBtn.dataset.vdel);
+      variants.splice(idx, 1);
+      renderVariantRows();
+      return;
+    }
+    const presetBtn = ev.target.closest('[data-preset]');
+    if (presetBtn) {
+      const p = presetBtn.dataset.preset;
+      const form = m.el.querySelector('form');
+      if (p === 'bib') {
+        if (form && form.sport) form.sport.value = 'football';
+        variants = [
+          { name: 'Màu Cam · Size L', sku: 'BIB-CAM-L', price: 30000, stock: 12, attributes: { 'Màu sắc': 'Cam', 'Kích cỡ': 'L' } },
+          { name: 'Màu Cam · Size XL', sku: 'BIB-CAM-XL', price: 30000, stock: 8, attributes: { 'Màu sắc': 'Cam', 'Kích cỡ': 'XL' } },
+          { name: 'Màu Xanh neon · Size L', sku: 'BIB-XANH-L', price: 30000, stock: 15, attributes: { 'Màu sắc': 'Xanh neon', 'Kích cỡ': 'L' } },
+          { name: 'Màu Xanh neon · Size XL', sku: 'BIB-XANH-XL', price: 30000, stock: 10, attributes: { 'Màu sắc': 'Xanh neon', 'Kích cỡ': 'XL' } },
+        ];
+      } else if (p === 'racket') {
+        if (form && form.sport) form.sport.value = 'badminton';
+        variants = [
+          { name: 'Yonex Nanoray · 10.5 kg', sku: 'VOT-YN-105', price: 25000, stock: 6, attributes: { 'Dòng': 'Yonex', 'Căng': '10.5kg' } },
+          { name: 'Yonex Nanoray · 11.0 kg', sku: 'VOT-YN-110', price: 30000, stock: 4, attributes: { 'Dòng': 'Yonex', 'Căng': '11.0kg' } },
+          { name: 'Lining Windstorm · 10.5 kg', sku: 'VOT-LN-105', price: 25000, stock: 5, attributes: { 'Dòng': 'Lining', 'Căng': '10.5kg' } },
+        ];
+      } else if (p === 'water') {
+        if (form && form.sport) form.sport.value = 'all';
+        variants = [
+          { name: 'Chai 500ml · Ướp lạnh', sku: 'AQ-500-COLD', price: 10000, stock: 60, attributes: { 'Dung tích': '500ml', 'Nhiệt độ': 'Lạnh' } },
+          { name: 'Chai 500ml · Thường', sku: 'AQ-500-ROOM', price: 10000, stock: 40, attributes: { 'Dung tích': '500ml', 'Nhiệt độ': 'Phòng' } },
+          { name: 'Chai lớn 1.5L · Ướp lạnh', sku: 'AQ-1500-COLD', price: 20000, stock: 20, attributes: { 'Dung tích': '1.5L', 'Nhiệt độ': 'Lạnh' } },
+        ];
+      }
+      renderVariantRows();
+    }
+  });
+
+  m.el.addEventListener('input', (ev) => {
+    const input = ev.target.closest('[data-vfield]');
+    if (!input) return;
+    const row = input.closest('[data-vidx]');
+    if (!row) return;
+    const idx = Number(row.dataset.vidx);
+    const field = input.dataset.vfield;
+    if (variants[idx]) {
+      variants[idx][field] = ['price', 'stock'].includes(field) ? Number(input.value) : input.value;
+    }
+  });
+
+  renderVariantRows();
+
   m.el.querySelector('[data-ok]').addEventListener('click', async (e) => {
     const form = m.el.querySelector('form');
     const f = formData(form);
+    const hasVars = hasVarsEl.checked;
+    if (hasVars && variants.length === 0) {
+      toast('Vui lòng thêm ít nhất một biến thể hoặc tắt đa thuộc tính.', 'error');
+      return;
+    }
     setBusy(e.currentTarget, true, 'Đang lưu...');
     try {
-      await api('owner', 'service_save', { ...f, id: item ? item.id : '', price: Number(f.price), stock: Number(f.stock), active: form.active.checked });
+      await api('owner', 'service_save', {
+        ...f,
+        id: item ? item.id : '',
+        price: Number(f.price) || 0,
+        stock: Number(f.stock) || 0,
+        hasVariants: hasVars,
+        variants: hasVars ? variants : [],
+        active: form.active.checked,
+      });
       sv.list = null;
       m.close();
-      toast('Đã lưu dịch vụ.');
+      toast('Đã lưu dịch vụ và các biến thể thành công.');
       renderServices();
     } catch (err) { setBusy(e.currentTarget, false); toast(err.message, 'error'); }
   });
@@ -215,13 +349,67 @@ export async function renderServices() {
   </div>
   ${low.length ? `<div class="mt-4 flex items-start gap-2 rounded-lg border border-accent-300 bg-accent-50 px-4 py-3 text-sm text-accent-800"><i class="ri-alarm-warning-line mt-0.5"></i><span>Cần nhập thêm: ${low.map((s) => `<b>${esc(s.name)}</b> (còn ${s.stock})`).join(', ')}</span></div>` : ''}
   <div class="mt-5 mb-3 flex flex-wrap gap-2"><button type="button" data-cat="all" class="${chip(sv.cat === 'all')}">Tất cả</button>${Object.entries(CATS).map(([k, [l, i]]) => `<button type="button" data-cat="${k}" class="${chip(sv.cat === k)}"><i class="${i}"></i>${l}</button>`).join('')}</div>
-  <div class="${CARD} overflow-hidden">${list.length ? table(['Dịch vụ', 'Nhóm', '>Giá bán', 'Tồn kho', 'Trạng thái', '>Thao tác'], list.map((s) => `<tr class="${s.active ? '' : 'opacity-60'}">
-    <td class="px-4 py-3 font-semibold">${esc(s.name)}<p class="text-xs font-normal text-foreground-500">/${esc(s.unit)}</p></td>
-    <td class="px-4 py-3 text-xs"><i class="${CATS[s.category][1]}"></i> ${CATS[s.category][0]}</td>
-    <td class="px-4 py-3 text-right font-semibold">${money(s.price)}</td>
-    <td class="px-4 py-3"><div class="flex items-center gap-1.5"><button type="button" data-stock="${s.id}" data-d="-1" class="flex h-7 w-7 items-center justify-center rounded border border-background-300">−</button><span class="w-10 text-center font-semibold ${s.stock <= LOW_STOCK ? 'text-accent-700' : ''}">${s.stock}</span><button type="button" data-stock="${s.id}" data-d="1" class="flex h-7 w-7 items-center justify-center rounded border border-background-300">+</button><button type="button" data-stock="${s.id}" data-d="10" class="rounded border border-background-300 px-1.5 py-1 text-[11px]">+10</button></div></td>
-    <td class="px-4 py-3"><button type="button" data-toggle="${s.id}" class="${s.active ? 'bg-primary-50 text-primary-700' : 'bg-background-100 text-foreground-600'} rounded-full px-2.5 py-1 text-xs font-semibold">${s.active ? 'Đang bán' : 'Tạm ngưng'}</button></td>
-    <td class="px-4 py-3"><div class="flex justify-end gap-1.5"><button type="button" data-edit="${s.id}" class="${BTN_SM}"><i class="ri-edit-line"></i>Sửa</button><button type="button" data-del="${s.id}" class="${BTN_SM_DANGER}"><i class="ri-delete-bin-line"></i></button></div></td></tr>`).join(''), 760)
+  <div class="${CARD} overflow-hidden">${list.length ? table(['Dịch vụ', 'Nhóm', '>Giá bán', 'Tồn kho', 'Trạng thái', '>Thao tác'], list.map((s) => {
+    const hasVars = s.hasVariants && s.variants && s.variants.length > 0;
+    return `
+      <tr class="${s.active ? '' : 'opacity-60'}">
+        <td class="px-4 py-3">
+          <div class="flex items-center gap-2">
+            <span class="font-semibold text-foreground-950">${esc(s.name)}</span>
+            ${hasVars ? `<span class="inline-flex items-center gap-1 rounded bg-primary-100 text-primary-800 px-2 py-0.5 text-[10px] font-bold"><i class="ri-git-merge-line"></i>${s.variants.length} phân loại</span>` : ''}
+          </div>
+          <p class="text-xs font-normal text-foreground-500">/${esc(s.unit)}</p>
+        </td>
+        <td class="px-4 py-3 text-xs">
+          <div><i class="${CATS[s.category][1]}"></i> ${CATS[s.category][0]}</div>
+          <div class="mt-1">${(s.sport === 'football' ? '<span class="inline-flex items-center gap-1 rounded bg-emerald-50 text-emerald-800 px-1.5 py-0.5 text-[10px] font-semibold"><i class="ri-football-line"></i>Bóng đá</span>' : (s.sport === 'badminton' ? '<span class="inline-flex items-center gap-1 rounded bg-blue-50 text-blue-800 px-1.5 py-0.5 text-[10px] font-semibold"><i class="ri-ping-pong-line"></i>Cầu lông</span>' : '<span class="inline-flex items-center gap-1 rounded bg-background-100 text-foreground-600 px-1.5 py-0.5 text-[10px] font-semibold"><i class="ri-apps-line"></i>Dùng chung</span>'))}</div>
+        </td>
+        <td class="px-4 py-3 text-right font-semibold">${hasVars ? `<span class="text-xs text-foreground-500 font-normal">từ </span>${money(s.price)}` : money(s.price)}</td>
+        <td class="px-4 py-3">
+          <div class="flex items-center gap-1.5">
+            ${!hasVars ? `
+              <button type="button" data-stock="${s.id}" data-d="-1" class="flex h-7 w-7 items-center justify-center rounded border border-background-300">−</button>
+              <span class="w-10 text-center font-semibold ${s.stock <= LOW_STOCK ? 'text-accent-700' : ''}">${s.stock}</span>
+              <button type="button" data-stock="${s.id}" data-d="1" class="flex h-7 w-7 items-center justify-center rounded border border-background-300">+</button>
+              <button type="button" data-stock="${s.id}" data-d="10" class="rounded border border-background-300 px-1.5 py-1 text-[11px]">+10</button>
+            ` : `
+              <span class="font-bold text-foreground-900 ${s.stock <= LOW_STOCK ? 'text-accent-700' : ''}">${s.stock}</span>
+              <span class="text-[11px] text-foreground-500">(${s.variants.length} loại)</span>
+            `}
+          </div>
+        </td>
+        <td class="px-4 py-3"><button type="button" data-toggle="${s.id}" class="${s.active ? 'bg-primary-50 text-primary-700' : 'bg-background-100 text-foreground-600'} rounded-full px-2.5 py-1 text-xs font-semibold">${s.active ? 'Đang bán' : 'Tạm ngưng'}</button></td>
+        <td class="px-4 py-3">
+          <div class="flex justify-end gap-1.5">
+            ${hasVars ? `<button type="button" data-drawer="${s.id}" class="${BTN_SM} bg-background-100 text-foreground-800 hover:bg-background-200" title="Xem các phân loại"><i class="ri-list-check-2"></i>Chi tiết</button>` : ''}
+            <button type="button" data-edit="${s.id}" class="${BTN_SM}"><i class="ri-edit-line"></i>Sửa</button>
+            <button type="button" data-del="${s.id}" class="${BTN_SM_DANGER}"><i class="ri-delete-bin-line"></i></button>
+          </div>
+        </td>
+      </tr>
+      ${hasVars ? `
+        <tr id="vars-sub-${s.id}" class="hidden bg-background-50/80">
+          <td colspan="6" class="px-6 py-3 border-t border-b border-background-200">
+            <div class="text-xs font-bold text-foreground-800 mb-2 flex items-center gap-1.5"><i class="ri-git-merge-line text-primary-600"></i>Các phân loại / biến thể của "${esc(s.name)}":</div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+              ${s.variants.map((v) => `
+                <div class="flex items-center justify-between gap-2 rounded border border-background-200 bg-white p-2.5 text-xs shadow-xs">
+                  <div>
+                    <span class="font-bold text-foreground-950 block">${esc(v.name)}</span>
+                    <span class="text-[10px] text-foreground-400 font-mono block">${esc(v.sku || 'N/A')}</span>
+                  </div>
+                  <div class="text-right">
+                    <span class="font-bold text-primary-700 block">${money(v.price)}</span>
+                    <span class="text-[11px] text-foreground-500">Tồn: <b>${v.stock}</b></span>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </td>
+        </tr>
+      ` : ''}
+    `;
+  }).join(''), 760)
       : `<div class="p-4">${emptyState('ri-cup-line', 'Chưa có dịch vụ', 'Thêm nước uống, dụng cụ cho thuê để bán kèm khi khách đến sân.')}</div>`}</div>`;
 
   const root = main();
@@ -229,6 +417,10 @@ export async function renderServices() {
   const save = async (s) => { try { await api('owner', 'service_save', s); renderServices(); } catch (e) { toast(e.message, 'error'); sv.list = null; renderServices(); } };
   on(root, 'click', '[data-cat]', (e, el) => { sv.cat = el.dataset.cat; renderServices(); });
   on(root, 'click', '[data-edit]', (e, el) => serviceForm(find(el.dataset.edit)));
+  on(root, 'click', '[data-drawer]', (e, el) => {
+    const subRow = root.querySelector(`#vars-sub-${el.dataset.drawer}`);
+    if (subRow) subRow.classList.toggle('hidden');
+  });
   on(root, 'click', '[data-stock]', (e, el) => { const s = find(el.dataset.stock); s.stock = Math.max(0, s.stock + Number(el.dataset.d)); save(s); });
   on(root, 'click', '[data-toggle]', (e, el) => { const s = find(el.dataset.toggle); s.active = !s.active; save(s); toast(s.active ? 'Đã mở bán lại.' : 'Đã tạm ngưng bán.'); });
   on(root, 'click', '[data-del]', async (e, el) => {

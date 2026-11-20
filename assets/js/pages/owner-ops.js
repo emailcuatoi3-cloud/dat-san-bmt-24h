@@ -98,7 +98,13 @@ export async function checkIn(b, code = '') {
 
 export function openBookingDetail(b) {
   const row = (l, v) => `<div class="flex items-start justify-between gap-3 py-1.5 text-sm"><span class="text-foreground-500">${l}</span><span class="text-right font-medium text-foreground-900">${v}</span></div>`;
-  const extras = (b.extras || []).map((x) => `${esc(x.label)} (${money(x.price)})`).join(', ');
+  const extras = (b.extras || []).map((x) => {
+    const name = esc(x.label || x.name || 'Dịch vụ');
+    const vname = x.variantName ? ` - ${esc(x.variantName)}` : '';
+    const qty = (x.quantity && x.quantity > 1) ? ` x${x.quantity}` : '';
+    const prc = money(x.total || x.price || 0);
+    return `${name}${vname}${qty} (${prc})`;
+  }).join(', ');
   const btns = [];
   if (b.status === 'pending') {
     if (!b.approvedAt) {

@@ -70,11 +70,7 @@ run_api([
         $status = in_str('status');
         if (!in_array($status, ['confirmed', 'cancelled', 'completed', 'pending'], true)) fail('Trạng thái không hợp lệ.');
         $reason = $status === 'cancelled' ? (mb_substr(in_str('reason'), 0, 250) ?: null) : null;
-<<<<<<< HEAD
-
-=======
         $now = date('Y-m-d H:i:s');
->>>>>>> origin/an
         if ($status === 'confirmed') {
             $slots = jd($b['slots']);
             $occ = occupied_slots($b['booking_date'], $b['id'])[$b['court_id']] ?? [];
@@ -83,11 +79,6 @@ run_api([
             if (!empty($unavailable)) {
                 fail('Không thể xác nhận đơn vì khung giờ ' . implode(', ', $unavailable) . ' ngày ' . $b['booking_date'] . ' đã bị trùng lịch với đơn khác hoặc đang bị khóa.');
             }
-<<<<<<< HEAD
-        }
-
-        q('UPDATE bookings SET status = ?, reject_reason = ? WHERE id = ?', [$status, $reason, $b['id']]);
-=======
             if ($b['source'] === 'online' && (int)$b['deposit_amount'] > 0 && $b['payment_status'] === 'unpaid') {
                 // Khách đặt online chưa cọc: chủ sân duyệt đơn -> cấp 5 phút để khách chuyển cọc
                 $holdExp = date('Y-m-d H:i:s', time() + HOLD_MINUTES * 60);
@@ -133,7 +124,6 @@ run_api([
         q('UPDATE bookings SET booking_date = ?, start_slot = ?, duration_minutes = ?, slots = ?, total_price = ?, note = ? WHERE id = ?',
             [$newDate, $slots[0], count($slots) * 60, j($slots), $total, $note, $b['id']]);
 
->>>>>>> origin/an
         return map_booking(q_one(BOOKING_SELECT . ' WHERE b.id = ?', [$b['id']]));
     },
 
@@ -340,31 +330,108 @@ run_api([
         return true;
     },
 
-    // ---------------- Dịch vụ bán kèm ----------------
+    // ---------------- Dịch vụ bán kèm & Đa thuộc tính ----------------
     'services' => function () {
         global $OWNER;
-        return array_map(fn($s) => ['id' => $s['id'], 'name' => $s['name'], 'category' => $s['category'], 'unit' => $s['unit'],
-            'price' => (int) $s['price'], 'stock' => (int) $s['stock'], 'active' => (bool) $s['active']],
-            q_all('SELECT * FROM owner_services WHERE owner_id = ? ORDER BY sort_order, name', [$OWNER['id']]));
+        ensure_sitemap_schema();
+        $services = q_all('SELECT * FROM owner_services WHERE owner_id = ? ORDER BY sort_order, name', [$OWNER['id']]);
+        $sIds = array_column($services, 'id');
+        $variantsMap = [];
+        if ($sIds) {
+            $vars = q_all('SELECT * FROM service_variants WHERE service_id IN (' . in_list($sIds) . ') ORDER BY sort_order, id', $sIds);
+            foreach ($vars as $v) {
+                $variantsMap[$v['service_id']][] = [
+                    'id' => $v['id'],
+                    'serviceId' => $v['service_id'],
+                    'sku' => $v['sku'],
+                    'name' => $v['name'],
+                    'attributes' => jd($v['attributes'] ?? '{}'),
+                    'price' => (int) $v['price'],
+                    'stock' => (int) $v['stock'],
+                    'active' => (bool) $v['active'],
+                ];
+            }
+        }
+        return array_map(fn($s) => [
+            'id' => $s['id'],
+            'name' => $s['name'],
+            'category' => $s['category'],
+            'sport' => $s['sport'] ?? 'all',
+            'unit' => $s['unit'],
+            'price' => (int) $s['price'],
+            'stock' => (int) $s['stock'],
+            'hasVariants' => (bool) ($s['has_variants'] ?? 0),
+            'attributesSchema' => jd($s['attributes_schema'] ?? '[]'),
+            'variants' => $variantsMap[$s['id']] ?? [],
+            'active' => (bool) $s['active'],
+        ], $services);
     },
 
     'service_save' => function () {
         global $OWNER;
+        ensure_sitemap_schema();
         $name = in_str('name');
         if (mb_strlen($name) < 2) fail('Vui lòng nhập tên dịch vụ.');
         $cat = in_array(in_str('category'), ['drink', 'rental', 'food', 'other'], true) ? in_str('category') : 'drink';
-        $vals = [$name, $cat, in_str('unit') ?: 'cái', max(0, in_int('price')), max(0, in_int('stock')), (input()['active'] ?? true) ? 1 : 0];
-        if ($id = in_str('id')) {
-            q('UPDATE owner_services SET name = ?, category = ?, unit = ?, price = ?, stock = ?, active = ? WHERE id = ? AND owner_id = ?', array_merge($vals, [$id, $OWNER['id']]));
-        } else {
-            q('INSERT INTO owner_services (name, category, unit, price, stock, active, id, owner_id, sort_order) VALUES (?,?,?,?,?,?,?,?,999)', array_merge($vals, [uid('sv-'), $OWNER['id']]));
+        $sport = in_array(in_str('sport'), ['football', 'badminton', 'all'], true) ? in_str('sport') : 'all';
+        $unit = in_str('unit') ?: 'cái';
+        $price = max(0, in_int('price'));
+        $stock = max(0, in_int('stock'));
+        $active = (input()['active'] ?? true) ? 1 : 0;
+        $hasVariants = !empty(input()['hasVariants']) ? 1 : 0;
+        $attributesSchema = in_arr('attributesSchema');
+        $rawVariants = in_arr('variants');
+
+        if ($hasVariants && $rawVariants) {
+            $varPrices = array_column($rawVariants, 'price');
+            $price = $varPrices ? min(array_map('intval', $varPrices)) : $price;
+            $stock = array_sum(array_map(fn($v) => max(0, (int) ($v['stock'] ?? 0)), $rawVariants));
         }
-        return true;
+
+        $id = in_str('id');
+        if ($id) {
+            $exists = q_one('SELECT id FROM owner_services WHERE id = ? AND owner_id = ?', [$id, $OWNER['id']]);
+            if (!$exists) fail('Không tìm thấy dịch vụ để cập nhật.');
+            q('UPDATE owner_services SET name = ?, category = ?, sport = ?, unit = ?, price = ?, stock = ?, has_variants = ?, attributes_schema = ?, active = ? WHERE id = ? AND owner_id = ?',
+                [$name, $cat, $sport, $unit, $price, $stock, $hasVariants, j($attributesSchema), $active, $id, $OWNER['id']]);
+        } else {
+            $id = uid('sv-');
+            q('INSERT INTO owner_services (id, owner_id, name, category, sport, unit, price, stock, has_variants, attributes_schema, active, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,999)',
+                [$id, $OWNER['id'], $name, $cat, $sport, $unit, $price, $stock, $hasVariants, j($attributesSchema), $active]);
+        }
+
+        if ($hasVariants && $rawVariants) {
+            $keptVarIds = [];
+            foreach ($rawVariants as $idx => $v) {
+                $vid = !empty($v['id']) ? $v['id'] : uid('svvar-');
+                $vname = trim($v['name'] ?? '');
+                if (!$vname) continue;
+                $vsku = trim($v['sku'] ?? '');
+                $vprice = max(0, (int) ($v['price'] ?? $price));
+                $vstock = max(0, (int) ($v['stock'] ?? 0));
+                $vactive = isset($v['active']) ? ($v['active'] ? 1 : 0) : 1;
+                $vattrs = is_array($v['attributes'] ?? null) ? $v['attributes'] : [];
+                $keptVarIds[] = $vid;
+
+                q('INSERT INTO service_variants (id, service_id, owner_id, sku, name, attributes, price, stock, active, sort_order)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)
+                   ON DUPLICATE KEY UPDATE sku = VALUES(sku), name = VALUES(name), attributes = VALUES(attributes), price = VALUES(price), stock = VALUES(stock), active = VALUES(active), sort_order = VALUES(sort_order)',
+                   [$vid, $id, $OWNER['id'], $vsku, $vname, j($vattrs), $vprice, $vstock, $vactive, $idx + 1]);
+            }
+            if ($keptVarIds) {
+                q('DELETE FROM service_variants WHERE service_id = ? AND owner_id = ? AND id NOT IN (' . in_list($keptVarIds) . ')', array_merge([$id, $OWNER['id']], $keptVarIds));
+            }
+        } else {
+            q('DELETE FROM service_variants WHERE service_id = ? AND owner_id = ?', [$id, $OWNER['id']]);
+        }
+        return ['id' => $id];
     },
 
     'service_delete' => function () {
         global $OWNER;
-        q('DELETE FROM owner_services WHERE id = ? AND owner_id = ?', [in_str('id'), $OWNER['id']]);
+        $id = in_str('id');
+        q('DELETE FROM service_variants WHERE service_id = ? AND owner_id = ?', [$id, $OWNER['id']]);
+        q('DELETE FROM owner_services WHERE id = ? AND owner_id = ?', [$id, $OWNER['id']]);
         return true;
     },
 
@@ -486,14 +553,33 @@ run_api([
 
     'inventory_adjust' => function () {
         global $OWNER;
-        $svc = q_one('SELECT * FROM owner_services WHERE id = ? AND owner_id = ?', [in_str('serviceId'), $OWNER['id']]) ?: fail('Không tìm thấy dịch vụ.');
+        $svcId = in_str('serviceId');
+        $varId = in_str('variantId');
+        $svc = q_one('SELECT * FROM owner_services WHERE id = ? AND owner_id = ?', [$svcId, $OWNER['id']]) ?: fail('Không tìm thấy dịch vụ.');
         $type = in_array(in_str('type'), ['import', 'export', 'adjust'], true) ? in_str('type') : 'import';
         $qty = max(1, in_int('quantity'));
         $cost = max(0, in_int('unitCost'));
-        $newStock = $type === 'import' ? ((int) $svc['stock'] + $qty) : ($type === 'export' ? max(0, (int) $svc['stock'] - $qty) : $qty);
-        q('UPDATE owner_services SET stock = ? WHERE id = ?', [$newStock, $svc['id']]);
+
+        $varName = '';
+        if ($varId) {
+            $var = q_one('SELECT * FROM service_variants WHERE id = ? AND service_id = ? AND owner_id = ?', [$varId, $svcId, $OWNER['id']]);
+            if ($var) {
+                $newVarStock = $type === 'import' ? ((int) $var['stock'] + $qty) : ($type === 'export' ? max(0, (int) $var['stock'] - $qty) : $qty);
+                q('UPDATE service_variants SET stock = ? WHERE id = ?', [$newVarStock, $var['id']]);
+                $varName = ' (' . $var['name'] . ')';
+                $tot = (int) q_val('SELECT SUM(stock) FROM service_variants WHERE service_id = ?', [$svcId]);
+                q('UPDATE owner_services SET stock = ? WHERE id = ?', [$tot, $svcId]);
+                $newStock = $tot;
+            }
+        }
+        if (!$varName) {
+            $newStock = $type === 'import' ? ((int) $svc['stock'] + $qty) : ($type === 'export' ? max(0, (int) $svc['stock'] - $qty) : $qty);
+            q('UPDATE owner_services SET stock = ? WHERE id = ?', [$newStock, $svc['id']]);
+        }
+
+        $logLabel = $svc['name'] . $varName;
         q('INSERT INTO inventory_logs (id, owner_id, service_id, service_name, type, quantity, unit_cost, note) VALUES (?,?,?,?,?,?,?,?)',
-            [uid('inv-'), $OWNER['id'], $svc['id'], $svc['name'], $type, $qty, $cost, mb_substr(in_str('note'), 0, 250)]);
+            [uid('inv-'), $OWNER['id'], $svc['id'], $logLabel, $type, $qty, $cost, mb_substr(in_str('note'), 0, 250)]);
         return ['stock' => $newStock];
     },
 
