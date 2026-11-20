@@ -33,8 +33,66 @@ function is_owner(): bool
 
 function login_user(int $id): void
 {
-    session_regenerate_id(true);
+    if (!headers_sent()) session_regenerate_id(true);
     $_SESSION['user_id'] = $id;
+    unset($_SESSION['staff_id'], $_SESSION['staff_owner_id'], $_SESSION['staff_name'], $_SESSION['staff_email'], $_SESSION['staff_phone'], $_SESSION['staff_role_name'], $_SESSION['staff_permissions']);
+}
+
+/** Lấy thông tin tài khoản nhân viên cơ sở đang đăng nhập (hoặc null nếu là chủ sân / khách / admin). */
+function current_staff(): ?array
+{
+    if (empty($_SESSION['staff_id'])) return null;
+    return [
+        'id' => (string) $_SESSION['staff_id'],
+        'ownerId' => (int) ($_SESSION['staff_owner_id'] ?? 0),
+        'name' => (string) ($_SESSION['staff_name'] ?? 'Nhân viên'),
+        'email' => (string) ($_SESSION['staff_email'] ?? ''),
+        'phone' => (string) ($_SESSION['staff_phone'] ?? ''),
+        'roleName' => (string) ($_SESSION['staff_role_name'] ?? 'Nhân viên'),
+        'permissions' => is_array($_SESSION['staff_permissions'] ?? null) ? $_SESSION['staff_permissions'] : jd($_SESSION['staff_permissions'] ?? '[]'),
+    ];
+}
+
+/** Kiểm tra người đang thao tác có phải là nhân viên được ủy quyền hay không. */
+function is_staff(): bool
+{
+    return !empty($_SESSION['staff_id']);
+}
+
+/**
+ * Kiểm tra nhân viên có quyền với module cụ thể hay không.
+ * Nếu là Chủ sân hoặc Quản trị viên: luôn trả về true.
+ * Nếu là Nhân viên: cấm tuyệt đối cài đặt nhạy cảm (settings, account), kiểm tra các quyền còn lại.
+ */
+function staff_can(string $module): bool
+{
+    if (!is_staff()) return true;
+    if (in_array($module, ['settings', 'account', 'staff'], true)) return false;
+    $perms = current_staff()['permissions'] ?? [];
+    if (in_array('all', $perms, true)) return true;
+    return in_array($module, $perms, true);
+}
+
+/** Chặn thao tác nếu nhân viên không có quyền. */
+function staff_need(string $module): void
+{
+    if (!staff_can($module)) {
+        json_error('Tài khoản nhân viên của bạn chưa được cấp quyền thao tác mục này.', 403);
+    }
+}
+
+/** Đăng nhập phiên nhân viên cơ sở. */
+function login_staff(array $st): void
+{
+    if (!headers_sent()) session_regenerate_id(true);
+    $_SESSION['user_id'] = (int) $st['owner_id'];
+    $_SESSION['staff_id'] = (string) $st['id'];
+    $_SESSION['staff_owner_id'] = (int) $st['owner_id'];
+    $_SESSION['staff_name'] = (string) $st['full_name'];
+    $_SESSION['staff_email'] = (string) $st['email'];
+    $_SESSION['staff_phone'] = (string) ($st['phone'] ?? '');
+    $_SESSION['staff_role_name'] = (string) ($st['role_name'] ?? 'Nhân viên');
+    $_SESSION['staff_permissions'] = is_array($st['permissions']) ? $st['permissions'] : jd($st['permissions'] ?? '[]');
 }
 
 function logout_user(): void
@@ -164,7 +222,7 @@ function get_auth_redirect_target(?string $explicit = null): string
 function public_profile(?array $u): ?array
 {
     if (!$u) return null;
-    return [
+    $p = [
         'id' => (int) $u['id'],
         'email' => $u['email'],
         'fullName' => $u['full_name'],
@@ -176,6 +234,10 @@ function public_profile(?array $u): ?array
         'favorites' => jd($u['favorites']),
         'createdAt' => iso($u['created_at']),
     ];
+    if (is_staff()) {
+        $p['staff'] = current_staff();
+    }
+    return $p;
 }
 
 // ---------------- Phân quyền quản trị ----------------

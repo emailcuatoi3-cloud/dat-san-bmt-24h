@@ -116,6 +116,15 @@ run_api([
 
     'change_password' => function () {
         if (impersonating_admin()) fail('Đang trong chế độ Ghost Login: Không thể thay đổi mật khẩu của người dùng.');
+        if (is_staff()) {
+            $st = current_staff();
+            $hash = q_val('SELECT password_hash FROM owner_staff WHERE id = ?', [$st['id']]);
+            if (!password_verify((string) (input()['current'] ?? ''), $hash)) fail('Mật khẩu hiện tại chưa đúng.');
+            $new = (string) (input()['password'] ?? '');
+            if (strlen($new) < 6) fail('Mật khẩu mới cần ít nhất 6 ký tự.');
+            q('UPDATE owner_staff SET password_hash = ? WHERE id = ?', [password_hash($new, PASSWORD_DEFAULT), $st['id']]);
+            return true;
+        }
         $u = api_require_login();
         $hash = q_val('SELECT password_hash FROM users WHERE id = ?', [$u['id']]);
         if (!password_verify((string) (input()['current'] ?? ''), $hash)) fail('Mật khẩu hiện tại chưa đúng.');

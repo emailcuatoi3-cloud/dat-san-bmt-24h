@@ -12,6 +12,7 @@ import {
   renderSitemapServices,
   renderSitemapPromotions,
   renderSitemapCustomers,
+  renderSitemapStaff,
   renderSitemapSettings,
   renderSitemapAccount,
 } from './owner-sitemap.js';
@@ -24,6 +25,7 @@ const RENDER = {
   services: renderSitemapServices,
   promotions: renderSitemapPromotions,
   customers: renderSitemapCustomers,
+  staff: renderSitemapStaff,
   settings: renderSitemapSettings,
   account: renderSitemapAccount,
 };

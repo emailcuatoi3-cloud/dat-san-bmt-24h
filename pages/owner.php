@@ -18,6 +18,7 @@ $groups = [
         ['customers', 'Khách hàng & đánh giá', 'ri-group-line'],
     ]],
     ['Hệ thống cơ sở', [
+        ['staff', 'Quản lý nhân viên', 'ri-team-line'],
         ['settings', 'Cài đặt', 'ri-settings-3-line'],
         ['account', 'Tài khoản', 'ri-user-settings-line'],
     ]],
@@ -30,7 +31,8 @@ $meta = [
     'services' => ['Dịch vụ', 'Quản lý dịch vụ bán kèm, nhập kho và theo dõi tồn kho nước uống, dụng cụ.'],
     'promotions' => ['Khuyến mãi', 'Tạo mã giảm giá và thiết lập chương trình ưu đãi giờ vàng thu hút khách.'],
     'customers' => ['Khách hàng & đánh giá', 'Danh sách khách hàng, phản hồi đánh giá công khai và tiếp nhận khiếu nại.'],
-    'settings' => ['Cài đặt', 'Chính sách đặt, cọc, hủy; nhân viên & phân quyền; cấu hình thông báo.'],
+    'staff' => ['Quản lý nhân viên', 'Danh sách nhân viên cơ sở, tài khoản đăng nhập, phân quyền thao tác và kiểm soát thu ngân.'],
+    'settings' => ['Cài đặt', 'Chính sách đặt sân, tiền cọc, hủy sân và cấu hình nhận thông báo.'],
     'account' => ['Tài khoản', 'Hồ sơ chủ sân, tài khoản ngân hàng nhận tiền VietQR, đổi mật khẩu và đăng xuất.'],
 ];
 // Giữ tương thích với các đường dẫn tab cũ
@@ -43,6 +45,11 @@ $tabAliases = [
 ];
 $rawTab = $_GET['tab'] ?? 'overview';
 $subTab = $_GET['sub'] ?? '';
+// Chuyển hướng sub-tab staff cũ sang tab chính staff
+if ($rawTab === 'settings' && $subTab === 'staff') {
+    $rawTab = 'staff';
+    $subTab = '';
+}
 if (isset($tabAliases[$rawTab])) {
     [$tab, $subTab] = $tabAliases[$rawTab];
 } else {
@@ -50,17 +57,38 @@ if (isset($tabAliases[$rawTab])) {
 }
 $business = $u['business_name'] ?: $u['full_name'];
 
+$staff = current_staff();
+if ($staff) {
+    $filteredGroups = [];
+    foreach ($groups as [$grpLabel, $items]) {
+        $allowedItems = [];
+        foreach ($items as $item) {
+            [$key] = $item;
+            if (staff_can($key)) {
+                $allowedItems[] = $item;
+            }
+        }
+        if ($allowedItems) {
+            $filteredGroups[] = [$grpLabel, $allowedItems];
+        }
+    }
+    $groups = $filteredGroups;
+    if (!staff_can($tab)) {
+        $tab = $groups[0][1][0][0] ?? 'bookings';
+    }
+}
+
 render_page([
     'title' => $meta[$tab][0] . ' · Kênh chủ sân - ' . SITE_NAME,
     'layout' => 'bare',
     'bodyClass' => 'bg-background-100',
     'script' => 'pages/owner.js',
     'data' => [
-        'tab' => $tab, 'sub' => $subTab, 'meta' => $meta, 'business' => $business,
+        'tab' => $tab, 'sub' => $subTab, 'meta' => $meta, 'business' => $business, 'staff' => $staff,
         'rejectReasons' => OWNER_REJECT_REASONS, 'otherReason' => CANCEL_OTHER_REASON,
         'areas' => court_areas(), 'facilityImages' => FACILITY_IMAGES,
     ],
-], function () use ($u, $groups, $meta, $tab, $business) {
+], function () use ($u, $staff, $groups, $meta, $tab, $business) {
     ?>
 <div class="min-h-screen bg-background-100">
   <!-- Thanh bên -->
@@ -83,8 +111,11 @@ render_page([
     </nav>
     <div class="border-t border-background-200 p-4">
       <div class="flex items-center gap-2.5">
-        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary-500 text-xs font-bold text-white"><?= e(initials_of($u['full_name'], $u['email'])) ?></span>
-        <div class="min-w-0"><p class="truncate text-sm font-semibold text-foreground-950"><?= e($business) ?></p><p class="truncate text-[11px] text-foreground-500"><?= e($u['email']) ?></p></div>
+        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full <?= $staff ? 'bg-primary-600' : 'bg-secondary-500' ?> text-xs font-bold text-white"><?= e(initials_of($staff ? $staff['name'] : $u['full_name'], $staff ? $staff['email'] : $u['email'])) ?></span>
+        <div class="min-w-0">
+          <p class="truncate text-sm font-semibold text-foreground-950"><?= e($staff ? $staff['name'] : $business) ?></p>
+          <p class="truncate text-[11px] <?= $staff ? 'font-semibold text-primary-600' : 'text-foreground-500' ?>"><?= e($staff ? ($staff['roleName'] . ' · ' . $business) : $u['email']) ?></p>
+        </div>
       </div>
       <a href="<?= url('/') ?>" class="mt-3 flex items-center gap-2 text-xs font-semibold text-foreground-600 hover:text-primary-700"><i class="ri-arrow-left-line" aria-hidden="true"></i>Về trang khách hàng</a>
     </div>
@@ -96,8 +127,8 @@ render_page([
       <div class="flex min-w-0 items-center gap-3">
         <button type="button" id="owner-menu-btn" class="flex h-9 w-9 items-center justify-center rounded-md border border-background-300 text-foreground-700 lg:hidden" aria-label="Mở menu"><i class="ri-menu-line text-lg" aria-hidden="true"></i></button>
         <div class="min-w-0">
-          <p class="truncate text-[11px] font-medium text-foreground-500">Xin chào, <?= e($u['full_name'] ?: $business) ?></p>
-          <p class="truncate font-heading text-sm font-bold text-foreground-950"><?= e($business) ?></p>
+          <p class="truncate text-[11px] font-medium text-foreground-500">Xin chào, <?= e($staff ? $staff['name'] : ($u['full_name'] ?: $business)) ?><?= $staff ? ' <span class="rounded bg-primary-100 px-1.5 py-0.5 text-[10px] font-bold text-primary-700">Nhân viên</span>' : '' ?></p>
+          <p class="truncate font-heading text-sm font-bold text-foreground-950"><?= e($staff ? ($staff['roleName'] . ' · ' . $business) : $business) ?></p>
         </div>
       </div>
       <div class="flex items-center gap-2">

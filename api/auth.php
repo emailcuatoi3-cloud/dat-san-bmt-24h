@@ -20,14 +20,27 @@ run_api([
         $password = (string) (input()['password'] ?? '');
         if (!valid_email($email)) fail('Email chưa đúng định dạng.');
         if (strlen($password) < 6) fail('Mật khẩu cần ít nhất 6 ký tự.');
+
+        // 1. Kiểm tra tài khoản users trước (Quản trị viên, Chủ sân, Khách hàng)
         $u = q_one('SELECT id, password_hash, role, status FROM users WHERE email = ?', [$email]);
-        if (!$u || !password_verify($password, $u['password_hash'])) fail('Email hoặc mật khẩu không đúng. Vui lòng thử lại.');
-        if ($u['status'] === 'suspended') fail('Tài khoản này đang bị tạm khóa. Vui lòng liên hệ quản trị viên để được hỗ trợ.');
-        login_user((int) $u['id']);
-        $redirect = in_str('redirect');
-        $target = get_auth_redirect_target($redirect !== '' ? $redirect : null);
-        unset($_SESSION['auth_redirect']);
-        return ['redirect' => url($target), 'role' => $u['role']];
+        if ($u && password_verify($password, $u['password_hash'])) {
+            if ($u['status'] === 'suspended') fail('Tài khoản này đang bị tạm khóa. Vui lòng liên hệ quản trị viên để được hỗ trợ.');
+            login_user((int) $u['id']);
+            $redirect = in_str('redirect');
+            $target = get_auth_redirect_target($redirect !== '' ? $redirect : null);
+            unset($_SESSION['auth_redirect']);
+            return ['redirect' => url($target), 'role' => $u['role']];
+        }
+
+        // 2. Kiểm tra tài khoản Nhân viên cơ sở (owner_staff)
+        $st = q_one('SELECT s.*, u.business_name, u.full_name as owner_name FROM owner_staff s JOIN users u ON u.id = s.owner_id WHERE s.email = ?', [$email]);
+        if ($st && !empty($st['password_hash']) && password_verify($password, $st['password_hash'])) {
+            if ($st['status'] === 'inactive') fail('Tài khoản nhân viên này đang tạm khóa hoặc đã nghỉ việc tại cơ sở.');
+            login_staff($st);
+            return ['redirect' => url('/chu-san'), 'role' => 'staff'];
+        }
+
+        fail('Email hoặc mật khẩu không đúng. Vui lòng thử lại.');
     },
 
     'register' => function () {
