@@ -171,7 +171,7 @@ assert_test("Input helper has() kiểm tra sự tồn tại của field", $contr
 // [7] KIỂM TRA PHƯƠNG THỨC NGHIỆP VỤ TRÊN CÁC MODEL CON
 echo "\n[7] KIỂM TRA PHƯƠNG THỨC NGHIỆP VỤ TRÊN MODEL CON...\n";
 $ownerStaff = $staffModel->getByOwner(2);
-assert_test("StaffModel::getByOwner(2) lấy danh sách nhân sự của chủ sân 2", count($ownerStaff) >= 1);
+assert_test("StaffModel::getByOwner(2) lấy danh sách nhân sự của chủ sân 2", count($ownerStaff) >= 5);
 
 $ownerCourts = $courtModel->getActiveCourtsByOwner(2);
 assert_test("CourtModel::getActiveCourtsByOwner(2) lấy 4 cụm sân", count($ownerCourts) === 4);
@@ -179,35 +179,11 @@ assert_test("CourtModel::getActiveCourtsByOwner(2) lấy 4 cụm sân", count($o
 $ownerCourtIds = $courtModel->getCourtIdsByOwner(2);
 assert_test("CourtModel::getCourtIdsByOwner(2) trả về danh sách mã sân", in_array('c01', $ownerCourtIds));
 
-// Thêm 1 đơn thử nghiệm trong ngày hôm nay để kiểm thử getTodayBookings & getTodayRevenue
-$testTodayId = 'bk-test-today-' . substr(md5((string)time()), 0, 6);
-$bookingModel->create([
-    'id' => $testTodayId,
-    'code' => 'TESTTODAY',
-    'court_id' => 'c01',
-    'court_name' => 'Sân bóng BMT Arena',
-    'customer_name' => 'Khách Thử Nghiệm',
-    'customer_phone' => '0901234567',
-    'customer_email' => 'test@test.vn',
-    'booking_date' => date('Y-m-d'),
-    'start_slot' => '08:00',
-    'duration_minutes' => 60,
-    'slots' => json_encode(['08:00']),
-    'total_price' => 150000,
-    'deposit_amount' => 45000,
-    'payment_method' => 'bank_transfer',
-    'payment_status' => 'paid',
-    'status' => 'confirmed',
-]);
-
 $todayBookings = $bookingModel->getTodayBookings($ownerCourtIds);
 assert_test("BookingModel::getTodayBookings() lấy các đơn hôm nay", count($todayBookings) >= 1);
 
 $todayRev = $bookingModel->getTodayRevenue($ownerCourtIds);
 assert_test("BookingModel::getTodayRevenue() tính doanh thu hôm nay", $todayRev > 0);
-
-// Dọn dẹp bản ghi thử nghiệm
-$bookingModel->delete($testTodayId);
 
 echo "\n====================================================================\n";
 echo "   KẾT QUẢ KIỂM THỬ: {$passed} PASS / {$failed} FAIL\n";
