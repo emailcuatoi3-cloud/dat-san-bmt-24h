@@ -27,7 +27,12 @@ run_api([
             if ($u['status'] === 'suspended') fail('Tài khoản này đang bị tạm khóa. Vui lòng liên hệ quản trị viên để được hỗ trợ.');
             login_user((int) $u['id']);
             $redirect = in_str('redirect');
-            $target = get_auth_redirect_target($redirect !== '' ? $redirect : null);
+            $target = get_auth_redirect_target($redirect !== '' ? $redirect : null, $u['role']);
+            if ($u['role'] === 'customer' && (str_starts_with($target, '/chu-san') || str_starts_with($target, '/quan-tri'))) {
+                $target = '/tai-khoan';
+            } elseif ($u['role'] === 'owner' && str_starts_with($target, '/quan-tri')) {
+                $target = '/chu-san';
+            }
             unset($_SESSION['auth_redirect']);
             return ['redirect' => url($target), 'role' => $u['role']];
         }
@@ -37,7 +42,10 @@ run_api([
         if ($st && !empty($st['password_hash']) && password_verify($password, $st['password_hash'])) {
             if ($st['status'] === 'inactive') fail('Tài khoản nhân viên này đang tạm khóa hoặc đã nghỉ việc tại cơ sở.');
             login_staff($st);
-            return ['redirect' => url('/chu-san'), 'role' => 'staff'];
+            $redirect = in_str('redirect');
+            $target = get_auth_redirect_target($redirect !== '' ? $redirect : null, 'staff');
+            unset($_SESSION['auth_redirect']);
+            return ['redirect' => url($target), 'role' => 'staff'];
         }
 
         fail('Email hoặc mật khẩu không đúng. Vui lòng thử lại.');
@@ -66,7 +74,7 @@ run_api([
             create_owner_request(q_one('SELECT * FROM users WHERE id = ?', [$id]), input() + ['contactName' => $name]);
             return ['redirect' => url('/dang-ky-chu-san')];
         }
-        $target = get_auth_redirect_target(in_str('redirect') ?: null);
+        $target = get_auth_redirect_target(in_str('redirect') ?: null, 'customer');
         unset($_SESSION['auth_redirect']);
         return ['redirect' => url($target)];
     },

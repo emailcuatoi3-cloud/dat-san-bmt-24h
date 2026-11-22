@@ -1,5 +1,5 @@
 /** Ngẫu nhiên: chia đội (Fisher–Yates), chọn sân còn trống ngẫu nhiên, vòng quay ưu đãi. */
-import { $, PAGE, esc, url, formatVnd } from '../core/ui.js';
+import { $, APP, PAGE, esc, url, formatVnd } from '../core/ui.js';
 
 const shuffle = (items) => {
   const a = [...items];
@@ -109,48 +109,294 @@ $('#pick-btn').addEventListener('click', () => {
   }, 900);
 });
 
-// ===================== VÒNG QUAY =====================
-const prizes = [
-  ['Giảm 5%', '-5%', 'Áp dụng cho lần đặt kế tiếp'],
-  ['Tặng 1 nước', '+1 nước', 'Nhận tại căng tin của sân'],
-  ['Giảm 10%', '-10%', 'Áp dụng cho lần đặt kế tiếp'],
-  ['Tặng 30 phút', '+30 phút', 'Cộng vào khung giờ đã đặt'],
-  ['Giảm 20%', '-20%', 'Áp dụng cho lần đặt kế tiếp'],
-  ['Chúc may mắn', 'May mắn', 'Thử lại ở lượt đặt sân sau'],
+// ===================== GHÉP ĐỘI & BẮT CẶP ĐỐI THỦ NGẪU NHIÊN (THỬ NGHIỆM) =====================
+const DEFAULT_OPPONENTS = [
+  { id: 'bmt-01', name: 'FC Ban Mê United', sport: 'football', playerCount: 7, area: 'Tân Lợi', level: 'normal', contact: 'Tuấn (0914 234 567)', style: 'Kèo nước ngọt, đá nhiệt tình' },
+  { id: 'bmt-02', name: 'FC Ea Tam Phố Núi', sport: 'football', playerCount: 5, area: 'Ea Tam', level: 'fun', contact: 'Hùng (0988 345 678)', style: 'Thể lực vui vẻ, sau trận giao lưu' },
+  { id: 'bmt-03', name: 'CLB Cầu Lông Đắk Lắk Trẻ', sport: 'badminton', playerCount: 2, area: 'Thắng Lợi', level: 'normal', contact: 'Trang (0905 123 789)', style: 'Đánh đôi cọ xát kinh nghiệm' },
+  { id: 'bmt-04', name: 'FC Buôn Ma Thuột Legend', sport: 'football', playerCount: 7, area: 'Tự An', level: 'hard', contact: 'Bảo (0935 456 789)', style: 'Cọ xát nhiệt huyết, kỹ thuật tốt' },
+  { id: 'bmt-05', name: 'Cầu Lông Kpă Klơng', sport: 'badminton', playerCount: 4, area: 'Tân Lập', level: 'fun', contact: 'Huy (0979 678 901)', style: 'Đánh đôi phong trào, vui là chính' },
+  { id: 'bmt-06', name: 'FC Cao Nguyên Xanh', sport: 'football', playerCount: 5, area: 'Tân An', level: 'fun', contact: 'Long (0918 890 123)', style: 'Đội văn phòng, thể thao cuối ngày' },
+  { id: 'bmt-07', name: 'FC Y Jut Brothers', sport: 'football', playerCount: 7, area: 'Thống Nhất', level: 'hard', contact: 'Thành (0947 567 890)', style: 'Bán chuyên, chạy nhiều, đá chắc' },
+  { id: 'bmt-08', name: 'Cầu Lông Cư M\'gar - BMT', sport: 'badminton', playerCount: 2, area: 'Tân Tiến', level: 'normal', contact: 'Đức (0962 345 012)', style: 'Đôi nam nữ giao lưu cuối tuần' },
 ];
-const SECTOR = 360 / prizes.length;
-const wheel = $('#wheel');
-let rotation = 0;
-let spins = 0;
-function paintWheel() {
-  wheel.style.transform = `rotate(${rotation}deg)`;
-  wheel.innerHTML = prizes
-    .map((p, i) => {
-      const rad = (i * SECTOR * Math.PI) / 180;
-      return `<span class="prize-label absolute whitespace-nowrap text-[11px] font-extrabold leading-none" style="left:${50 + 31 * Math.sin(rad)}%;top:${50 - 31 * Math.cos(rad)}%;transform:translate(-50%,-50%) rotate(${-rotation}deg)">${p[1]}</span>`;
-    })
+
+const LOBBY_STORAGE_KEY = 'bmt24h_match_custom_teams';
+function getCustomLobbyTeams() {
+  try {
+    const raw = localStorage.getItem(LOBBY_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+function saveCustomLobbyTeam(team) {
+  try {
+    const existing = getCustomLobbyTeams().filter((t) => t.id !== team.id);
+    existing.unshift(team);
+    localStorage.setItem(LOBBY_STORAGE_KEY, JSON.stringify(existing.slice(0, 10)));
+  } catch {}
+}
+
+const levelLabels = {
+  fun: 'Phong trào vui vẻ',
+  normal: 'Trung bình khá',
+  hard: 'Bán chuyên nhiệt huyết',
+};
+const sportLabels = {
+  football: 'Bóng đá',
+  badminton: 'Cầu lông',
+};
+
+function getAllOpponents() {
+  const custom = getCustomLobbyTeams();
+  return [...custom, ...DEFAULT_OPPONENTS];
+}
+
+function renderLobby() {
+  const list = getAllOpponents();
+  const poolCount = $('#match-pool-count');
+  if (poolCount) poolCount.textContent = list.length;
+  const container = $('#match-lobby-list');
+  if (!container) return;
+
+  container.innerHTML = list
+    .slice(0, 8)
+    .map(
+      (t) => `
+    <div class="flex flex-col justify-between rounded-lg border border-background-200 bg-background-50 p-3 transition-shadow hover:shadow-sm">
+      <div>
+        <div class="flex items-center justify-between gap-1">
+          <span class="inline-flex items-center gap-1 rounded bg-primary-50 px-2 py-0.5 text-[10px] font-bold text-primary-700">
+            ${sportLabels[t.sport] || 'Thể thao'} • ${t.playerCount} người
+          </span>
+          <span class="text-[10px] text-foreground-400">P. ${esc(t.area)}</span>
+        </div>
+        <h4 class="mt-2 font-heading text-sm font-bold text-foreground-950">${esc(t.name)}</h4>
+        <p class="mt-0.5 text-xs text-foreground-600 line-clamp-1">${esc(t.style)}</p>
+        <p class="mt-1 text-[11px] text-foreground-500"><i class="ri-phone-line mr-1 text-primary-600"></i>${esc(t.contact)}</p>
+      </div>
+      <button type="button" data-match-direct="${esc(t.id)}" class="mt-3 flex w-full cursor-pointer items-center justify-center gap-1 rounded-md border border-primary-300 bg-white py-1.5 text-xs font-bold text-primary-700 transition-colors hover:bg-primary-50">
+        <i class="ri-sword-line"></i>Ghép ngay
+      </button>
+    </div>
+  `,
+    )
     .join('');
 }
-function paintResult(prize) {
-  $('#spin-result').innerHTML = prize
-    ? `<div class="rounded-lg border border-primary-300 bg-primary-50 p-4 animate-fade-up"><p class="text-xs font-semibold uppercase tracking-wide text-primary-800">Kết quả lượt quay</p><p class="mt-1 font-heading text-xl font-extrabold text-primary-900">${prize[0]}</p><p class="mt-1 text-sm text-primary-800">${prize[2]}</p><p class="mt-3 flex items-start gap-1.5 rounded-md bg-background-100 px-2.5 py-2 text-[11px] leading-relaxed text-foreground-600"><i class="ri-information-line mt-0.5" aria-hidden="true"></i>Ưu đãi có hiệu lực 7 ngày. Bạn đọc mã ưu đãi cho nhân viên tại sân khi thanh toán.</p></div>`
-    : `<div class="rounded-lg border border-dashed border-background-300 bg-background-50 p-4"><p class="text-sm font-semibold text-foreground-900">${spins >= 1 ? 'Bạn đã dùng lượt quay của phiên này' : 'Bấm nút QUAY ở giữa vòng tròn để thử vận may'}</p><p class="mt-1 text-xs leading-relaxed text-foreground-500">Mỗi đơn đặt sân chỉ được quay một lần. Kết quả hiển thị ngay sau khi vòng quay dừng lại.</p></div>`;
+
+function renderMatchResult(myTeam, oppTeam) {
+  const box = $('#match-result');
+  if (!box) return;
+  box.classList.remove('hidden');
+
+  // Gợi ý sân trung gian
+  const courts = (PAGE.courts || []).filter((c) => c.sport === myTeam.sport);
+  const randomCourt = courts.length ? courts[Math.floor(Math.random() * courts.length)] : null;
+
+  box.innerHTML = `
+    <div class="rounded-xl border-2 border-primary-500/40 bg-gradient-to-br from-primary-50/60 via-background-50 to-white p-5 shadow-sm transition-all duration-300 animate-fade-up">
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-background-200 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="flex h-7 w-7 items-center justify-center rounded-full bg-primary-500 text-white font-bold text-xs">
+            <i class="ri-check-double-line text-sm"></i>
+          </span>
+          <span class="text-xs font-bold uppercase tracking-wider text-primary-800">Bắt cặp thành công (Match Found!)</span>
+        </div>
+        <span class="rounded-full bg-accent-50 px-2.5 py-0.5 text-[11px] font-bold text-accent-800 border border-accent-200">
+          Kèo giao lưu ngẫu nhiên
+        </span>
+      </div>
+
+      <!-- Khung thi đấu 2 đội -->
+      <div class="mt-5 grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-center gap-4">
+        <!-- Đội của bạn -->
+        <div class="rounded-lg border border-primary-300 bg-white p-4 shadow-sm">
+          <div class="flex items-center justify-between gap-2">
+            <span class="rounded bg-primary-500 px-2 py-0.5 text-[10px] font-bold uppercase text-white">Đội của bạn</span>
+            <span class="text-xs font-semibold text-foreground-600">${myTeam.playerCount} người</span>
+          </div>
+          <h3 class="mt-2.5 font-heading text-base font-extrabold text-foreground-950">${esc(myTeam.name)}</h3>
+          <p class="mt-1 text-xs text-foreground-600">${sportLabels[myTeam.sport] || 'Thể thao'} • ${levelLabels[myTeam.level] || 'Giao lưu'}</p>
+          <div class="mt-3 flex items-center gap-1.5 text-xs text-primary-700 font-medium">
+            <i class="ri-shield-user-line"></i><span>Sẵn sàng ra sân</span>
+          </div>
+        </div>
+
+        <!-- Biểu tượng VS -->
+        <div class="flex flex-col items-center justify-center">
+          <span class="flex h-12 w-12 items-center justify-center rounded-full bg-foreground-950 text-accent-400 font-heading text-lg font-black shadow-md border-2 border-accent-400">
+            VS
+          </span>
+          <span class="mt-1 text-[10px] font-bold uppercase tracking-widest text-foreground-500">Đối đầu</span>
+        </div>
+
+        <!-- Đội đối thủ được ghép ngẫu nhiên -->
+        <div class="rounded-lg border border-accent-300 bg-white p-4 shadow-sm">
+          <div class="flex items-center justify-between gap-2">
+            <span class="rounded bg-accent-500 px-2 py-0.5 text-[10px] font-bold uppercase text-background-950">Đối thủ được ghép</span>
+            <span class="text-xs font-semibold text-foreground-600">${oppTeam.playerCount} người</span>
+          </div>
+          <h3 class="mt-2.5 font-heading text-base font-extrabold text-foreground-950">${esc(oppTeam.name)}</h3>
+          <p class="mt-1 text-xs text-foreground-600">Khu vực: P. ${esc(oppTeam.area || 'BMT')} • ${esc(oppTeam.style)}</p>
+          <div class="mt-3 flex items-center justify-between gap-2">
+            <span class="text-xs font-semibold text-accent-800"><i class="ri-phone-line mr-1"></i>${esc(oppTeam.contact)}</span>
+            <a href="tel:${esc((oppTeam.contact || '').replace(/[^\d+]/g, ''))}" class="rounded bg-accent-100 px-2.5 py-1 text-[11px] font-bold text-accent-800 hover:bg-accent-200 transition-colors">Gọi ngay</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gợi ý sân trung gian & Đặt sân -->
+      ${
+        randomCourt
+          ? `
+      <div class="mt-5 rounded-lg border border-background-200 bg-white p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+          <img src="${esc(randomCourt.images[0])}" alt="${esc(randomCourt.name)}" class="h-12 w-16 rounded object-cover shrink-0">
+          <div class="min-w-0">
+            <p class="text-[11px] font-bold uppercase tracking-wide text-primary-700">Gợi ý sân trung gian lý tưởng</p>
+            <h4 class="truncate font-heading text-sm font-bold text-foreground-950">${esc(randomCourt.name)}</h4>
+            <p class="text-xs text-foreground-500">${esc(randomCourt.address)}</p>
+          </div>
+        </div>
+        <div class="flex shrink-0 items-center gap-2">
+          <a href="${url(`/dat-san/${randomCourt.slug}`)}" class="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md bg-primary-500 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-primary-600">
+            <i class="ri-calendar-check-line"></i>Đặt sân này ngay
+          </a>
+        </div>
+      </div>
+      `
+          : ''
+      }
+
+      <div class="mt-4 flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-background-200">
+        <p class="text-xs text-foreground-500">Hai đội có thể gọi điện hoặc chat Zalo để thống nhất giờ đá & chia tiền sân.</p>
+        <button type="button" id="match-again-btn" class="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-background-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-foreground-800 transition-colors hover:border-primary-400 hover:text-primary-700">
+          <i class="ri-shuffle-line"></i>Ghép đối thủ khác
+        </button>
+      </div>
+    </div>
+  `;
+
+  $('#match-again-btn')?.addEventListener('click', () => {
+    doRandomMatch(myTeam);
+  });
 }
-$('#prize-list').innerHTML = prizes.map((p) => `<li class="flex items-center gap-2 rounded-md border border-background-200 bg-background-50 px-2.5 py-2 text-xs text-foreground-700"><i class="ri-checkbox-blank-circle-fill text-[8px] text-primary-500" aria-hidden="true"></i>${p[0]}</li>`).join('');
-$('#spin-btn').addEventListener('click', () => {
-  if (spins >= 1) return;
-  const btn = $('#spin-btn');
+
+function doRandomMatch(myTeam) {
+  const box = $('#match-result');
+  const btn = $('#match-btn');
+  if (!box || !btn) return;
+
   btn.disabled = true;
-  const index = Math.floor(Math.random() * prizes.length);
-  rotation = rotation - (rotation % 360) + 360 * 5 + (360 - (index * SECTOR + SECTOR / 2));
-  spins += 1;
-  wheel.classList.add('shadow-lg');
-  paintWheel();
-  paintResult(null);
+  btn.innerHTML = '<i class="ri-loader-4-line animate-spin text-sm"></i><span>Đang tìm đối thủ...</span>';
+
+  box.classList.remove('hidden');
+  box.innerHTML = `
+    <div class="rounded-lg border border-dashed border-primary-300 bg-primary-50/50 p-6 text-center animate-fade-up">
+      <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary-100 text-primary-600">
+        <i class="ri-radar-line animate-spin text-2xl"></i>
+      </div>
+      <h3 class="mt-3 font-heading text-base font-bold text-foreground-950">Đang quét tìm kiếm đối thủ phù hợp...</h3>
+      <p class="mt-1 text-xs text-foreground-600">Hệ thống đang đối chiếu môn thi đấu, số người (${myTeam.playerCount} người) và khu vực Buôn Ma Thuột.</p>
+    </div>
+  `;
+
   setTimeout(() => {
-    wheel.classList.remove('shadow-lg');
-    paintResult(prizes[index]);
-  }, 4300);
-});
-paintWheel();
-paintResult(null);
+    const list = getAllOpponents().filter((t) => t.name.toLowerCase() !== myTeam.name.toLowerCase());
+    // Ưu tiên đội cùng môn
+    let pool = list.filter((t) => t.sport === myTeam.sport);
+    if (!pool.length) pool = list;
+
+    // Xáo trộn ngẫu nhiên
+    const shuffled = shuffle(pool);
+    const opponent = shuffled[0] || {
+      id: 'opp-random',
+      name: 'FC Cao Nguyên BMT',
+      sport: myTeam.sport,
+      playerCount: myTeam.playerCount,
+      area: 'Buôn Ma Thuột',
+      contact: 'Đại diện (0905 999 888)',
+      style: 'Giao lưu nhiệt tình, rèn sức khỏe',
+    };
+
+    renderMatchResult(myTeam, opponent);
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ri-sword-line" aria-hidden="true"></i><span>Bắt cặp ngẫu nhiên ngay</span>';
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, 800);
+}
+
+function initMatchmaking() {
+  const form = $('#match-form');
+  const queueBtn = $('#match-queue-btn');
+  if (!form) return;
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = $('#match-team-name').value.trim();
+    if (name.length < 2) {
+      alert('Vui lòng nhập tên đội của bạn (ít nhất 2 ký tự).');
+      $('#match-team-name').focus();
+      return;
+    }
+
+    const myTeam = {
+      id: 'my-' + Date.now(),
+      name,
+      playerCount: Number($('#match-player-count').value) || 7,
+      sport: $('#match-sport').value,
+      level: $('#match-level').value,
+    };
+
+    doRandomMatch(myTeam);
+  });
+
+  queueBtn?.addEventListener('click', () => {
+    const name = $('#match-team-name').value.trim();
+    if (name.length < 2) {
+      alert('Vui lòng nhập tên đội của bạn trước khi đưa vào hàng chờ.');
+      $('#match-team-name').focus();
+      return;
+    }
+
+    const newTeam = {
+      id: 'user-' + Date.now(),
+      name,
+      sport: $('#match-sport').value,
+      playerCount: Number($('#match-player-count').value) || 7,
+      area: 'Tự do BMT',
+      level: $('#match-level').value,
+      contact: 'Chờ liên hệ tại sân',
+      style: 'Vừa đăng ký hàng chờ',
+    };
+
+    saveCustomLobbyTeam(newTeam);
+    renderLobby();
+    alert(`Đã đưa đội "${name}" vào hàng chờ tìm đối thủ giao lưu thành công!`);
+  });
+
+  document.addEventListener('click', (e) => {
+    const directBtn = e.target.closest('[data-match-direct]');
+    if (!directBtn) return;
+    const oppId = directBtn.dataset.matchDirect;
+    const opp = getAllOpponents().find((t) => t.id === oppId);
+    if (!opp) return;
+
+    let myName = $('#match-team-name').value.trim() || 'Đội của bạn';
+    const myTeam = {
+      id: 'my-' + Date.now(),
+      name: myName,
+      playerCount: opp.playerCount,
+      sport: opp.sport,
+      level: opp.level,
+    };
+
+    renderMatchResult(myTeam, opp);
+    $('#match-result')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+
+  renderLobby();
+}
+
+initMatchmaking();

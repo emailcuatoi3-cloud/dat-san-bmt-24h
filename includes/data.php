@@ -392,6 +392,15 @@ function approve_deposit(array $b, string $status): void
     if ($status !== 'confirmed' || $b['source'] !== 'online' || $b['payment_status'] !== 'deposit_claimed') return;
     $full = $b['payment_method'] === 'vietqr-full' || (int) $b['deposit_amount'] >= (int) $b['total_price'];
     q('UPDATE bookings SET payment_status = ? WHERE id = ?', [$full ? 'paid' : 'deposit_paid', $b['id']]);
+
+    $targetUserId = (int) ($b['customer_id'] ?? 0);
+    if (!$targetUserId && !empty($b['customer_phone'])) {
+        $targetUserId = (int) q_val('SELECT id FROM users WHERE phone = ?', [$b['customer_phone']]);
+    }
+    if ($targetUserId > 0) {
+        $payText = $full ? 'toàn bộ tiền sân' : 'tiền cọc ' . number_format((int) $b['deposit_amount'], 0, ',', '.') . 'đ';
+        push_notification($targetUserId, 'Xác nhận thanh toán đơn #' . $b['code'] . ' thành công!', 'Hệ thống đã nhận ' . $payText . ' cho đơn đặt sân tại ' . ($b['court_name'] ?: 'sân thể thao') . '. Lịch đặt của bạn đã chính thức được giữ chỗ!', 'payment', '/tai-khoan?tab=history');
+    }
 }
 
 // ===================== YÊU CẦU ĐĂNG KÝ CHỦ SÂN =====================

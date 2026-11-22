@@ -4,6 +4,7 @@ import { WEEKDAY_SHORT, describeConditions, describeDiscount, promotionState } f
 
 const items = (PAGE.promotions || []).filter((p) => ['active', 'upcoming'].includes(promotionState(p)));
 const st = { filter: 'all', keyword: '', copied: '', saved: new Set() };
+let lastCheckedPromo = null;
 const meta = {
   active: ['Đang áp dụng', 'bg-primary-50 text-primary-800', 'bg-primary-500'],
   upcoming: ['Sắp mở', 'bg-secondary-100 text-secondary-900', 'bg-secondary-500'],
@@ -379,7 +380,8 @@ document.addEventListener('click', async (event) => {
   const sv = event.target.closest('[data-save-voucher]');
   if (sv) {
     const code = sv.dataset.saveVoucher;
-    const p = items.find((x) => x.code === code);
+    const p = items.find((x) => x.code === code) || (lastCheckedPromo && lastCheckedPromo.code === code ? lastCheckedPromo : null);
+    if (!p) return;
     if (!APP.user) {
       toast('Vui lòng đăng nhập để lưu mã vào Ví voucher.', 'info');
       return;
@@ -393,11 +395,17 @@ document.addEventListener('click', async (event) => {
         discountValue: p.discountValue,
         minOrder: p.minOrder || 0,
         expiresAt: p.endDate || null,
-        source: 'promo',
+        source: p.isWheelPrize ? 'wheel' : 'promo',
       });
       st.saved.add(code);
       toast(`Đã lưu mã ${code} vào Ví voucher!`);
       render();
+      const btnInResult = $(`#promo-checker-result [data-save-voucher="${code}"]`);
+      if (btnInResult) {
+        btnInResult.innerHTML = '<i class="ri-check-line text-sm"></i><span>Đã lưu ví</span>';
+        btnInResult.classList.remove('border-background-300', 'bg-white', 'text-foreground-800');
+        btnInResult.classList.add('border-primary-300', 'bg-primary-50', 'text-primary-800');
+      }
     } catch (e) {
       toast(e.message, 'error');
     }
@@ -408,15 +416,232 @@ document.addEventListener('click', async (event) => {
     st.copied = c.dataset.copyCode;
     toast(`Đã sao chép mã ${c.dataset.copyCode}`);
     render();
+    const btnInResult = $(`#promo-checker-result [data-copy-code="${c.dataset.copyCode}"]`);
+    if (btnInResult) {
+      btnInResult.innerHTML = '<i class="ri-check-line text-sm"></i><span>Đã chép mã</span>';
+      setTimeout(() => {
+        if (btnInResult) btnInResult.innerHTML = '<i class="ri-file-copy-line text-sm"></i><span>Sao chép mã</span>';
+      }, 1800);
+    }
     setTimeout(() => {
       st.copied = '';
       render();
     }, 1800);
   }
 });
+
+// ---------------- MỤC NHẬP & TRA CỨU MÃ ƯU ĐÃI MỚI ----------------
+function renderCheckResult(promo, state, message) {
+  const resultBox = $('#promo-checker-result');
+  if (!resultBox) return;
+  resultBox.classList.remove('hidden');
+
+  const isExhausted = state === 'exhausted';
+  const isExpired = state === 'expired';
+  const isPaused = state === 'paused';
+  const isUpcoming = state === 'upcoming';
+  const isActive = state === 'active';
+
+  const badgeCls = isActive
+    ? 'bg-primary-50 text-primary-800 border-primary-200'
+    : isUpcoming
+      ? 'bg-secondary-50 text-secondary-900 border-secondary-200'
+      : isExhausted
+        ? 'bg-accent-100 text-accent-900 border-accent-300'
+        : 'bg-accent-50 text-accent-800 border-accent-200';
+
+  const badgeText = isActive ? 'Khả dụng & Dùng được ngay' : isUpcoming ? 'Sắp mở áp dụng' : isPaused ? 'Đang tạm dừng' : isExhausted ? 'Đã hết lượt dùng' : 'Đã hết hạn';
+
+  const headline = promo.discountType === 'percent'
+    ? `${promo.discountValue}%`
+    : promo.discountType === 'gift'
+      ? 'QUÀ TẶNG'
+      : `${Math.round(promo.discountValue / 1000)}K`;
+
+  const isSaved = st.saved.has(promo.code);
+
+  resultBox.innerHTML = `
+    <div class="rounded-lg border-2 border-primary-400/40 bg-gradient-to-r from-primary-50/50 via-white to-background-50 p-4 sm:p-5 shadow-sm transition-all duration-300">
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-background-200 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="flex h-6 w-6 items-center justify-center rounded-full ${isExhausted ? 'bg-accent-500 text-white' : 'bg-primary-500 text-white'} text-xs">
+            <i class="${isExhausted ? 'ri-error-warning-line' : 'ri-check-line'} font-bold"></i>
+          </span>
+          <span class="text-xs font-bold uppercase tracking-wider ${isExhausted ? 'text-accent-800' : 'text-primary-800'}">${isExhausted ? 'Mã ưu đãi đã hết lượt dùng' : 'Mã ưu đãi hợp lệ'}</span>
+        </div>
+        <span class="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${badgeCls}">
+          <span class="h-1.5 w-1.5 rounded-full ${isActive ? 'bg-primary-500' : isUpcoming ? 'bg-secondary-500' : 'bg-accent-500'}"></span>
+          ${badgeText}
+        </span>
+      </div>
+
+      <div class="mt-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div class="min-w-0 flex-1">
+          <div class="flex flex-wrap items-center gap-3">
+            <span class="rounded-md border-2 border-dashed ${isExhausted ? 'border-accent-400 bg-accent-50 text-accent-800' : 'border-primary-400 bg-white text-primary-700'} px-3 py-1 font-mono text-base sm:text-lg font-extrabold tracking-widest">
+              ${esc(promo.code)}
+            </span>
+            <span class="font-heading text-xl sm:text-2xl font-extrabold text-foreground-950">
+              ${headline} <span class="text-xs sm:text-sm font-semibold text-foreground-500">${promo.discountType === 'percent' ? 'giảm giá' : promo.discountType === 'gift' ? '' : 'đ'}</span>
+            </span>
+          </div>
+
+          <h3 class="mt-2 font-heading text-base font-bold text-foreground-950">${esc(promo.title)}</h3>
+          ${promo.description ? `<p class="mt-1 text-xs text-foreground-600 leading-relaxed">${esc(promo.description)}</p>` : ''}
+
+          <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-foreground-600">
+            <span class="flex items-center gap-1.5"><i class="ri-calendar-line text-foreground-400"></i>HSD: <b>${promo.endDate ? promo.endDate.split('-').reverse().join('/') : 'Không thời hạn'}</b></span>
+            ${promo.minOrder > 0 ? `<span class="flex items-center gap-1.5"><i class="ri-shopping-bag-3-line text-foreground-400"></i>Đơn tối thiểu: <b>${Number(promo.minOrder).toLocaleString('vi-VN')}đ</b></span>` : ''}
+            ${promo.startTime && promo.endTime ? `<span class="flex items-center gap-1.5 text-accent-700 font-semibold"><i class="ri-time-line"></i>Giờ vàng: ${promo.startTime} - ${promo.endTime}</span>` : ''}
+            ${promo.ownerName ? `<span class="flex items-center gap-1.5"><i class="ri-store-2-line text-foreground-400"></i>Áp dụng: ${esc(promo.ownerName)}</span>` : ''}
+          </div>
+          <p class="mt-2 text-xs font-semibold ${isExhausted ? 'text-accent-700' : 'text-primary-700'} flex items-center gap-1.5"><i class="${isExhausted ? 'ri-error-warning-line text-accent-600' : 'ri-checkbox-circle-line text-primary-600'}"></i>${esc(message || (isExhausted ? 'Mã ưu đãi này đã hết lượt sử dụng.' : 'Mã ưu đãi sẵn sàng áp dụng!'))}</p>
+        </div>
+
+        <div class="flex flex-wrap shrink-0 items-center gap-2 md:flex-col md:items-stretch">
+          <button type="button" data-copy-code="${esc(promo.code)}" class="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-md border border-primary-300 bg-white px-3.5 py-2 text-xs font-bold text-primary-700 transition-colors hover:bg-primary-50">
+            <i class="ri-file-copy-line text-sm"></i><span>Sao chép mã</span>
+          </button>
+          <button type="button" data-save-voucher="${esc(promo.code)}" class="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-md border ${isSaved ? 'border-primary-300 bg-primary-50 text-primary-800' : 'border-background-300 bg-white text-foreground-800 hover:border-primary-400'} px-3.5 py-2 text-xs font-semibold transition-colors">
+            <i class="${isSaved ? 'ri-check-line' : 'ri-wallet-3-line'} text-sm"></i><span>${isSaved ? 'Đã lưu ví' : 'Lưu vào ví'}</span>
+          </button>
+          ${isActive ? `<a href="${url(`/dat-san?promo=${encodeURIComponent(promo.code)}`)}" class="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-md bg-primary-500 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-primary-600">
+            <i class="ri-calendar-check-line text-sm"></i><span>Đặt sân dùng ngay</span>
+          </a>` : isExhausted ? `<span class="inline-flex cursor-not-allowed items-center justify-center gap-1.5 rounded-md bg-background-200 px-3.5 py-2 text-xs font-semibold text-foreground-500"><i class="ri-forbid-2-line"></i><span>Đã hết lượt dùng</span></span>` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderCheckNotFound(code, customMessage) {
+  const resultBox = $('#promo-checker-result');
+  if (!resultBox) return;
+  resultBox.classList.remove('hidden');
+
+  resultBox.innerHTML = `
+    <div class="rounded-lg border border-accent-300 bg-accent-50/80 p-4 sm:p-5 shadow-sm transition-all duration-300">
+      <div class="flex items-start gap-3.5">
+        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-100 text-accent-700">
+          <i class="ri-close-circle-line text-2xl" aria-hidden="true"></i>
+        </span>
+        <div class="min-w-0 flex-1">
+          <h3 class="font-heading text-sm sm:text-base font-bold text-accent-950">
+            Mã ưu đãi không tồn tại hoặc đã được sử dụng!
+          </h3>
+          <p class="mt-1 text-xs leading-relaxed text-accent-800 sm:text-sm">
+            ${customMessage ? esc(customMessage) : `Mã ưu đãi không tồn tại hoặc đã được sử dụng.`} Vui lòng kiểm tra lại chính xác các ký tự của mã hoặc tham khảo danh sách các mã đang hoạt động bên dưới.
+          </p>
+          <div class="mt-3.5 flex flex-wrap items-center gap-2">
+            <button type="button" id="promo-retype-btn" class="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-accent-300 bg-white px-3 py-1.5 text-xs font-semibold text-accent-900 transition-colors hover:bg-accent-100">
+              <i class="ri-edit-line"></i>Nhập lại mã khác
+            </button>
+            <a href="#promo-filters" class="inline-flex items-center gap-1.5 rounded-md bg-accent-500 px-3.5 py-1.5 text-xs font-bold text-background-950 transition-colors hover:bg-accent-600">
+              <i class="ri-list-check-2"></i>Xem các mã đang chạy
+            </a>
+            <a href="#vong-quay" class="inline-flex items-center gap-1.5 rounded-md border border-background-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-foreground-800 transition-colors hover:border-primary-400">
+              <i class="ri-gift-line"></i>Quay nhận voucher miễn phí
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  $('#promo-retype-btn')?.addEventListener('click', () => {
+    const input = $('#promo-input-code');
+    if (input) {
+      input.value = '';
+      input.focus();
+    }
+    resultBox.classList.add('hidden');
+    resultBox.innerHTML = '';
+  });
+}
+
+function initPromoChecker() {
+  const form = $('#promo-checker-form');
+  const input = $('#promo-input-code');
+  const clearBtn = $('#promo-clear-input');
+  const checkBtn = $('#promo-check-btn');
+  const resultBox = $('#promo-checker-result');
+  if (!form || !input || !checkBtn || !resultBox) return;
+
+  const toggleClearBtn = () => {
+    if (clearBtn) {
+      clearBtn.classList.toggle('hidden', !input.value.trim());
+    }
+  };
+
+  input.addEventListener('input', () => {
+    toggleClearBtn();
+  });
+
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      input.value = '';
+      toggleClearBtn();
+      resultBox.classList.add('hidden');
+      resultBox.innerHTML = '';
+      lastCheckedPromo = null;
+      input.focus();
+    });
+  }
+
+  const performCheck = async (rawCode) => {
+    const code = (rawCode || input.value).trim().toUpperCase();
+    if (!code) {
+      toast('Vui lòng nhập mã ưu đãi cần kiểm tra.', 'info');
+      input.focus();
+      return;
+    }
+    input.value = code;
+    toggleClearBtn();
+
+    const origBtnHtml = checkBtn.innerHTML;
+    checkBtn.disabled = true;
+    checkBtn.innerHTML = '<i class="ri-loader-4-line animate-spin text-sm"></i><span>Đang kiểm tra...</span>';
+
+    try {
+      const data = await api('booking', 'lookup_promo', { code });
+      if (data && data.found && data.promotion) {
+        lastCheckedPromo = data.promotion;
+        renderCheckResult(data.promotion, data.state, data.message);
+      } else {
+        lastCheckedPromo = null;
+        renderCheckNotFound(code, 'Mã ưu đãi không có hoặc không tồn tại trên hệ thống.');
+      }
+    } catch (err) {
+      lastCheckedPromo = null;
+      renderCheckNotFound(code, err.message || 'Mã ưu đãi không có hoặc không tồn tại trên hệ thống.');
+    } finally {
+      checkBtn.disabled = false;
+      checkBtn.innerHTML = origBtnHtml;
+      resultBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  };
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    performCheck();
+  });
+
+  // Tự động kiểm tra nếu có tham số trên URL (?promo=... hoặc ?code=...)
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const queryCode = urlParams.get('promo') || urlParams.get('code');
+    if (queryCode) {
+      input.value = queryCode;
+      toggleClearBtn();
+      performCheck(queryCode);
+    }
+  } catch (e) {}
+}
+
 $('#promo-search').addEventListener('input', (e) => {
   st.keyword = e.target.value;
   render();
 });
 render();
 initPromoWheel();
+initPromoChecker();

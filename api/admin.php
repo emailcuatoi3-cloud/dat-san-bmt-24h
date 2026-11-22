@@ -419,9 +419,12 @@ run_api([
         if (!$approve && mb_strlen($note) < 5) fail('Vui lòng ghi lý do từ chối (ít nhất 5 ký tự) để gửi cho người đăng ký.');
         q('UPDATE owner_requests SET status = ?, admin_note = ?, reviewed_by = ?, reviewed_at = NOW() WHERE id = ?',
             [$approve ? 'approved' : 'rejected', $note, admin_access()['actorName'], $r['id']]);
-        if ($approve && $r['user_role'] === 'customer') {
+        if ($approve) {
             q("UPDATE users SET role = 'owner', business_name = ?, phone = IF(phone = '', ?, phone), address = IF(address = '', ?, address) WHERE id = ?",
                 [$r['business_name'], $r['phone'], $r['address'], $r['user_id']]);
+            push_notification((int) $r['user_id'], 'Đăng ký chủ sân đã được duyệt!', 'Chúc mừng bạn! Yêu cầu đăng ký cơ sở "' . $r['business_name'] . '" đã được phê duyệt. Kênh chủ sân đã sẵn sàng hoạt động.', 'system', '/chu-san');
+        } else {
+            push_notification((int) $r['user_id'], 'Yêu cầu đăng ký chủ sân chưa được duyệt', 'Lý do: ' . $note, 'system', '/dang-ky-chu-san');
         }
         // Khi duyệt đăng ký chủ sân: tự động khởi tạo sân mà chủ sân đã đăng ký (gắn đúng owner_id)
         if ($approve && !q_val('SELECT id FROM courts WHERE owner_id = ? AND name = ? AND deleted_at IS NULL', [$r['user_id'], $r['business_name']])) {
@@ -642,6 +645,18 @@ run_api([
         } else {
             q('UPDATE bookings SET status = ?, reject_reason = ? WHERE id = ?', [$status, $reason, $b['id']]);
             approve_deposit($b, $status);
+        }
+
+        $targetUserId = (int) ($b['customer_id'] ?? 0);
+        if (!$targetUserId && !empty($b['customer_phone'])) {
+            $targetUserId = (int) q_val('SELECT id FROM users WHERE phone = ?', [$b['customer_phone']]);
+        }
+        if ($targetUserId > 0) {
+            if ($status === 'confirmed') {
+                push_notification($targetUserId, 'Đơn đặt sân #' . $b['code'] . ' đã được duyệt!', 'Đơn đặt sân tại ' . ($b['court_name'] ?: 'sân thể thao') . ' ngày ' . date('d/m/Y', strtotime($b['booking_date'])) . ' đã được duyệt thành công.', 'booking', '/tai-khoan?tab=history');
+            } else {
+                push_notification($targetUserId, 'Đơn đặt sân #' . $b['code'] . ' đã bị hủy / từ chối', 'Lý do: ' . ($reason ?: 'Đơn đã bị hủy.') . '.', 'booking', '/tai-khoan?tab=history');
+            }
         }
         audit('bookings', $status === 'confirmed' ? 'Duyệt đơn đặt sân' : 'Từ chối đơn đặt sân', $b['code'] . ' · ' . $b['court_name'], (string) $reason, $status === 'confirmed' ? 'success' : 'warning');
         return map_booking(q_one(BOOKING_SELECT . ' WHERE b.id = ?', [$b['id']]));
