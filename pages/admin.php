@@ -47,23 +47,29 @@ render_page([
 <div class="min-h-screen bg-background-100">
   <div id="owner-overlay" class="fixed inset-0 z-40 hidden bg-black/40 lg:hidden"></div>
   <aside id="owner-sidebar" class="fixed inset-y-0 left-0 z-50 flex w-[264px] -translate-x-full flex-col border-r border-background-200 bg-white transition-transform lg:translate-x-0">
-    <a href="<?= url('/') ?>" class="flex h-16 shrink-0 items-center gap-2.5 border-b border-background-200 px-5">
-      <img src="<?= site_logo() ?>" alt="Logo Đặt Sân BMT 24H" class="h-9 w-9 rounded-md object-contain">
-      <span class="leading-tight"><span class="block font-heading text-sm font-extrabold text-foreground-950">Đặt Sân BMT 24H</span><span class="block text-[11px] font-medium text-foreground-500">Trang quản trị</span></span>
+    <a href="<?= url('/') ?>" class="flex h-16 shrink-0 items-center gap-3 border-b border-background-200 px-5 group">
+      <img src="<?= site_logo() ?>" alt="Logo Đặt Sân BMT 24H" class="h-10 w-10 rounded-xl object-contain drop-shadow-sm transition-transform group-hover:scale-105">
+      <div class="leading-tight">
+        <div class="flex items-center gap-1.5">
+          <span class="font-heading text-sm font-black text-foreground-950">ĐẶT SÂN BMT</span>
+          <span class="rounded bg-accent-500 px-1 py-0.2 text-[10px] font-bold text-background-950">24H</span>
+        </div>
+        <span class="block text-xs font-medium text-foreground-500">Trang quản trị</span>
+      </div>
     </a>
     <nav class="flex-1 overflow-y-auto px-3 py-4" aria-label="Điều hướng quản trị">
-      <p class="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-foreground-400">Quản trị hệ thống</p>
+      <p class="mb-1.5 px-3 text-xs font-bold uppercase tracking-wider text-foreground-400">Quản trị hệ thống</p>
       <?php foreach ($modules as $m): ?>
         <a href="<?= url('/quan-tri?tab=' . $m['key']) ?>" class="<?= $m['key'] === $tab ? 'bg-primary-50 text-primary-700' : 'text-foreground-700 hover:bg-background-100 hover:text-foreground-950' ?> mb-0.5 flex items-center justify-between gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-colors">
-          <span class="flex items-center gap-2.5"><i class="<?= $m['icon'] ?> text-[17px]" aria-hidden="true"></i><?= $m['label'] ?></span>
-          <span data-badge="<?= $m['key'] ?>" class="hidden min-w-[20px] rounded-full bg-accent-500 px-1.5 py-0.5 text-center text-[10px] font-bold text-white"></span>
+          <span class="flex items-center gap-2.5"><i class="<?= $m['icon'] ?> text-lg" aria-hidden="true"></i><?= $m['label'] ?></span>
+          <span data-badge="<?= $m['key'] ?>" class="hidden min-w-[20px] rounded-full bg-accent-500 px-1.5 py-0.5 text-center text-xs font-bold text-white"></span>
         </a>
       <?php endforeach; ?>
     </nav>
     <div class="border-t border-background-200 p-4">
       <div class="flex items-center gap-2.5">
         <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary-700 text-xs font-bold text-white"><?= e(initials_of($u['full_name'], $u['email'])) ?></span>
-        <div class="min-w-0"><p class="truncate text-sm font-semibold text-foreground-950"><?= e($access['actorName']) ?></p><p class="truncate text-[11px] text-foreground-500"><?= e($access['roleName']) ?></p></div>
+        <div class="min-w-0"><p class="truncate text-sm font-semibold text-foreground-950"><?= e($access['actorName']) ?></p><p class="truncate text-xs text-foreground-500"><?= e($access['roleName']) ?></p></div>
       </div>
       <a href="<?= url('/') ?>" class="mt-3 flex items-center gap-2 text-xs font-semibold text-foreground-600 hover:text-primary-700"><i class="ri-arrow-left-line" aria-hidden="true"></i>Về trang khách hàng</a>
     </div>
@@ -74,7 +80,7 @@ render_page([
       <div class="flex min-w-0 items-center gap-3">
         <button type="button" id="owner-menu-btn" class="flex h-9 w-9 items-center justify-center rounded-md border border-background-300 text-foreground-700 lg:hidden" aria-label="Mở menu"><i class="ri-menu-line text-lg" aria-hidden="true"></i></button>
         <div class="min-w-0">
-          <p class="truncate text-[11px] font-medium text-foreground-500">Xin chào, <?= e($access['actorName']) ?></p>
+          <p class="truncate text-xs font-medium text-foreground-500">Xin chào, <?= e($access['actorName']) ?></p>
           <p class="flex items-center gap-1.5 truncate font-heading text-sm font-bold text-foreground-950"><i class="ri-shield-user-line text-primary-600" aria-hidden="true"></i><?= e($access['roleName']) ?></p>
         </div>
       </div>
@@ -92,7 +98,7 @@ render_page([
       <?php endif; ?>
       <div class="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 class="font-heading text-2xl font-extrabold text-foreground-950 md:text-[28px]"><?= $meta[$tab][0] ?></h1>
+          <h1 class="font-heading text-2xl font-extrabold text-foreground-950 md:text-3xl"><?= $meta[$tab][0] ?></h1>
           <p class="mt-1.5 max-w-2xl text-sm leading-relaxed text-foreground-600"><?= $meta[$tab][1] ?></p>
         </div>
         <div id="owner-actions" class="flex flex-wrap items-center gap-2"></div>

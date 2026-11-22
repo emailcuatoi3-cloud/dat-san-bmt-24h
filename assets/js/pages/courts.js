@@ -68,7 +68,7 @@ function filterPanelHtml() {
       <button type="button" data-reset class="whitespace-nowrap text-xs font-semibold text-primary-600 transition-colors hover:text-primary-700">Xóa tất cả</button>
     </div>
     <div>
-      <p class="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-foreground-500">Loại sân</p>
+      <p class="mb-2.5 text-xs font-semibold uppercase tracking-wider text-foreground-500">Loại sân</p>
       <div class="flex flex-col gap-1.5">
         ${sportChoices
       .map((ch) => {
@@ -85,11 +85,11 @@ function filterPanelHtml() {
               </div>
               ${expanded
             ? `<div class="ml-3 mt-1.5 flex flex-col gap-1 border-l border-background-200 pl-3">
-                  <button type="button" data-field-type="all" data-for="${ch.value}" class="${cx('flex cursor-pointer items-center justify-between rounded-md px-2.5 py-2 text-left text-[13px] transition-colors', f.fieldType === 'all' ? 'bg-secondary-100 font-semibold text-secondary-900' : 'text-foreground-600 hover:bg-background-100 hover:text-foreground-900')}"><span>Tất cả ${ch.shortLabel}</span><span class="text-[11px] opacity-70">${sportCount(ch.value)}</span></button>
+                  <button type="button" data-field-type="all" data-for="${ch.value}" class="${cx('flex cursor-pointer items-center justify-between rounded-md px-2.5 py-2 text-left text-sm transition-colors', f.fieldType === 'all' ? 'bg-secondary-100 font-semibold text-secondary-900' : 'text-foreground-600 hover:bg-background-100 hover:text-foreground-900')}"><span>Tất cả ${ch.shortLabel}</span><span class="text-xs opacity-75">${sportCount(ch.value)}</span></button>
                   ${subTypesFor(ch.value)
               .map((type) => {
                 const sub = f.fieldType === type;
-                return `<button type="button" data-field-type="${esc(type)}" data-for="${ch.value}" class="${cx('flex cursor-pointer items-center justify-between rounded-md px-2.5 py-2 text-left text-[13px] transition-colors', sub ? 'bg-primary-100 font-semibold text-primary-800' : 'text-foreground-600 hover:bg-background-100 hover:text-foreground-900')}"><span class="flex items-center gap-2"><span class="h-1.5 w-1.5 rounded-full ${sub ? 'bg-primary-600' : 'bg-foreground-300'}"></span>${esc(type)}</span><span class="text-[11px] opacity-70">${subTypeCount(ch.value, type)}</span></button>`;
+                return `<button type="button" data-field-type="${esc(type)}" data-for="${ch.value}" class="${cx('flex cursor-pointer items-center justify-between rounded-md px-2.5 py-2 text-left text-sm transition-colors', sub ? 'bg-primary-100 font-semibold text-primary-800' : 'text-foreground-600 hover:bg-background-100 hover:text-foreground-900')}"><span class="flex items-center gap-2"><span class="h-1.5 w-1.5 rounded-full ${sub ? 'bg-primary-600' : 'bg-foreground-300'}"></span>${esc(type)}</span><span class="text-xs opacity-75">${subTypeCount(ch.value, type)}</span></button>`;
               })
               .join('')}
                 </div>`
@@ -101,7 +101,7 @@ function filterPanelHtml() {
       </div>
     </div>
     <div>
-      <label class="mb-2.5 block text-[11px] font-semibold uppercase tracking-wide text-foreground-500">Khu vực</label>
+      <label class="mb-2.5 block text-xs font-semibold uppercase tracking-wider text-foreground-500">Khu vực</label>
       <div class="relative">
         <select data-area class="w-full cursor-pointer appearance-none rounded-md border border-background-300 bg-white px-3 py-2.5 pr-9 text-sm text-foreground-800 focus:border-primary-400 focus:outline-none">
           <option value="">Tất cả khu vực</option>
@@ -111,7 +111,7 @@ function filterPanelHtml() {
       </div>
     </div>
     <div>
-      <p class="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-foreground-500">Khoảng giá mỗi giờ</p>
+      <p class="mb-2.5 text-xs font-semibold uppercase tracking-wider text-foreground-500">Khoảng giá mỗi giờ</p>
       <div class="flex flex-col gap-1">
         ${priceRanges
       .map((r) => {
@@ -123,7 +123,7 @@ function filterPanelHtml() {
       </div>
     </div>
     <div>
-      <p class="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-foreground-500">Trạng thái hoạt động</p>
+      <p class="mb-2.5 text-xs font-semibold uppercase tracking-wider text-foreground-500">Trạng thái hoạt động</p>
       <label class="flex cursor-pointer items-start gap-2.5 rounded-md border border-background-200 bg-background-50 px-3 py-2.5">
         <input type="checkbox" data-active ${f.activeOnly ? 'checked' : ''} class="mt-0.5 h-4 w-4 cursor-pointer accent-primary-500">
         <span class="text-sm text-foreground-700">Chỉ hiển thị sân đang hoạt động<span class="mt-0.5 block text-xs text-foreground-500">${counts.active} sân sẵn sàng nhận đặt</span></span>
@@ -150,7 +150,7 @@ function render() {
 
   const active = (f.sport !== 'all') + (f.fieldType !== 'all') + Boolean(f.area) + (f.priceId !== 'all') + f.activeOnly;
   $('#filter-count').innerHTML = active
-    ? `<span class="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary-500 px-1 text-[11px] font-bold text-white">${active}</span>`
+    ? `<span class="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary-500 px-1 text-xs font-bold text-white">${active}</span>`
     : '';
   $('#drawer-apply').textContent = `Xem ${list.length} sân phù hợp`;
 

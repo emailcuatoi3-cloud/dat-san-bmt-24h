@@ -74,7 +74,7 @@ export function courtCard(court) {
         <i class="${court.sport === 'football' ? 'ri-football-line' : 'ri-ping-pong-line'} text-primary-600" aria-hidden="true"></i>${esc(court.sportLabel)}
       </div>
       <div class="absolute top-3 right-3">${statusBadge(court.status)}</div>
-      ${court.featured ? `<div class="absolute bottom-3 left-3 flex items-center gap-1 rounded-full bg-accent-500 px-2.5 py-1 text-[11px] font-semibold text-background-950"><i class="ri-fire-line" aria-hidden="true"></i>Sân nổi bật</div>` : ''}
+      ${court.featured ? `<div class="absolute bottom-3 left-3 flex items-center gap-1 rounded-full bg-accent-500 px-2.5 py-1 text-xs font-semibold text-background-950"><i class="ri-fire-line" aria-hidden="true"></i>Sân nổi bật</div>` : ''}
       <button type="button" data-fav="${esc(court.slug)}" aria-pressed="${fav}" aria-label="${fav ? 'Bỏ khỏi sân yêu thích' : 'Lưu vào sân yêu thích'}" class="${favButtonClass(fav)}">
         <i class="${fav ? 'ri-heart-3-fill' : 'ri-heart-3-line'} text-base" aria-hidden="true"></i>
       </button>
@@ -84,15 +84,15 @@ export function courtCard(court) {
         <h3 class="font-heading text-base font-bold leading-snug text-foreground-950">${esc(court.name)}</h3>
         ${stars(court.rating)}
       </div>
-      <p class="flex items-start gap-1.5 text-[13px] font-medium leading-relaxed text-foreground-800"><i class="ri-map-pin-line mt-0.5 text-foreground-600" aria-hidden="true"></i><span>${esc(court.address)}</span></p>
-      <p class="flex flex-wrap items-center gap-x-1.5 text-[11px] font-medium text-foreground-600"><i class="ri-time-line" aria-hidden="true"></i>Mở cửa ${esc(court.openTime)} - ${esc(court.closeTime)} hằng ngày</p>
+      <p class="flex items-start gap-1.5 text-xs md:text-sm font-medium leading-relaxed text-foreground-800"><i class="ri-map-pin-line mt-0.5 text-foreground-600" aria-hidden="true"></i><span>${esc(court.address)}</span></p>
+      <p class="flex flex-wrap items-center gap-x-1.5 text-xs font-medium text-foreground-600"><i class="ri-time-line" aria-hidden="true"></i>Mở cửa ${esc(court.openTime)} - ${esc(court.closeTime)} hằng ngày</p>
       <p class="text-sm leading-relaxed text-foreground-700 line-clamp-2">${esc(court.description)}</p>
-      <p data-fav-notice class="hidden flex items-center gap-1.5 rounded-md bg-background-50 px-2 py-1.5 text-[11px] font-medium text-foreground-700"></p>
+      <p data-fav-notice class="hidden flex items-center gap-1.5 rounded-md bg-background-50 px-2 py-1.5 text-xs font-medium text-foreground-700"></p>
       <div class="mt-auto flex flex-wrap items-end justify-between gap-2 pt-3 border-t border-background-200">
         <div>
-          <p class="text-[11px] font-semibold uppercase tracking-wide text-foreground-700">Giá thuê từ</p>
+          <p class="text-xs font-semibold uppercase tracking-wider text-foreground-600">Giá thuê từ</p>
           <p class="font-heading text-lg font-bold text-primary-600">${formatVnd(low)}<span class="text-xs font-semibold text-foreground-700">/giờ</span></p>
-          ${evening && evening.price > low ? `<p class="mt-0.5 text-[11px] font-medium text-foreground-600">Buổi tối <span class="font-bold text-accent-700">${formatVnd(evening.price)}</span>/giờ</p>` : ''}
+          ${evening && evening.price > low ? `<p class="mt-0.5 text-xs font-medium text-foreground-600">Buổi tối <span class="font-bold text-accent-700">${formatVnd(evening.price)}</span>/giờ</p>` : ''}
         </div>
         <span class="rounded-md bg-secondary-50 px-2 py-1 text-xs font-medium text-secondary-800">${esc(court.area)}</span>
       </div>

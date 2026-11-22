@@ -101,15 +101,18 @@ body {
   background-color: oklch(var(--background-50));
   color: oklch(var(--foreground-950));
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 h1,
 h2,
 h3,
 h4,
-h5 {
+h5,
+h6 {
   font-family: var(--font-heading);
-  letter-spacing: -0.015em;
+  letter-spacing: -0.02em;
 }
 
 ::selection {
@@ -132,6 +135,40 @@ h5 {
 /* Cac vien/nhan xanh ngoc nhat (dang chon) co vien ro hon tren mat the toi */
 .bg-primary-50 {
   box-shadow: inset 0 0 0 1px oklch(var(--primary-200) / 0.55);
+}
+
+/* Cầu nối hover và hiệu ứng xoay mũi tên menu điều hướng */
+[data-nav-panel] {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+[data-nav-panel]::before {
+  content: '';
+  position: absolute;
+  top: -14px;
+  left: 0;
+  right: 0;
+  height: 14px;
+}
+
+[data-dropdown-menu]::before {
+  content: '';
+  position: absolute;
+  top: -14px;
+  left: 0;
+  right: 0;
+  height: 14px;
+}
+
+[data-nav-toggle][aria-expanded='true'] i.ri-arrow-down-s-line,
+[data-dropdown-toggle][aria-expanded='true'] i.ri-arrow-down-s-line {
+  transform: rotate(180deg);
+}
+
+[data-nav-toggle] i.ri-arrow-down-s-line,
+[data-dropdown-toggle] i.ri-arrow-down-s-line {
+  transition: transform 0.2s ease;
+  display: inline-block;
 }
 
 /* Anti-spam field for the contact form: hidden without obvious utility classes */

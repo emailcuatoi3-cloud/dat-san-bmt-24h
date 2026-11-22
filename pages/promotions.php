@@ -36,7 +36,7 @@ function () use ($active, $upcoming, $best) {
     $stat = function ($icon, $tone, $value, $unit, $label) { ?>
       <div class="flex items-center gap-3 rounded-lg border border-background-200 bg-background-50 px-4 py-3.5">
         <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md <?= $tone ?>"><i class="<?= $icon ?> text-lg" aria-hidden="true"></i></span>
-        <div class="min-w-0"><p class="font-heading text-xl font-extrabold leading-none text-foreground-950"><?= $value ?><?php if ($unit): ?><span class="ml-1 text-xs font-semibold text-foreground-400"><?= $unit ?></span><?php endif; ?></p><p class="mt-1 text-[11px] font-medium text-foreground-500"><?= $label ?></p></div>
+        <div class="min-w-0"><p class="font-heading text-xl font-extrabold leading-none text-foreground-950"><?= $value ?><?php if ($unit): ?><span class="ml-1 text-xs font-semibold text-foreground-400"><?= $unit ?></span><?php endif; ?></p><p class="mt-1 text-xs font-medium text-foreground-500"><?= $label ?></p></div>
       </div> 
     <?php };
     ?>
@@ -89,8 +89,8 @@ function () use ($active, $upcoming, $best) {
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div class="flex flex-wrap items-center gap-2">
-            <span class="inline-flex items-center gap-1.5 rounded-full bg-accent-50 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-accent-800"><i class="ri-gift-line" aria-hidden="true"></i>Vòng quay ưu đãi</span>
-            <span id="promo-wheel-status" class="inline-flex items-center gap-1.5 rounded-full bg-primary-50 px-3 py-1 text-[11px] font-bold text-primary-700"><i class="ri-time-line" aria-hidden="true"></i>1 lượt quay / 48 giờ</span>
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-accent-50 px-3 py-1 text-xs font-bold uppercase tracking-wider text-accent-800"><i class="ri-gift-line" aria-hidden="true"></i>Vòng quay ưu đãi</span>
+            <span id="promo-wheel-status" class="inline-flex items-center gap-1.5 rounded-full bg-primary-50 px-3 py-1 text-xs font-bold text-primary-700"><i class="ri-time-line" aria-hidden="true"></i>1 lượt quay / 48 giờ</span>
           </div>
           <h2 class="mt-2.5 font-heading text-xl font-extrabold text-foreground-950 md:text-2xl">Quay may mắn nhận voucher giảm giá vào ví</h2>
           <p class="mt-1.5 max-w-2xl text-sm leading-relaxed text-foreground-600">Mỗi <b>48 giờ</b> bạn nhận 1 lượt quay miễn phí để trúng mã giảm 10%, 15%, 20.000đ, 50.000đ hoặc tặng nước uống. Nếu đã đăng nhập, phần thưởng tự động lưu vào <b>Tài khoản → Ví voucher</b>.</p>

@@ -52,12 +52,12 @@ export function statCard(icon, label, value, hint = '', tone = 'primary') {
   return `<div class="${CARD} p-4">
     <div class="flex items-center justify-between gap-2"><p class="text-xs font-medium text-foreground-500">${label}</p><span class="flex h-8 w-8 items-center justify-center rounded-md ${tones[tone]}"><i class="${icon} text-base" aria-hidden="true"></i></span></div>
     <p class="mt-2 font-heading text-xl font-extrabold text-foreground-950 md:text-2xl">${value}</p>
-    ${hint ? `<p class="mt-1 text-[11px] text-foreground-500">${hint}</p>` : ''}
+    ${hint ? `<p class="mt-1 text-xs text-foreground-500">${hint}</p>` : ''}
   </div>`;
 }
 
 export const sectionTitle = (title, right = '') =>
-  `<div class="flex flex-wrap items-center justify-between gap-2 border-b border-background-200 px-4 py-3"><h2 class="font-heading text-sm font-bold text-foreground-950">${title}</h2>${right}</div>`;
+  `<div class="flex flex-wrap items-center justify-between gap-2 border-b border-background-200 px-4 py-3"><h2 class="font-heading text-base font-bold text-foreground-950">${title}</h2>${right}</div>`;
 
 /** Khung hộp thoại chuẩn: tiêu đề + thân + chân */
 export function modal(title, body, footer = '', size = 'max-w-lg') {
@@ -86,8 +86,8 @@ export function addDays(iso, n) {
 export const phoneKey = (p) => (p || '').replace(/\D/g, '');
 export const sourceBadge = (b) =>
   b.source === 'owner'
-    ? '<span class="inline-flex items-center gap-1 rounded-full bg-secondary-50 px-2 py-0.5 text-[10px] font-semibold text-secondary-800"><i class="ri-store-line" aria-hidden="true"></i>Tại quầy</span>'
-    : '<span class="inline-flex items-center gap-1 rounded-full bg-primary-50 px-2 py-0.5 text-[10px] font-semibold text-primary-700"><i class="ri-global-line" aria-hidden="true"></i>Online</span>';
+    ? '<span class="inline-flex items-center gap-1 rounded-full bg-secondary-50 px-2.5 py-0.5 text-xs font-semibold text-secondary-800"><i class="ri-store-line" aria-hidden="true"></i>Tại quầy</span>'
+    : '<span class="inline-flex items-center gap-1 rounded-full bg-primary-50 px-2.5 py-0.5 text-xs font-semibold text-primary-700"><i class="ri-global-line" aria-hidden="true"></i>Online</span>';
 
 export const courtOptions = (selected = '', all = 'Tất cả sân') =>
   `${all ? `<option value="">${all}</option>` : ''}${S.courts.map((c) => `<option value="${esc(c.id)}" ${c.id === selected ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}`;
