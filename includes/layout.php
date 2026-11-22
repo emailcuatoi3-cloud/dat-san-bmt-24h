@@ -142,7 +142,7 @@ function render_ghost_login_banner(): void
     ];
     $targetRole = $roleLabels[$target['role'] ?? ''] ?? $target['role'];
     ?>
-    <aside class="sticky top-0 z-[160] flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-amber-600 via-rose-600 to-rose-700 px-4 py-2.5 text-xs text-white shadow-xl backdrop-blur">
+    <aside id="ghost-login-banner" class="fixed top-0 left-0 right-0 z-[160] flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-amber-600 via-rose-600 to-rose-700 px-4 py-2.5 text-xs text-white shadow-xl backdrop-blur">
       <div class="flex flex-wrap items-center gap-2">
         <span class="inline-flex items-center gap-1 rounded bg-black/35 px-2 py-0.5 text-xs font-extrabold uppercase tracking-wider text-amber-200 shadow-inner">
           <i class="ri-spy-line text-sm animate-pulse" aria-hidden="true"></i> Ghost Login
@@ -165,6 +165,7 @@ function render_ghost_login_banner(): void
 function render_page(array $opt, callable $content): void
 {
     $layout = $opt['layout'] ?? 'site';
+    $imp = impersonating_admin();
     render_head($opt);
     if ($layout === 'bare') {
         echo '<body class="' . e($opt['bodyClass'] ?? 'bg-background-50') . '">';
@@ -183,7 +184,7 @@ function render_page(array $opt, callable $content): void
   <div class="site-backdrop pointer-events-none fixed inset-0 z-0" aria-hidden="true"></div>
   <div class="relative z-10 flex min-h-screen flex-col">
     <?php render_site_header($transparent); ?>
-    <?php if (!$transparent): ?><div class="h-[72px] shrink-0" aria-hidden="true"></div><?php endif; ?>
+    <?php if (!$transparent): ?><div class="<?= $imp ? 'h-[118px]' : 'h-[72px]' ?> shrink-0" aria-hidden="true"></div><?php endif; ?>
     <main class="flex-1"><?php $content(); ?></main>
     <?php render_site_footer(); ?>
   </div>
@@ -213,8 +214,9 @@ function render_site_header(bool $tr): void
     $path = current_path();
     $sport = $_GET['sport'] ?? '';
     $q = $_GET['q'] ?? '';
-    $isOwner = $u && $u['role'] === 'owner';
-    $isAdmin = $u && $u['role'] === 'admin';
+    $imp = impersonating_admin();
+    $isOwner = $u && ($u['role'] === 'owner' || !empty($imp));
+    $isAdmin = ($u && $u['role'] === 'admin') || !empty($imp);
     $favCount = $u ? count(jd($u['favorites'])) : 0;
     $unreadNotif = $u ? (int) q_val('SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0', [$u['id']]) : 0;
     $initials = $u ? initials_of($u['full_name'], $u['email']) : '';
@@ -257,7 +259,7 @@ function render_site_header(bool $tr): void
     $aboutActive = strpos($path, '/gioi-thieu') === 0;
     $contactActive = strpos($path, '/lien-he') === 0;
     ?>
-<header id="site-header" <?= tcls($tr, 'bg-transparent border-b border-white/10', 'bg-background-50/80 backdrop-blur-md border-b border-background-200', 'fixed top-0 left-0 right-0 z-50 transition-all duration-300') ?> <?= $tr ? 'data-transparent="1"' : '' ?>>
+<header id="site-header" <?= tcls($tr, 'bg-transparent border-b border-white/10', 'bg-background-50/80 backdrop-blur-md border-b border-background-200', 'fixed left-0 right-0 z-50 transition-all duration-300') ?> style="<?= $imp ? 'top: var(--ghost-banner-height, 44px);' : 'top: 0;' ?>" <?= $tr ? 'data-transparent="1"' : '' ?>>
   <div class="w-full px-3 xl:px-4 h-[72px] flex items-center justify-between gap-2">
     <a href="<?= url('/') ?>" class="flex items-center gap-2.5 sm:gap-3 shrink-0 group py-1" aria-label="Đặt Sân BMT 24H - Trang chủ">
       <div class="relative flex items-center justify-center shrink-0">
@@ -309,11 +311,12 @@ function render_site_header(bool $tr): void
     <div class="hidden lg:flex items-center gap-1 shrink-0">
       <?php $chip = 'flex shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-full border px-2 py-1.5 text-xs font-semibold transition-colors'; ?>
       <?php if ($isAdmin): ?>
-        <a href="<?= url('/quan-tri') ?>" title="Quản trị hệ thống" <?= tcls($tr, 'border-white/40 text-white hover:border-white hover:bg-white/15', 'border-accent-300 bg-accent-50 text-accent-800 hover:border-accent-400 hover:bg-accent-100', $chip) ?>>
+        <a href="<?= url($imp ? '/thoat-gia-lap' : '/quan-tri') ?>" title="Quản trị hệ thống" <?= tcls($tr, 'border-white/40 text-white hover:border-white hover:bg-white/15', 'border-accent-300 bg-accent-50 text-accent-800 hover:border-accent-400 hover:bg-accent-100', $chip) ?>>
           <i class="ri-shield-user-line text-sm" aria-hidden="true"></i>
-          <span>Quản trị</span>
+          <span><?= $imp ? 'Về Quản trị' : 'Quản trị' ?></span>
         </a>
-      <?php elseif ($isOwner): ?>
+      <?php endif; ?>
+      <?php if ($isOwner): ?>
         <a href="<?= url('/chu-san') ?>" title="Kênh chủ sân" <?= tcls($tr, 'border-white/40 text-white hover:border-white hover:bg-white/15', 'border-primary-300 bg-primary-50 text-primary-800 hover:border-primary-400 hover:bg-primary-100', $chip) ?>>
           <i class="ri-store-2-line text-sm" aria-hidden="true"></i>
           <span class="hdr-wide-only">Kênh chủ sân</span><span class="hdr-compact-only">Chủ sân</span>
@@ -379,9 +382,9 @@ function render_site_header(bool $tr): void
                   </a>
                 <?php endif; ?>
                 <?php if ($isAdmin): ?>
-                  <a href="<?= url('/quan-tri') ?>" role="menuitem" class="flex cursor-pointer items-start gap-2.5 rounded-md border border-accent-200 bg-accent-50 px-2.5 py-2 transition-colors hover:bg-accent-100">
+                  <a href="<?= url($imp ? '/thoat-gia-lap' : '/quan-tri') ?>" role="menuitem" class="flex cursor-pointer items-start gap-2.5 rounded-md border border-accent-200 bg-accent-50 px-2.5 py-2 transition-colors hover:bg-accent-100">
                     <span class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent-500 text-background-950"><i class="ri-shield-user-line text-sm" aria-hidden="true"></i></span>
-                    <span class="min-w-0"><span class="block whitespace-nowrap text-sm font-semibold text-accent-800">Quản trị hệ thống</span><span class="mt-0.5 block text-xs leading-snug text-accent-700/80">Sân, đơn đặt, người dùng và phân quyền</span></span>
+                    <span class="min-w-0"><span class="block whitespace-nowrap text-sm font-semibold text-accent-800"><?= $imp ? 'Trở về Quản trị' : 'Quản trị hệ thống' ?></span><span class="mt-0.5 block text-xs leading-snug text-accent-700/80">Sân, đơn đặt, người dùng và phân quyền</span></span>
                   </a>
                 <?php endif; ?>
               </div>
@@ -459,7 +462,7 @@ function render_site_header(bool $tr): void
           <a href="<?= url('/chu-san') ?>" class="flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm font-semibold text-foreground-800 hover:bg-background-100"><i class="ri-store-2-line text-base text-primary-600" aria-hidden="true"></i>Kênh chủ sân<i class="ri-arrow-right-s-line ml-auto text-foreground-400" aria-hidden="true"></i></a>
         <?php endif; ?>
         <?php if ($isAdmin): ?>
-          <a href="<?= url('/quan-tri') ?>" class="flex items-center gap-2.5 rounded-md border border-primary-300 bg-primary-50 px-3 py-2.5 text-sm font-semibold text-primary-700"><i class="ri-shield-user-line text-base" aria-hidden="true"></i>Quản trị hệ thống<i class="ri-arrow-right-s-line ml-auto text-primary-400" aria-hidden="true"></i></a>
+          <a href="<?= url($imp ? '/thoat-gia-lap' : '/quan-tri') ?>" class="flex items-center gap-2.5 rounded-md border border-primary-300 bg-primary-50 px-3 py-2.5 text-sm font-semibold text-primary-700"><i class="ri-shield-user-line text-base" aria-hidden="true"></i><?= $imp ? 'Trở về Quản trị' : 'Quản trị hệ thống' ?><i class="ri-arrow-right-s-line ml-auto text-primary-400" aria-hidden="true"></i></a>
         <?php endif; ?>
         <?php if ($u): ?>
           <div class="flex items-center gap-2.5 rounded-md bg-background-100 px-3 py-2.5">

@@ -1,7 +1,7 @@
 /**
  * Script chạy trên MỌI trang: thanh menu, giao diện sáng/tối, ngôn ngữ, đăng xuất.
  */
-import { $, $$, api, toast, url } from './ui.js';
+import { $, $$, APP, api, toast, url } from './ui.js';
 import { applyLanguage, getStoredLanguage, initDomLanguage, persistLanguage, watchDomChanges } from '../i18n/domTranslator.js';
 
 // ---------------- Giao diện sáng / tối ----------------
@@ -300,5 +300,38 @@ window.addEventListener('bmt24h-favorites', (event) => {
     badge.classList.toggle('flex', count > 0);
   });
 });
+
+// Ghi nhớ trang nội bộ xem dở (để sau khi đăng nhập quay lại đúng trang này)
+try {
+  const curPath = window.location.pathname;
+  const authRoutes = ['/dang-nhap', '/dang-ky', '/dang-ky-chu-san', '/quen-mat-khau', '/dat-lai-mat-khau', '/dang-xuat'];
+  if (!authRoutes.some((r) => curPath.includes(r))) {
+    const base = APP.base || '';
+    let relPath = window.location.pathname;
+    if (base && relPath.startsWith(base)) {
+      relPath = relPath.slice(base.length);
+      if (!relPath.startsWith('/')) relPath = '/' + relPath;
+    }
+    const fullPrev = (relPath || '/') + (window.location.search || '');
+    if (fullPrev && fullPrev !== '/') {
+      sessionStorage.setItem('bmt24h_auth_return_url', fullPrev);
+    }
+  }
+} catch (e) {}
+
+// Đồng bộ chiều cao thanh Ghost Login (khi quản trị viên đang giả lập tài khoản)
+const ghostBanner = document.getElementById('ghost-login-banner');
+if (ghostBanner) {
+  const syncGhostH = () => {
+    const h = ghostBanner.offsetHeight || 44;
+    document.documentElement.style.setProperty('--ghost-banner-height', `${h}px`);
+    const siteH = document.getElementById('site-header');
+    if (siteH) siteH.style.top = `${h}px`;
+    const sidebars = document.querySelectorAll('#owner-sidebar');
+    sidebars.forEach((sb) => { sb.style.top = `${h}px`; });
+  };
+  syncGhostH();
+  window.addEventListener('resize', syncGhostH);
+}
 
 export { toast };

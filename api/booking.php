@@ -185,6 +185,43 @@ run_api([
         return $out;
     },
 
+    // Danh sách toàn bộ mã giảm giá đang hoạt động trên hệ thống (và ví cá nhân nếu đăng nhập)
+    'promotions' => function () {
+        $promos = array_map('map_promotion', q_all("SELECT * FROM promotions WHERE status = 'active' AND end_date >= CURDATE() ORDER BY discount_value DESC, updated_at DESC"));
+        $u = current_user();
+        if ($u) {
+            $uvs = q_all("SELECT * FROM user_vouchers WHERE user_id = ? AND status = 'available' AND (expires_at IS NULL OR expires_at >= CURDATE())", [$u['id']]);
+            $existingCodes = array_map(fn($p) => strtoupper($p['code']), $promos);
+            foreach ($uvs as $uv) {
+                $c = strtoupper($uv['code']);
+                if (!in_array($c, $existingCodes, true)) {
+                    $promos[] = [
+                        'id' => $uv['id'],
+                        'ownerId' => null,
+                        'ownerName' => 'Hệ thống',
+                        'code' => $c,
+                        'title' => $uv['title'],
+                        'description' => $uv['description'],
+                        'discountType' => $uv['discount_type'],
+                        'discountValue' => (int) $uv['discount_value'],
+                        'maxDiscount' => null,
+                        'minOrder' => (int) $uv['min_order'],
+                        'startDate' => substr($uv['created_at'], 0, 10),
+                        'endDate' => $uv['expires_at'] ?: '2099-12-31',
+                        'weekdays' => [],
+                        'startTime' => '',
+                        'endTime' => '',
+                        'usageLimit' => 1,
+                        'status' => 'active',
+                        'isUserVoucher' => true,
+                    ];
+                    $existingCodes[] = $c;
+                }
+            }
+        }
+        return $promos;
+    },
+
     // Kiểm tra mã giảm giá cho đơn đang đặt
     'check_promo' => function () {
         $code = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', in_str('code')));
@@ -202,6 +239,136 @@ run_api([
         $err = promo_check($promo, $date, $start, $subtotal);
         if ($err) fail($err);
         return ['promotion' => $promo, 'discount' => promo_discount($promo, $subtotal)];
+    },
+
+    // Tra cứu mã ưu đãi (dùng cho ô nhập mã ưu đãi mới trên trang /uu-dai)
+    'lookup_promo' => function () {
+        $raw = in_str('code');
+        $code = strtoupper(trim(preg_replace('/[^A-Za-z0-9_-]/', '', $raw)));
+        if (!$code) fail('Vui lòng nhập mã ưu đãi cần tra cứu.');
+
+        $today = date('Y-m-d');
+
+        // 1. Tìm trong bảng promotions
+        $row = q_one('SELECT * FROM promotions WHERE UPPER(code) = ?', [$code]);
+        if ($row) {
+            $p = map_promotion($row);
+            $usedCount = promo_used_count($row['code']);
+            $isLimitReached = $p['usageLimit'] && $p['usageLimit'] > 0 && $usedCount >= $p['usageLimit'];
+
+            if ($isLimitReached) {
+                return [
+                    'found' => true,
+                    'promotion' => $p,
+                    'state' => 'exhausted',
+                    'message' => 'Mã ưu đãi này đã hết lượt sử dụng.',
+                ];
+            }
+
+            $state = 'active';
+            $msg = 'Mã ưu đãi hợp lệ và đang áp dụng!';
+            if ($row['status'] === 'paused') {
+                $state = 'paused';
+                $msg = 'Mã ưu đãi này hiện đang tạm dừng áp dụng.';
+            } elseif ($p['startDate'] > $today) {
+                $state = 'upcoming';
+                $msg = 'Mã ưu đãi sắp mở từ ngày ' . date('d/m/Y', strtotime($p['startDate'])) . '.';
+            } elseif ($p['endDate'] < $today) {
+                $state = 'expired';
+                $msg = 'Mã ưu đãi này đã hết hạn từ ngày ' . date('d/m/Y', strtotime($p['endDate'])) . '.';
+            }
+            return [
+                'found' => true,
+                'promotion' => $p,
+                'state' => $state,
+                'message' => $msg,
+            ];
+        }
+
+        // 2. Tìm trong danh mục quà tặng Vòng quay may mắn
+        $wheelPrizes = [
+            'QUAY10' => ['title' => 'Giảm 10% tiền sân', 'discountType' => 'percent', 'discountValue' => 10, 'minOrder' => 100000, 'desc' => 'Áp dụng cho mọi khung giờ từ 100.000đ'],
+            'QUAY20K' => ['title' => 'Voucher 20.000đ', 'discountType' => 'amount', 'discountValue' => 20000, 'minOrder' => 0, 'desc' => 'Trừ trực tiếp 20.000đ vào đơn đặt sân'],
+            'NUOCFREE' => ['title' => 'Tặng 2 chai nước suối', 'discountType' => 'gift', 'discountValue' => 0, 'minOrder' => 0, 'desc' => 'Đưa mã cho nhân viên sân khi check-in'],
+            'QUAY15' => ['title' => 'Giảm 15% giờ vàng', 'discountType' => 'percent', 'discountValue' => 15, 'minOrder' => 0, 'desc' => 'Áp dụng khung sáng – chiều 05:00 - 16:00'],
+            'QUAY50K' => ['title' => 'Voucher VIP 50.000đ', 'discountType' => 'amount', 'discountValue' => 50000, 'minOrder' => 300000, 'desc' => 'Áp dụng cho đơn đặt từ 300.000đ'],
+            'THEM30P' => ['title' => 'Tặng 30 phút chơi thêm', 'discountType' => 'gift', 'discountValue' => 0, 'minOrder' => 0, 'desc' => 'Áp dụng khi sân còn trống khung liền kề'],
+        ];
+        if (isset($wheelPrizes[$code])) {
+            $wp = $wheelPrizes[$code];
+            $promo = [
+                'id' => 'wheel-' . strtolower($code),
+                'ownerId' => null,
+                'ownerName' => 'Vòng quay ưu đãi BMT 24H',
+                'code' => $code,
+                'title' => $wp['title'],
+                'description' => $wp['desc'],
+                'discountType' => $wp['discountType'],
+                'discountValue' => $wp['discountValue'],
+                'maxDiscount' => null,
+                'minOrder' => $wp['minOrder'],
+                'startDate' => $today,
+                'endDate' => date('Y-m-d', strtotime('+30 days')),
+                'weekdays' => [],
+                'startTime' => '',
+                'endTime' => '',
+                'usageLimit' => 1,
+                'status' => 'active',
+                'isWheelPrize' => true,
+            ];
+            return [
+                'found' => true,
+                'promotion' => $promo,
+                'state' => 'active',
+                'message' => 'Mã ưu đãi từ Vòng quay may mắn hợp lệ và sẵn sàng sử dụng!',
+            ];
+        }
+
+        // 3. Tìm trong ví voucher người dùng (nếu có đăng nhập)
+        $u = current_user();
+        if ($u) {
+            $uv = q_one('SELECT * FROM user_vouchers WHERE user_id = ? AND UPPER(code) = ?', [$u['id'], $code]);
+            if ($uv) {
+                $isExpired = $uv['expires_at'] && $uv['expires_at'] < $today;
+                $isUsed = $uv['status'] === 'used';
+                $promo = [
+                    'id' => $uv['id'],
+                    'ownerId' => null,
+                    'ownerName' => 'Ví voucher của bạn',
+                    'code' => strtoupper($uv['code']),
+                    'title' => $uv['title'],
+                    'description' => $uv['description'],
+                    'discountType' => $uv['discount_type'],
+                    'discountValue' => (int) $uv['discount_value'],
+                    'maxDiscount' => null,
+                    'minOrder' => (int) $uv['min_order'],
+                    'startDate' => substr($uv['created_at'], 0, 10),
+                    'endDate' => $uv['expires_at'] ?: date('Y-m-d', strtotime('+30 days')),
+                    'weekdays' => [],
+                    'startTime' => '',
+                    'endTime' => '',
+                    'usageLimit' => 1,
+                    'status' => $isUsed ? 'exhausted' : ($isExpired ? 'expired' : 'active'),
+                    'isUserVoucher' => true,
+                ];
+                if ($isUsed) {
+                    return [
+                        'found' => true,
+                        'promotion' => $promo,
+                        'state' => 'exhausted',
+                        'message' => 'Mã voucher này đã được sử dụng trước đó.',
+                    ];
+                }
+                return [
+                    'found' => true,
+                    'promotion' => $promo,
+                    'state' => $isExpired ? 'expired' : 'active',
+                    'message' => $isExpired ? 'Mã ưu đãi trong ví của bạn đã hết hạn.' : 'Mã ưu đãi có trong Ví voucher của bạn và sẵn sàng sử dụng!',
+                ];
+            }
+        }
+
+        fail('Mã ưu đãi không tồn tại hoặc đã được sử dụng.');
     },
 
     // Bước 2 → 3: tạo đơn và giữ sân trong HOLD_MINUTES phút
@@ -318,6 +485,20 @@ run_api([
                 q("UPDATE bookings SET customer_id = ?, payment_status = ?, status = 'confirmed' WHERE id = ?", [$u['id'], $full ? 'paid' : 'deposit_paid', $b['id']]);
             } else {
                 q("UPDATE bookings SET payment_status = ?, status = 'confirmed' WHERE id = ?", [$full ? 'paid' : 'deposit_paid', $b['id']]);
+            }
+
+            $targetUserId = (int) ($b['customer_id'] ?: ($u['id'] ?? 0));
+            if (!$targetUserId && !empty($b['customer_phone'])) {
+                $targetUserId = (int) q_val('SELECT id FROM users WHERE phone = ?', [$b['customer_phone']]);
+            }
+            if ($targetUserId > 0) {
+                $payText = $full ? 'toàn bộ tiền sân' : 'tiền cọc ' . number_format((int) $b['deposit_amount'], 0, ',', '.') . 'đ';
+                push_notification($targetUserId, 'Xác nhận thanh toán đơn #' . $b['code'] . ' thành công!', 'Hệ thống đã nhận ' . $payText . ' cho đơn đặt sân tại ' . ($b['court_name'] ?: 'sân thể thao') . '. Vé đặt sân của bạn đã chính thức được kích hoạt!', 'payment', '/tai-khoan?tab=history');
+            }
+
+            $court = q_one('SELECT owner_id FROM courts WHERE id = ?', [$b['court_id']]);
+            if (!empty($court['owner_id'])) {
+                push_notification((int) $court['owner_id'], 'Đơn #' . $b['code'] . ' đã hoàn tất cọc', 'Khách hàng ' . ($b['customer_name'] ?: 'Khách') . ' đã chuyển cọc cho lịch đặt ngày ' . date('d/m/Y', strtotime($b['booking_date'])) . '.', 'payment', '/chu-san?tab=bookings');
             }
         }
         return booking_by_code($b['code']);

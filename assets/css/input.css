@@ -121,8 +121,9 @@ h6 {
 }
 
 /* Cac mat the/khung truoc day dung bg-white: dua ve mat the toi cua he mau */
-.bg-white {
-  background-color: oklch(var(--background-100)) !important;
+.bg-white,
+.bg-white\/95 {
+  background-color: oklch(var(--background-50) / 0.95) !important;
 }
 
 /* Nut/mang xanh ngoc dac: them vien sang mo + quang nhe de tach khoi nen toi */

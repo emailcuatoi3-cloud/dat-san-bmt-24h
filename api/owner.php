@@ -91,6 +91,19 @@ run_api([
         } else {
             q('UPDATE bookings SET status = ?, reject_reason = ? WHERE id = ?', [$status, $reason, $b['id']]);
         }
+
+        $targetUserId = (int) ($b['customer_id'] ?? 0);
+        if (!$targetUserId && !empty($b['customer_phone'])) {
+            $targetUserId = (int) q_val('SELECT id FROM users WHERE phone = ?', [$b['customer_phone']]);
+        }
+        if ($targetUserId > 0) {
+            if ($status === 'confirmed') {
+                push_notification($targetUserId, 'Đơn đặt sân #' . $b['code'] . ' đã được duyệt!', 'Chủ sân đã xác nhận đơn đặt sân tại ' . ($b['court_name'] ?: 'sân thể thao') . ' ngày ' . date('d/m/Y', strtotime($b['booking_date'])) . '. Vui lòng kiểm tra vé và giờ chơi.', 'booking', '/tai-khoan?tab=history');
+            } else {
+                push_notification($targetUserId, 'Đơn đặt sân #' . $b['code'] . ' đã bị từ chối / hủy', 'Lý do: ' . ($reason ?: 'Chủ sân từ chối đơn') . '.', 'booking', '/tai-khoan?tab=history');
+            }
+        }
+
         return map_booking(q_one(BOOKING_SELECT . ' WHERE b.id = ?', [$b['id']]));
     },
 
@@ -346,6 +359,15 @@ run_api([
             [uid('rf-'), $OWNER['id'], $b['code'], $b['customer_name'], $b['court_name'], $amount,
                 in_array(in_str('method'), ['cash', 'transfer', 'vietqr'], true) ? in_str('method') : 'cash', mb_substr(in_str('note'), 0, 250)]);
         q("UPDATE bookings SET payment_status = 'refunded' WHERE id = ?", [$b['id']]);
+
+        $targetUserId = (int) ($b['customer_id'] ?? 0);
+        if (!$targetUserId && !empty($b['customer_phone'])) {
+            $targetUserId = (int) q_val('SELECT id FROM users WHERE phone = ?', [$b['customer_phone']]);
+        }
+        if ($targetUserId > 0) {
+            push_notification($targetUserId, 'Hoàn tiền cọc đơn #' . $b['code'], 'Chủ sân đã hoàn số tiền ' . number_format($amount, 0, ',', '.') . 'đ cho bạn.', 'payment', '/tai-khoan?tab=history');
+        }
+
         return map_booking(q_one(BOOKING_SELECT . ' WHERE b.id = ?', [$b['id']]));
     },
 

@@ -1,13 +1,13 @@
 /**
  * TRANG QUẢN TRỊ — vẽ từng mục theo ?tab=, dữ liệu lấy từ api/admin.php.
  */
-import { api, esc, toast, confirmBox, setBusy, formData, on, statusBadge, emptyState, loadingBlock, errorBlock, formatDateTime, downloadCsv } from '../core/ui.js';
+import { api, esc, toast, confirmBox, setBusy, formData, on, statusBadge, emptyState, loadingBlock, errorBlock, formatDateTime, downloadCsv } from '../core/ui.js?v=20261122_03';
 import { openInvoiceModal, invoiceBadge, filterByDate, exportInvoices } from '../core/invoice.js';
 import { describeDiscount, describeConditions, promotionState } from '../lib/promotions.js';
 import {
   PAGE, TODAY, main, actions, BTN, BTN_OUT, BTN_SM, BTN_SM_PRI, BTN_SM_DANGER, INPUT, LABEL, CARD,
   chip, statCard, sectionTitle, modal, slotText, dateText, longDate, money, sourceBadge,
-} from './owner-shared.js';
+} from './owner-shared.js?v=20261122_03';
 
 const ROLE = { customer: 'Khách hàng', owner: 'Chủ sân', admin: 'Quản trị viên' };
 const C = {}; // bộ nhớ đệm dữ liệu từng mục
@@ -24,21 +24,34 @@ async function get(key, action) {
   return C[key];
 }
 
-/** Hộp nhập lý do / ghi chú: trả về chuỗi hoặc null nếu bỏ qua */
+/** Hộp nhập lý do / ghi chú: trả về chuỗi hoặc null nếu bỏ qua. Có singleton guard chống chồng popup. */
+let activeNotePromise = null;
 function askNote(title, label, { min = 0, value = '', confirm = 'Xác nhận', danger = false } = {}) {
-  return new Promise((resolve) => {
+  if (activeNotePromise) {
+    return activeNotePromise;
+  }
+  activeNotePromise = new Promise((resolve) => {
     let done = false;
     const m = modal(title, `<label class="${LABEL}">${label}</label><textarea rows="3" class="${INPUT}">${esc(value)}</textarea>`, `<button type="button" data-close class="${BTN_OUT}">Hủy</button><button type="button" data-ok class="${BTN} ${danger ? '!bg-accent-600 hover:!bg-accent-700' : ''}">${confirm}</button>`);
-    const close = m.close;
+    const origClose = m.close;
+    const finish = (result) => {
+      if (done) return;
+      done = true;
+      activeNotePromise = null;
+      origClose();
+      resolve(result);
+    };
+    m.close = () => finish(null);
     m.el.querySelector('[data-ok]').addEventListener('click', () => {
       const v = m.el.querySelector('textarea').value.trim();
       if (v.length < min) return toast(`Vui lòng nhập ít nhất ${min} ký tự.`, 'error');
-      done = true;
-      close();
-      resolve(v);
+      finish(v);
     });
-    m.el.closest('.fixed').addEventListener('click', (e) => { if (!done && e.target.closest('[data-close]')) resolve(null); });
+    m.el.addEventListener('click', (e) => {
+      if (!done && e.target.closest('[data-close]')) finish(null);
+    });
   });
+  return activeNotePromise;
 }
 
 function promptSudoModal() {
@@ -1175,18 +1188,30 @@ async function renderModeration() {
   on(root, 'click', '[data-ps]', (e, el) => { f.ps = el.dataset.ps; render(); });
   on(root, 'click', '[data-approve]', (e, el) => run(api('admin', 'review_moderate', { id: el.dataset.approve, status: 'approved' }), 'Đánh giá đã hiển thị.', 'moderation'));
   on(root, 'click', '[data-hide]', async (e, el) => {
-    const note = await askNote('Ẩn đánh giá', 'Lý do ẩn (lưu trong ghi chú kiểm duyệt)', { min: 5, confirm: 'Ẩn đánh giá', danger: true });
-    if (note !== null) run(api('admin', 'review_moderate', { id: el.dataset.hide, status: 'hidden', note }), 'Đã ẩn đánh giá.', 'moderation');
+    if (el.disabled || el.dataset.busy === '1') return;
+    el.dataset.busy = '1';
+    try {
+      const note = await askNote('Ẩn đánh giá', 'Lý do ẩn (lưu trong ghi chú kiểm duyệt)', { min: 5, confirm: 'Ẩn đánh giá', danger: true });
+      if (note !== null) await run(api('admin', 'review_moderate', { id: el.dataset.hide, status: 'hidden', note }), 'Đã ẩn đánh giá.', 'moderation');
+    } finally {
+      el.dataset.busy = '0';
+    }
   });
   on(root, 'click', '[data-rp]', async (e, el) => {
-    const to = el.dataset.to;
-    const rep = d.reports.find((r) => r.id === el.dataset.rp);
-    let note = rep.resolutionNote;
-    if (to === 'resolved' || to === 'rejected') {
-      note = await askNote(to === 'resolved' ? 'Ghi kết quả xử lý' : 'Lý do bác bỏ', 'Nội dung', { min: 5, value: rep.resolutionNote });
-      if (note === null) return;
+    if (el.disabled || el.dataset.busy === '1') return;
+    el.dataset.busy = '1';
+    try {
+      const to = el.dataset.to;
+      const rep = d.reports.find((r) => r.id === el.dataset.rp);
+      let note = rep?.resolutionNote;
+      if (to === 'resolved' || to === 'rejected') {
+        note = await askNote(to === 'resolved' ? 'Ghi kết quả xử lý' : 'Lý do bác bỏ', 'Nội dung', { min: 5, value: rep?.resolutionNote || '' });
+        if (note === null) return;
+      }
+      await run(api('admin', 'report_update', { id: rep.id, status: to, note }), 'Đã cập nhật báo cáo.', 'moderation');
+    } finally {
+      el.dataset.busy = '0';
     }
-    run(api('admin', 'report_update', { id: rep.id, status: to, note }), 'Đã cập nhật báo cáo.', 'moderation');
   });
 }
 
@@ -1717,8 +1742,14 @@ async function render() {
 
 const sidebar = document.getElementById('owner-sidebar');
 const overlay = document.getElementById('owner-overlay');
-document.getElementById('owner-menu-btn').addEventListener('click', () => { sidebar.classList.remove('-translate-x-full'); overlay.classList.remove('hidden'); });
-overlay.addEventListener('click', () => { sidebar.classList.add('-translate-x-full'); overlay.classList.add('hidden'); });
+document.getElementById('owner-menu-btn')?.addEventListener('click', () => { 
+  if (sidebar) sidebar.classList.remove('-translate-x-full'); 
+  if (overlay) overlay.classList.remove('hidden'); 
+});
+overlay?.addEventListener('click', () => { 
+  if (sidebar) sidebar.classList.add('-translate-x-full'); 
+  if (overlay) overlay.classList.add('hidden'); 
+});
 
 // Huy hiệu số việc cần xử lý trên thanh bên
 api('admin', 'overview').then((d) => {

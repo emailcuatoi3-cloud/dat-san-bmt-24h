@@ -43,10 +43,11 @@ render_page([
     'script' => 'pages/admin.js',
     'data' => ['tab' => $tab, 'sub' => $subTab, 'access' => $access, 'denied' => $denied, 'modules' => ADMIN_MODULES],
 ], function () use ($u, $access, $meta, $tab, $modules, $denied) {
+    $imp = impersonating_admin();
     ?>
-<div class="min-h-screen bg-background-100">
+<div class="min-h-screen bg-background-100" <?= $imp ? 'style="padding-top: var(--ghost-banner-height, 44px);"' : '' ?>>
   <div id="owner-overlay" class="fixed inset-0 z-40 hidden bg-black/40 lg:hidden"></div>
-  <aside id="owner-sidebar" class="fixed inset-y-0 left-0 z-50 flex w-[264px] -translate-x-full flex-col border-r border-background-200 bg-white transition-transform lg:translate-x-0">
+  <aside id="owner-sidebar" class="fixed inset-y-0 left-0 z-50 flex w-[264px] -translate-x-full flex-col border-r border-background-200 bg-white transition-transform lg:translate-x-0" <?= $imp ? 'style="top: var(--ghost-banner-height, 44px);"' : '' ?>>
     <a href="<?= url('/') ?>" class="flex h-16 shrink-0 items-center gap-3 border-b border-background-200 px-5 group">
       <img src="<?= site_logo() ?>" alt="Logo Đặt Sân BMT 24H" class="h-10 w-10 rounded-xl object-contain drop-shadow-sm transition-transform group-hover:scale-105">
       <div class="leading-tight">
@@ -71,14 +72,15 @@ render_page([
         <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary-700 text-xs font-bold text-white"><?= e(initials_of($u['full_name'], $u['email'])) ?></span>
         <div class="min-w-0"><p class="truncate text-sm font-semibold text-foreground-950"><?= e($access['actorName']) ?></p><p class="truncate text-xs text-foreground-500"><?= e($access['roleName']) ?></p></div>
       </div>
-      <a href="<?= url('/') ?>" class="mt-3 flex items-center gap-2 text-xs font-semibold text-foreground-600 hover:text-primary-700"><i class="ri-arrow-left-line" aria-hidden="true"></i>Về trang khách hàng</a>
+      <a href="<?= url('/chu-san') ?>" class="mt-3 flex items-center gap-2 text-xs font-semibold text-primary-700 hover:text-primary-800"><i class="ri-store-2-line" aria-hidden="true"></i>Kênh chủ sân</a>
+      <a href="<?= url('/') ?>" class="mt-2 flex items-center gap-2 text-xs font-semibold text-foreground-600 hover:text-primary-700"><i class="ri-arrow-left-line" aria-hidden="true"></i>Về trang khách hàng</a>
     </div>
   </aside>
 
   <div class="lg:ml-[264px]">
-    <header class="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-background-200 bg-white/95 px-4 backdrop-blur md:px-6">
+    <header class="sticky z-30 flex h-16 items-center justify-between gap-3 border-b border-background-200 bg-background-50/95 px-4 backdrop-blur-md md:px-6" <?= $imp ? 'style="top: var(--ghost-banner-height, 44px);"' : 'style="top: 0;"' ?>>
       <div class="flex min-w-0 items-center gap-3">
-        <button type="button" id="owner-menu-btn" class="flex h-9 w-9 items-center justify-center rounded-md border border-background-300 text-foreground-700 lg:hidden" aria-label="Mở menu"><i class="ri-menu-line text-lg" aria-hidden="true"></i></button>
+        <button type="button" id="owner-menu-btn" class="flex h-9 w-9 items-center justify-center rounded-md border border-background-300 bg-background-100 text-foreground-700 hover:bg-background-200 lg:hidden" aria-label="Mở menu"><i class="ri-menu-line text-lg" aria-hidden="true"></i></button>
         <div class="min-w-0">
           <p class="truncate text-xs font-medium text-foreground-500">Xin chào, <?= e($access['actorName']) ?></p>
           <p class="flex items-center gap-1.5 truncate font-heading text-sm font-bold text-foreground-950"><i class="ri-shield-user-line text-primary-600" aria-hidden="true"></i><?= e($access['roleName']) ?></p>
@@ -87,8 +89,9 @@ render_page([
       <div class="flex items-center gap-2">
         <?php render_language_toggle(false, 'hidden sm:flex'); ?>
         <?php render_theme_toggle(false); ?>
-        <a href="<?= url('/') ?>" target="_blank" class="hidden items-center gap-1.5 rounded-md border border-background-300 px-3 py-2 text-sm font-semibold text-foreground-800 hover:border-primary-400 hover:text-primary-700 md:inline-flex"><i class="ri-external-link-line" aria-hidden="true"></i>Xem website</a>
-        <button type="button" data-logout class="flex h-9 w-9 items-center justify-center rounded-md border border-background-300 text-foreground-700 hover:border-accent-400 hover:text-accent-700" aria-label="Đăng xuất" title="Đăng xuất"><i class="ri-logout-box-r-line text-lg" aria-hidden="true"></i></button>
+        <a href="<?= url('/chu-san') ?>" class="hidden items-center gap-1.5 rounded-md border border-primary-300 bg-primary-50 px-3 py-2 text-sm font-semibold text-primary-800 hover:border-primary-400 hover:bg-primary-100 md:inline-flex"><i class="ri-store-2-line" aria-hidden="true"></i>Kênh chủ sân</a>
+        <a href="<?= url('/') ?>" target="_blank" class="hidden items-center gap-1.5 rounded-md border border-background-300 bg-background-100 px-3 py-2 text-sm font-semibold text-foreground-800 hover:border-primary-400 hover:bg-background-200 hover:text-primary-700 md:inline-flex"><i class="ri-external-link-line" aria-hidden="true"></i>Xem website</a>
+        <button type="button" data-logout class="flex h-9 w-9 items-center justify-center rounded-md border border-background-300 bg-background-100 text-foreground-700 hover:border-accent-400 hover:bg-accent-50/20 hover:text-accent-600" aria-label="Đăng xuất" title="Đăng xuất"><i class="ri-logout-box-r-line text-lg" aria-hidden="true"></i></button>
       </div>
     </header>
 

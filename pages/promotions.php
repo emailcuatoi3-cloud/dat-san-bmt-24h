@@ -49,6 +49,64 @@ function () use ($active, $upcoming, $best) {
 </div>
 <div class="w-full px-4 pb-12 pt-2 md:px-8 md:pb-16">
   <div class="mx-auto w-full max-w-[1280px]">
+
+    <!-- ========== MỤC NHẬP & KIỂM TRA MÃ ƯU ĐÃI MỚI ========== -->
+    <section id="promo-checker-section" class="mb-6 rounded-xl border border-primary-200 bg-white p-5 shadow-sm md:p-6">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div class="max-w-xl">
+          <div class="flex items-center gap-2">
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-primary-50 px-3 py-1 text-xs font-bold uppercase tracking-wider text-primary-700">
+              <i class="ri-coupon-3-line text-sm" aria-hidden="true"></i>Nhập mã ưu đãi mới
+            </span>
+            <span class="inline-flex items-center gap-1 text-xs font-medium text-foreground-500">
+              <i class="ri-shield-check-line text-primary-600" aria-hidden="true"></i>Kiểm tra tính khả dụng
+            </span>
+          </div>
+          <h2 class="mt-2 font-heading text-lg font-bold text-foreground-950 md:text-xl">
+            Bạn có mã ưu đãi hoặc voucher riêng?
+          </h2>
+          <p class="mt-1 text-xs leading-relaxed text-foreground-600 md:text-sm">
+            Nhập mã vào đây để kiểm tra ngay mức giảm, hạn dùng và điều kiện áp dụng trước khi đặt sân.
+          </p>
+        </div>
+
+        <form id="promo-checker-form" class="w-full max-w-md" novalidate>
+          <div class="flex flex-col gap-2.5 sm:flex-row">
+            <div class="relative flex-1">
+              <i class="ri-ticket-2-line absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-foreground-400" aria-hidden="true"></i>
+              <input
+                type="text"
+                id="promo-input-code"
+                name="code"
+                autocomplete="off"
+                placeholder="Nhập mã (VD: GIOVANG, BMT30K...)"
+                class="w-full rounded-md border border-background-300 bg-background-50/50 py-2.5 pl-10 pr-9 font-mono text-sm uppercase tracking-wider text-foreground-950 placeholder:font-sans placeholder:normal-case placeholder:tracking-normal placeholder:text-foreground-400 focus:border-primary-500 focus:bg-white focus:outline-none"
+              >
+              <button
+                type="button"
+                id="promo-clear-input"
+                class="absolute right-2.5 top-1/2 hidden -translate-y-1/2 text-foreground-400 hover:text-foreground-700"
+                aria-label="Xóa mã"
+              >
+                <i class="ri-close-circle-fill text-base"></i>
+              </button>
+            </div>
+            <button
+              type="submit"
+              id="promo-check-btn"
+              class="inline-flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-primary-500 px-5 py-2.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-primary-600 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <i class="ri-search-2-line text-sm" aria-hidden="true"></i>
+              <span>Kiểm tra mã</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Khu vực hiển thị kết quả kiểm tra mã: Nếu đúng hiển thị card ưu đãi, ngược lại hiển thị không tồn tại -->
+      <div id="promo-checker-result" class="mt-4 hidden"></div>
+    </section>
+
     <div class="flex flex-col gap-3 rounded-lg border border-background-200 bg-white p-4 md:flex-row md:items-center md:justify-between">
       <div class="flex flex-wrap items-center gap-1 rounded-full bg-background-100 p-1" id="promo-filters"></div>
       <div class="flex w-full items-center gap-2 rounded-md border border-background-200 px-3 py-2.5 md:w-[320px]">

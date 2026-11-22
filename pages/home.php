@@ -233,7 +233,7 @@ render_page([
       </ul>
       <div class="mt-7 flex flex-col gap-3 sm:flex-row">
         <a href="<?= url('/dang-ky-chu-san') ?>" class="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-primary-600"><i class="ri-store-2-line text-base" aria-hidden="true"></i>Trở thành đối tác chủ sân</a>
-        <a href="<?= url('/dang-nhap') ?>" class="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-background-300 bg-white px-5 py-3 text-sm font-semibold text-foreground-800 transition-colors hover:border-primary-300 hover:text-primary-700">Đã có tài khoản chủ sân</a>
+        <a href="<?= url('/dang-nhap?redirect=/chu-san') ?>" class="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-background-300 bg-white px-5 py-3 text-sm font-semibold text-foreground-800 transition-colors hover:border-primary-300 hover:text-primary-700">Đã có tài khoản chủ sân</a>
       </div>
     </div>
   </div>

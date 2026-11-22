@@ -85,7 +85,34 @@ if (loginForm) {
     const btn = $('button[type=submit]', loginForm);
     setBusy(btn, true, 'Đang đăng nhập...');
     try {
-      const data = await api('auth', 'login', { email, password, redirect: PAGE.redirect || '' });
+      const urlParams = new URLSearchParams(window.location.search);
+      let targetRedirect = urlParams.get('redirect') || (PAGE.redirect && PAGE.redirect !== '/' ? PAGE.redirect : '');
+      if (!targetRedirect) {
+        try {
+          const stored = sessionStorage.getItem('bmt24h_auth_return_url');
+          if (stored && stored !== '/') targetRedirect = stored;
+        } catch (e) {}
+      }
+      if (!targetRedirect && document.referrer) {
+        try {
+          const ref = new URL(document.referrer);
+          if (ref.origin === window.location.origin) {
+            let refPath = ref.pathname;
+            const base = (window.APP && window.APP.base) || '';
+            if (base && refPath.startsWith(base)) {
+              refPath = refPath.slice(base.length);
+              if (!refPath.startsWith('/')) refPath = '/' + refPath;
+            }
+            refPath = (refPath || '/') + (ref.search || '');
+            const authRoutes = ['/dang-nhap', '/dang-ky', '/dang-ky-chu-san', '/quen-mat-khau', '/dat-lai-mat-khau', '/dang-xuat'];
+            if (!authRoutes.some((r) => refPath.includes(r)) && refPath !== '/') {
+              targetRedirect = refPath;
+            }
+          }
+        } catch (e) {}
+      }
+      const data = await api('auth', 'login', { email, password, redirect: targetRedirect || '' });
+      try { sessionStorage.removeItem('bmt24h_auth_return_url'); } catch (e) {}
       window.location.href = data.redirect;
     } catch (error) {
       showAlert(loginForm, '[data-server-error]', error.message);
@@ -153,6 +180,8 @@ if (registerForm) {
     const btn = $('button[type=submit]', f);
     setBusy(btn, true, 'Đang tạo tài khoản...');
     try {
+      const urlParams = new URLSearchParams(window.location.search);
+      let targetRedirect = urlParams.get('redirect') || (PAGE.redirect && PAGE.redirect !== '/' ? PAGE.redirect : '');
       const data = await api('auth', 'register', {
         role: f.role.value,
         businessName: f.businessName.value.trim(),
@@ -164,7 +193,9 @@ if (registerForm) {
         phone,
         email,
         password: f.password.value,
+        redirect: targetRedirect || '',
       });
+      try { sessionStorage.removeItem('bmt24h_auth_return_url'); } catch (e) {}
       window.location.href = data.redirect;
     } catch (error) {
       showAlert(f, '[data-server-error]', error.message);

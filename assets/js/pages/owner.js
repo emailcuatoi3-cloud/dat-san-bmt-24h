@@ -15,7 +15,7 @@ import {
   renderSitemapStaff,
   renderSitemapSettings,
   renderSitemapAccount,
-} from './owner-sitemap.js';
+} from './owner-sitemap.js?v=20261122_03';
 
 const RENDER = {
   overview: renderSitemapOverview,
@@ -40,13 +40,13 @@ window.__ownerRender = render;
 const sidebar = document.getElementById('owner-sidebar');
 const overlay = document.getElementById('owner-overlay');
 const toggleMenu = (open) => {
-  sidebar.classList.toggle('-translate-x-full', !open);
-  overlay.classList.toggle('hidden', !open);
+  if (sidebar) sidebar.classList.toggle('-translate-x-full', !open);
+  if (overlay) overlay.classList.toggle('hidden', !open);
 };
-document.getElementById('owner-menu-btn').addEventListener('click', () => toggleMenu(true));
-overlay.addEventListener('click', () => toggleMenu(false));
+document.getElementById('owner-menu-btn')?.addEventListener('click', () => toggleMenu(true));
+overlay?.addEventListener('click', () => toggleMenu(false));
 
-document.getElementById('counter-btn').addEventListener('click', () => openCounterBooking());
+document.getElementById('counter-btn')?.addEventListener('click', () => openCounterBooking());
 
 (async () => {
   main().innerHTML = loadingBlock('Đang tải dữ liệu kênh chủ sân...');

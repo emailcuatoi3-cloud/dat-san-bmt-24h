@@ -2,6 +2,38 @@
 // MODULE: ĐẶT SÂN & TÍNH TIỀN CỌC
 /** ĐẶT SÂN 3 BƯỚC — /dat-san hoặc /dat-san/{slug}. Toàn bộ luồng do assets/js/pages/booking.js điều khiển. */
 $u = current_user();
+$bookingPromos = array_map('map_promotion', q_all("SELECT * FROM promotions WHERE status = 'active' AND end_date >= CURDATE() ORDER BY discount_value DESC, updated_at DESC"));
+if ($u) {
+    $uvs = q_all("SELECT * FROM user_vouchers WHERE user_id = ? AND status = 'available' AND (expires_at IS NULL OR expires_at >= CURDATE())", [$u['id']]);
+    $existingCodes = array_map(fn($p) => strtoupper($p['code']), $bookingPromos);
+    foreach ($uvs as $uv) {
+        $c = strtoupper($uv['code']);
+        if (!in_array($c, $existingCodes, true)) {
+            $bookingPromos[] = [
+                'id' => $uv['id'],
+                'ownerId' => null,
+                'ownerName' => 'Hệ thống',
+                'code' => $c,
+                'title' => $uv['title'],
+                'description' => $uv['description'],
+                'discountType' => $uv['discount_type'],
+                'discountValue' => (int) $uv['discount_value'],
+                'maxDiscount' => null,
+                'minOrder' => (int) $uv['min_order'],
+                'startDate' => substr($uv['created_at'], 0, 10),
+                'endDate' => $uv['expires_at'] ?: '2099-12-31',
+                'weekdays' => [],
+                'startTime' => '',
+                'endTime' => '',
+                'usageLimit' => 1,
+                'status' => 'active',
+                'isUserVoucher' => true,
+            ];
+            $existingCodes[] = $c;
+        }
+    }
+}
+
 render_page([
     'title' => 'Đặt sân - ' . SITE_NAME,
     'script' => 'pages/booking.js',
@@ -10,6 +42,7 @@ render_page([
         'areas' => court_areas(),
         'priceRanges' => PRICE_RANGES,
         'services' => services_with_variants(),
+        'promotions' => $bookingPromos,
         'preset' => [
             'slug' => $params[0] ?? '',
             'date' => $_GET['date'] ?? '',
