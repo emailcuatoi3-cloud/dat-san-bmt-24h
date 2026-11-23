@@ -8,7 +8,7 @@ function e($value): string
 /** Thư mục gốc của website trên URL (vd: "" hoặc "/dat_san_24h_php"). */
 function base_path(): string
 {
-    static $base = null;
+    static $base = null; 
     if ($base === null) {
         $root = realpath(__DIR__ . '/..');
         $doc = realpath($_SERVER['DOCUMENT_ROOT'] ?? '') ?: '';

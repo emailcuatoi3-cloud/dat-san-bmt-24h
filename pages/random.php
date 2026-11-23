@@ -9,11 +9,11 @@ foreach (blocked_slots_map($today) as $key => $slots) {
 render_page(['title' => 'Ngẫu nhiên & chia đội - ' . SITE_NAME, 'script' => 'pages/random.js',
     'data' => ['courts' => array_values(array_filter(public_courts(), fn($c) => $c['status'] === 'active')), 'areas' => court_areas(), 'taken' => (object) $taken]],
 function () {
-    page_hero([['Trang chủ', '/'], ['Ngẫu nhiên']], 'Ngẫu nhiên & vui cùng đội bóng',
-        'Ba công cụ giúp buổi chơi bớt tranh cãi: chia đội công bằng, chọn sân ngẫu nhiên khi cả nhóm chưa quyết được, và vòng quay ưu đãi sau khi đặt sân.',
+    page_hero([['Trang chủ', '/'], ['Ngẫu nhiên & Ghép đội']], 'Ngẫu nhiên & Ghép đội giao lưu',
+        'Các công cụ tiện ích cho cộng đồng thể thao Buôn Ma Thuột: chia đội nội bộ, bắt cặp giao lưu ngẫu nhiên giữa các đội và chọn sân thay bạn khi chưa quyết định được.',
         function () { ?>
 <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-  <?php foreach ([['ri-group-line', 'Chia đội công bằng', 'Xáo trộn ngẫu nhiên, chia đều 2 đội hoặc ghép đôi đánh cầu lông.'], ['ri-dice-line', 'Chọn sân thay bạn', 'Lọc theo môn, khu vực, khung giờ rồi để hệ thống chọn giúp.'], ['ri-gift-line', 'Quay ưu đãi', 'Giảm 5 - 20%, tặng nước hoặc cộng thêm 30 phút chơi.']] as $h): ?>
+  <?php foreach ([['ri-group-line', 'Chia đội nội bộ', 'Xáo trộn ngẫu nhiên, chia đều 2 đội bóng hoặc ghép đôi cầu lông.'], ['ri-sword-line', 'Bắt cặp giao lưu', 'Nhập tên đội & số người, hệ thống tự động ghép đối thủ phù hợp.'], ['ri-dice-line', 'Chọn sân thay bạn', 'Lọc theo môn, khu vực, khung giờ rồi để hệ thống chọn giúp.']] as $h): ?>
     <div class="flex items-start gap-2.5 rounded-md border border-background-200 bg-background-50 px-3.5 py-3"><span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-50 text-primary-700"><i class="<?= $h[0] ?> text-base" aria-hidden="true"></i></span><div class="min-w-0"><p class="text-sm font-semibold text-foreground-950"><?= $h[1] ?></p><p class="mt-0.5 text-xs leading-relaxed text-foreground-500"><?= $h[2] ?></p></div></div>
   <?php endforeach; ?>
 </div> 
@@ -62,18 +62,79 @@ function () {
       <div id="pick-result"></div>
     </section>
 
-    <!-- VÒNG QUAY -->
-    <section id="vong-quay" class="rounded-lg border border-background-200 bg-background-100 p-5 md:p-6">
-      <span class="inline-flex items-center gap-1.5 rounded-full bg-accent-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-accent-800"><i class="ri-gift-line" aria-hidden="true"></i>Vòng quay ưu đãi</span>
-      <h2 class="mt-2.5 font-heading text-lg font-bold text-foreground-950">Quay may mắn sau khi đặt sân</h2>
-      <p class="mt-1.5 max-w-xl text-sm leading-relaxed text-foreground-600">Mỗi lượt đặt sân thành công bạn có một lượt quay. Phần thưởng gồm giảm giá, nước uống và cộng thêm giờ chơi.</p>
-      <div class="mt-5 flex flex-col items-center gap-5 md:flex-row md:items-start md:gap-8">
-        <div class="relative h-[280px] w-[280px] shrink-0">
-          <i class="ri-arrow-down-s-fill absolute left-1/2 top-[-14px] z-20 -ml-4 text-[32px] text-accent-500" aria-hidden="true"></i>
-          <div id="wheel" class="prize-wheel prize-wheel-spin absolute inset-0 rounded-full border-[6px] border-background-200"></div>
-          <button type="button" id="spin-btn" class="absolute left-1/2 top-1/2 z-10 flex h-[76px] w-[76px] -translate-x-1/2 -translate-y-1/2 cursor-pointer flex-col items-center justify-center rounded-full border-4 border-background-100 bg-foreground-950 text-background-50 transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-80"><i class="ri-play-fill text-lg" aria-hidden="true"></i><span class="text-[10px] font-bold uppercase tracking-wide">Quay</span></button>
+    <!-- GHÉP ĐỘI & BẮT CẶP ĐỐI THỦ NGẪU NHIÊN (THỬ NGHIỆM) -->
+    <section id="ghep-doi" class="rounded-lg border border-primary-200 bg-background-100 p-5 md:p-6 shadow-sm">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <span class="inline-flex items-center gap-1.5 rounded-full bg-primary-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-primary-700"><i class="ri-sword-line" aria-hidden="true"></i>Ghép đội &amp; Bắt cặp đối thủ (Thử nghiệm)</span>
+          <h2 class="mt-2.5 font-heading text-lg font-bold text-foreground-950">Bắt cặp giao lưu ngẫu nhiên giữa các đội</h2>
+          <p class="mt-1.5 max-w-xl text-sm leading-relaxed text-foreground-600">Đội bạn đang thiếu đối thủ cọ xát? Nhập tên đội và số lượng thành viên, hệ thống sẽ tự động ghép cặp ngẫu nhiên với một đội đối thủ phù hợp tại Buôn Ma Thuột.</p>
         </div>
-        <div class="min-w-0 flex-1"><div id="spin-result"></div><ul class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2" id="prize-list"></ul></div>
+        <span class="inline-flex items-center gap-1 rounded-md bg-accent-50 px-2.5 py-1 text-xs font-semibold text-accent-800"><i class="ri-flask-line" aria-hidden="true"></i>Tính năng thử nghiệm</span>
+      </div>
+
+      <form id="match-form" class="mt-5 space-y-4" novalidate>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div class="min-w-0">
+            <label for="match-team-name" class="block text-xs font-semibold uppercase tracking-wide text-foreground-600">Tên đội của bạn <span class="text-accent-600">*</span></label>
+            <input type="text" id="match-team-name" name="teamName" placeholder="VD: FC Ea Tam, Ban Mê United..." maxlength="50" class="mt-1.5 w-full rounded-md border border-background-300 bg-background-50 px-3 py-2 text-sm text-foreground-950 placeholder:text-foreground-400 focus:border-primary-500 focus:bg-white focus:outline-none" value="FC Ea Tam">
+          </div>
+
+          <div class="min-w-0">
+            <label for="match-player-count" class="block text-xs font-semibold uppercase tracking-wide text-foreground-600">Số người chơi <span class="text-accent-600">*</span></label>
+            <div class="relative mt-1.5">
+              <select id="match-player-count" name="playerCount" class="w-full cursor-pointer rounded-md border border-background-300 bg-background-50 px-3 py-2 text-sm text-foreground-950 focus:border-primary-500 focus:bg-white focus:outline-none">
+                <option value="5">5 người (Sân 5)</option>
+                <option value="7" selected>7 người (Sân 7)</option>
+                <option value="2">2 người (Đôi cầu lông)</option>
+                <option value="4">4 người (Nhóm cầu lông)</option>
+                <option value="6">6 người (Bóng chuyền / Cầu lông)</option>
+                <option value="11">11 người (Sân lớn 11)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="min-w-0">
+            <label for="match-sport" class="block text-xs font-semibold uppercase tracking-wide text-foreground-600">Môn thể thao</label>
+            <select id="match-sport" name="sport" class="mt-1.5 w-full cursor-pointer rounded-md border border-background-300 bg-background-50 px-3 py-2 text-sm text-foreground-950 focus:border-primary-500 focus:bg-white focus:outline-none">
+              <option value="football">Bóng đá mini</option>
+              <option value="badminton">Cầu lông</option>
+            </select>
+          </div>
+
+          <div class="min-w-0">
+            <label for="match-level" class="block text-xs font-semibold uppercase tracking-wide text-foreground-600">Trình độ / Phong cách</label>
+            <select id="match-level" name="level" class="mt-1.5 w-full cursor-pointer rounded-md border border-background-300 bg-background-50 px-3 py-2 text-sm text-foreground-950 focus:border-primary-500 focus:bg-white focus:outline-none">
+              <option value="fun">Phong trào vui vẻ, rèn thể lực</option>
+              <option value="normal" selected>Trung bình khá, có chút kèo nước</option>
+              <option value="hard">Bán chuyên, cọ xát nhiệt huyết</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="submit" id="match-btn" class="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md bg-primary-500 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-primary-600">
+              <i class="ri-sword-line" aria-hidden="true"></i><span>Bắt cặp ngẫu nhiên ngay</span>
+            </button>
+            <button type="button" id="match-queue-btn" class="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border border-background-300 bg-background-200 px-4 py-2.5 text-xs font-semibold text-foreground-800 transition-colors hover:border-primary-400 hover:text-primary-800">
+              <i class="ri-user-add-line" aria-hidden="true"></i>Đưa đội vào hàng chờ
+            </button>
+          </div>
+          <p id="match-hint" class="text-xs text-foreground-500">Đang có <b id="match-pool-count" class="text-primary-700">8</b> đội đang tìm đối thủ tại BMT</p>
+        </div>
+      </form>
+
+      <!-- Khung kết quả bắt cặp ngẫu nhiên -->
+      <div id="match-result" class="mt-5 hidden"></div>
+
+      <!-- Danh sách các đội đang chờ giao lưu (Lobby) -->
+      <div class="mt-6 border-t border-background-200 pt-5">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-foreground-600"><i class="ri-broadcast-line mr-1 text-primary-600"></i>Hàng chờ các đội đang tìm đối thủ giao lưu tại BMT</h3>
+          <span class="text-[11px] text-foreground-500">Bấm "Ghép ngay" để bắt cặp trực tiếp</span>
+        </div>
+        <div id="match-lobby-list" class="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4"></div>
       </div>
     </section>
 

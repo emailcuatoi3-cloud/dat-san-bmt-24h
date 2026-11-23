@@ -45,6 +45,8 @@ define('GOOGLE_CLIENT_ID', getenv('GOOGLE_CLIENT_ID') ?: '');
 define('GOOGLE_CLIENT_SECRET', getenv('GOOGLE_CLIENT_SECRET') ?: '');
 define('FACEBOOK_APP_ID', getenv('FACEBOOK_APP_ID') ?: '');
 define('FACEBOOK_APP_SECRET', getenv('FACEBOOK_APP_SECRET') ?: '');
+define('CHATBOT_PROVIDER', strtolower(trim((string)(getenv('CHATBOT_PROVIDER') ?: 'gemini'))));
 define('CHATBOT_API_KEY', getenv('CHATBOT_API_KEY') ?: '');
+define('CHATBOT_MODEL', trim((string)(getenv('CHATBOT_MODEL') ?: '')));
 
 date_default_timezone_set('Asia/Ho_Chi_Minh');

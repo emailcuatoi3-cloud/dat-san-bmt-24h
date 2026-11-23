@@ -68,10 +68,22 @@ function ensure_sitemap_schema(): void
     $done = true;
 
     $pdo = db();
-    // Kiểm tra nhanh nếu bảng mới nhất đã tồn tại thì bỏ qua DDL nặng
+
+    // Bổ sung password_hash cho owner_staff (tài khoản nhân viên cơ sở)
     try {
-        $check = $pdo->query("SHOW TABLES LIKE 'wheel_spins'")->fetchColumn();
-        if ($check) return;
+        $hasStaffPwd = $pdo->query("SHOW COLUMNS FROM owner_staff LIKE 'password_hash'")->fetchColumn();
+        if (!$hasStaffPwd) {
+            $pdo->exec("ALTER TABLE owner_staff ADD COLUMN password_hash VARCHAR(255) NULL AFTER email");
+            $defPwd = password_hash('123456', PASSWORD_DEFAULT);
+            $stmt = $pdo->prepare("UPDATE owner_staff SET password_hash = ? WHERE password_hash IS NULL OR password_hash = ''");
+            $stmt->execute([$defPwd]);
+        }
+    } catch (Throwable $e) {}
+
+    // Kiểm tra nhanh nếu cột sport trong owner_services đã tồn tại thì bỏ qua DDL nặng
+    try {
+        $hasSport = $pdo->query("SHOW COLUMNS FROM owner_services LIKE 'sport'")->fetchColumn();
+        if ($hasSport) return;
     } catch (Throwable $e) {
         return;
     }
@@ -156,6 +168,7 @@ function ensure_sitemap_schema(): void
             full_name VARCHAR(120) NOT NULL,
             phone VARCHAR(30) NOT NULL DEFAULT '',
             email VARCHAR(190) NOT NULL DEFAULT '',
+            password_hash VARCHAR(255) NULL,
             role_name VARCHAR(80) NOT NULL DEFAULT 'Nhân viên lễ tân',
             permissions TEXT NULL COMMENT 'JSON',
             status ENUM('active','inactive') NOT NULL DEFAULT 'active',
@@ -200,6 +213,23 @@ function ensure_sitemap_schema(): void
             svalue TEXT NULL,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+        "CREATE TABLE IF NOT EXISTS service_variants (
+            id VARCHAR(40) PRIMARY KEY,
+            service_id VARCHAR(40) NOT NULL,
+            owner_id INT NOT NULL,
+            sku VARCHAR(60) NOT NULL DEFAULT '',
+            name VARCHAR(160) NOT NULL,
+            attributes TEXT NOT NULL COMMENT 'JSON: {\"Màu sắc\":\"Cam\",\"Kích cỡ\":\"L\"}',
+            price INT NOT NULL DEFAULT 0,
+            stock INT NOT NULL DEFAULT 0,
+            active TINYINT(1) NOT NULL DEFAULT 1,
+            sort_order INT NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            KEY idx_sv_service (service_id),
+            KEY idx_sv_owner (owner_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
     ];
 
     foreach ($ddl as $sql) {
@@ -220,6 +250,35 @@ function ensure_sitemap_schema(): void
         $hasApproved = $pdo->query("SHOW COLUMNS FROM bookings LIKE 'approved_at'")->fetchColumn();
         if (!$hasApproved) {
             $pdo->exec("ALTER TABLE bookings ADD COLUMN approved_at DATETIME NULL AFTER status");
+        }
+    } catch (Throwable $e) {}
+    try {
+        $hasVariantsCol = $pdo->query("SHOW COLUMNS FROM owner_services LIKE 'has_variants'")->fetchColumn();
+        if (!$hasVariantsCol) {
+            $pdo->exec("ALTER TABLE owner_services ADD COLUMN has_variants TINYINT(1) NOT NULL DEFAULT 0 AFTER stock");
+            $pdo->exec("ALTER TABLE owner_services ADD COLUMN attributes_schema TEXT NULL AFTER has_variants");
+        }
+    } catch (Throwable $e) {}
+    try {
+        $hasSportCol = $pdo->query("SHOW COLUMNS FROM owner_services LIKE 'sport'")->fetchColumn();
+        if (!$hasSportCol) {
+            $pdo->exec("ALTER TABLE owner_services ADD COLUMN sport ENUM('all','football','badminton') NOT NULL DEFAULT 'all' AFTER category");
+            $pdo->exec("UPDATE owner_services SET sport = 'football' WHERE id IN ('sv-ball', 'sv-bib')");
+            $pdo->exec("UPDATE owner_services SET sport = 'badminton' WHERE id IN ('sv-racket', 'sv-shuttle')");
+            $pdo->exec("UPDATE owner_services SET sport = 'all' WHERE id IN ('sv-water', 'sv-revive', 'sv-sting')");
+        }
+        // Xóa dịch vụ không hợp lý (mì tôm)
+        $pdo->exec("DELETE FROM owner_services WHERE id = 'sv-noodle'");
+    } catch (Throwable $e) {}
+
+    // Bổ sung password_hash cho owner_staff (tài khoản nhân viên cơ sở)
+    try {
+        $hasStaffPwd = $pdo->query("SHOW COLUMNS FROM owner_staff LIKE 'password_hash'")->fetchColumn();
+        if (!$hasStaffPwd) {
+            $pdo->exec("ALTER TABLE owner_staff ADD COLUMN password_hash VARCHAR(255) NULL AFTER email");
+            $defPwd = password_hash('123456', PASSWORD_DEFAULT);
+            $stmt = $pdo->prepare("UPDATE owner_staff SET password_hash = ? WHERE password_hash IS NULL OR password_hash = ''");
+            $stmt->execute([$defPwd]);
         }
     } catch (Throwable $e) {}
 
@@ -276,9 +335,10 @@ function seed_sitemap_defaults(): void
             (2, 30, 4, 5, 0, 'Khách đến trước 10 phút để nhận sân. Hủy trước 4 giờ hoàn 100% cọc.', 'Vietcombank', '0231000688999', 'TRAN QUOC HUNG')");
     }
     if ((int) q_val('SELECT COUNT(*) FROM owner_staff') === 0) {
-        q("INSERT INTO owner_staff (id, owner_id, full_name, phone, email, role_name, permissions, status) VALUES
-            ('st-01', 2, 'Nguyễn Văn Tài', '0935 111 222', 'tai.nv@hungsport.vn', 'Quản lý ca tối', '[\"bookings\",\"services\",\"payments\"]', 'active'),
-            ('st-02', 2, 'Lê Thị Ngọc', '0935 333 444', 'ngoc.lt@hungsport.vn', 'Lễ tân & thu ngân', '[\"bookings\",\"services\"]', 'active')");
+        $stPwd = password_hash('123456', PASSWORD_DEFAULT);
+        q("INSERT INTO owner_staff (id, owner_id, full_name, phone, email, password_hash, role_name, permissions, status) VALUES
+            ('st-01', 2, 'Nguyễn Văn Tài', '0935 111 222', 'tai.nv@hungsport.vn', ?, 'Quản lý ca tối', '[\"bookings\",\"services\",\"payments\"]', 'active'),
+            ('st-02', 2, 'Lê Thị Ngọc', '0935 333 444', 'ngoc.lt@hungsport.vn', ?, 'Lễ tân & thu ngân', '[\"bookings\",\"services\"]', 'active')", [$stPwd, $stPwd]);
     }
 
     // 6. Nhật ký nhập kho mẫu
@@ -296,5 +356,39 @@ function seed_sitemap_defaults(): void
         q("INSERT INTO payouts (id, owner_id, owner_name, period_label, gross_amount, commission_rate, commission_amount, net_amount, status, note) VALUES
             ('po-01', 2, 'Hưng Sport BMT', ?, 4850000, 5, 242500, 4607500, 'pending', 'Đối soát doanh thu đặt sân online kỳ hiện tại'),
             ('po-02', 5, 'Lộc Sport', ?, 2100000, 5, 105000, 1995000, 'transferred', 'Đã chuyển khoản đợt 1 qua VietQR')", [$period, $period]);
+    }
+
+    // 8. Đa thuộc tính & Biến thể dịch vụ mẫu (Hướng 2 - Dự án 1)
+    if ((int) q_val('SELECT COUNT(*) FROM service_variants') === 0) {
+        q("UPDATE owner_services SET has_variants = 1, attributes_schema = ? WHERE id = 'sv-bib' AND owner_id = 2",
+            [j([['name' => 'Màu sắc', 'options' => ['Cam', 'Xanh neon', 'Đỏ']], ['name' => 'Kích cỡ', 'options' => ['L (Dưới 70kg)', 'XL (Trên 70kg)']]])]);
+        q("UPDATE owner_services SET has_variants = 1, attributes_schema = ? WHERE id = 'sv-racket' AND owner_id = 2",
+            [j([['name' => 'Dòng vợt', 'options' => ['Yonex Nanoray', 'Lining Windstorm']], ['name' => 'Độ căng cước', 'options' => ['10.5 kg', '11.0 kg']]])]);
+        q("UPDATE owner_services SET has_variants = 1, attributes_schema = ? WHERE id = 'sv-water' AND owner_id = 2",
+            [j([['name' => 'Quy cách & Nhiệt độ', 'options' => ['Chai 500ml (Ướp lạnh)', 'Chai 500ml (Nhiệt độ phòng)', 'Chai lớn 1.5L (Ướp lạnh)']]])]);
+        q("UPDATE owner_services SET has_variants = 1, attributes_schema = ? WHERE id = 'sv-ball' AND owner_id = 2",
+            [j([['name' => 'Loại bóng', 'options' => ['Bóng số 4 (Sân 5 người)', 'Bóng số 5 (Sân 7 & 11 người)']]])]);
+
+        $variants = [
+            ['sv-bib-v1', 'sv-bib', 2, 'BIB-CAM-L', 'Màu Cam · Size L', j(['Màu sắc' => 'Cam', 'Kích cỡ' => 'L (Dưới 70kg)']), 30000, 12, 1],
+            ['sv-bib-v2', 'sv-bib', 2, 'BIB-CAM-XL', 'Màu Cam · Size XL', j(['Màu sắc' => 'Cam', 'Kích cỡ' => 'XL (Trên 70kg)']), 30000, 8, 1],
+            ['sv-bib-v3', 'sv-bib', 2, 'BIB-XANH-L', 'Màu Xanh neon · Size L', j(['Màu sắc' => 'Xanh neon', 'Kích cỡ' => 'L (Dưới 70kg)']), 30000, 15, 1],
+            ['sv-bib-v4', 'sv-bib', 2, 'BIB-XANH-XL', 'Màu Xanh neon · Size XL', j(['Màu sắc' => 'Xanh neon', 'Kích cỡ' => 'XL (Trên 70kg)']), 30000, 10, 1],
+            ['sv-bib-v5', 'sv-bib', 2, 'BIB-DO-L', 'Màu Đỏ · Size L', j(['Màu sắc' => 'Đỏ', 'Kích cỡ' => 'L (Dưới 70kg)']), 30000, 10, 1],
+            ['sv-bib-v6', 'sv-bib', 2, 'BIB-DO-XL', 'Màu Đỏ · Size XL', j(['Màu sắc' => 'Đỏ', 'Kích cỡ' => 'XL (Trên 70kg)']), 30000, 10, 1],
+            ['sv-racket-v1', 'sv-racket', 2, 'VOT-YN-105', 'Yonex Nanoray · 10.5 kg', j(['Dòng vợt' => 'Yonex Nanoray', 'Độ căng cước' => '10.5 kg']), 25000, 6, 1],
+            ['sv-racket-v2', 'sv-racket', 2, 'VOT-YN-110', 'Yonex Nanoray · 11.0 kg', j(['Dòng vợt' => 'Yonex Nanoray', 'Độ căng cước' => '11.0 kg']), 30000, 4, 1],
+            ['sv-racket-v3', 'sv-racket', 2, 'VOT-LN-105', 'Lining Windstorm · 10.5 kg', j(['Dòng vợt' => 'Lining Windstorm', 'Độ căng cước' => '10.5 kg']), 25000, 5, 1],
+            ['sv-racket-v4', 'sv-racket', 2, 'VOT-LN-110', 'Lining Windstorm · 11.0 kg', j(['Dòng vợt' => 'Lining Windstorm', 'Độ căng cước' => '11.0 kg']), 30000, 5, 1],
+            ['sv-water-v1', 'sv-water', 2, 'AQ-500-COLD', 'Chai 500ml · Ướp lạnh', j(['Quy cách & Nhiệt độ' => 'Chai 500ml (Ướp lạnh)']), 10000, 60, 1],
+            ['sv-water-v2', 'sv-water', 2, 'AQ-500-ROOM', 'Chai 500ml · Nhiệt độ phòng', j(['Quy cách & Nhiệt độ' => 'Chai 500ml (Nhiệt độ phòng)']), 10000, 40, 1],
+            ['sv-water-v3', 'sv-water', 2, 'AQ-1500-COLD', 'Chai lớn 1.5L · Ướp lạnh', j(['Quy cách & Nhiệt độ' => 'Chai lớn 1.5L (Ướp lạnh)']), 20000, 20, 1],
+            ['sv-ball-v1', 'sv-ball', 2, 'BALL-S4', 'Bóng số 4 (Sân 5 người)', j(['Loại bóng' => 'Bóng số 4 (Sân 5 người)']), 20000, 8, 1],
+            ['sv-ball-v2', 'sv-ball', 2, 'BALL-S5', 'Bóng số 5 (Sân 7 & 11 người)', j(['Loại bóng' => 'Bóng số 5 (Sân 7 & 11 người)']), 30000, 6, 1],
+        ];
+        foreach ($variants as $idx => $v) {
+            q('INSERT INTO service_variants (id, service_id, owner_id, sku, name, attributes, price, stock, active, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?)',
+                [$v[0], $v[1], $v[2], $v[3], $v[4], $v[5], $v[6], $v[7], $v[8], $idx + 1]);
+        }
     }
 }

@@ -8,6 +8,18 @@ function current_user(): ?array
         $id = $_SESSION['user_id'] ?? null;
         if ($id) {
             $user = q_one('SELECT id, email, full_name, phone, address, role, business_name, status, favorites, created_at FROM users WHERE id = ?', [$id]);
+            if ($user && $user['role'] === 'customer') {
+                // Tự động đồng bộ quyền chủ sân nếu người dùng đã có yêu cầu đăng ký chủ sân được duyệt
+                $approvedReq = q_one("SELECT business_name FROM owner_requests WHERE user_id = ? AND status = 'approved' ORDER BY reviewed_at DESC, id DESC LIMIT 1", [$id]);
+                if ($approvedReq) {
+                    q("UPDATE users SET role = 'owner', business_name = IF(business_name = '' OR business_name IS NULL, ?, business_name) WHERE id = ?",
+                        [$approvedReq['business_name'], $id]);
+                    $user['role'] = 'owner';
+                    if (empty($user['business_name'])) {
+                        $user['business_name'] = $approvedReq['business_name'];
+                    }
+                }
+            }
             if (!$user) unset($_SESSION['user_id']);
         }
     }
@@ -33,8 +45,66 @@ function is_owner(): bool
 
 function login_user(int $id): void
 {
-    session_regenerate_id(true);
+    if (!headers_sent()) session_regenerate_id(true);
     $_SESSION['user_id'] = $id;
+    unset($_SESSION['staff_id'], $_SESSION['staff_owner_id'], $_SESSION['staff_name'], $_SESSION['staff_email'], $_SESSION['staff_phone'], $_SESSION['staff_role_name'], $_SESSION['staff_permissions']);
+}
+
+/** Lấy thông tin tài khoản nhân viên cơ sở đang đăng nhập (hoặc null nếu là chủ sân / khách / admin). */
+function current_staff(): ?array
+{
+    if (empty($_SESSION['staff_id'])) return null;
+    return [
+        'id' => (string) $_SESSION['staff_id'],
+        'ownerId' => (int) ($_SESSION['staff_owner_id'] ?? 0),
+        'name' => (string) ($_SESSION['staff_name'] ?? 'Nhân viên'),
+        'email' => (string) ($_SESSION['staff_email'] ?? ''),
+        'phone' => (string) ($_SESSION['staff_phone'] ?? ''),
+        'roleName' => (string) ($_SESSION['staff_role_name'] ?? 'Nhân viên'),
+        'permissions' => is_array($_SESSION['staff_permissions'] ?? null) ? $_SESSION['staff_permissions'] : jd($_SESSION['staff_permissions'] ?? '[]'),
+    ];
+}
+
+/** Kiểm tra người đang thao tác có phải là nhân viên được ủy quyền hay không. */
+function is_staff(): bool
+{
+    return !empty($_SESSION['staff_id']);
+}
+
+/**
+ * Kiểm tra nhân viên có quyền với module cụ thể hay không.
+ * Nếu là Chủ sân hoặc Quản trị viên: luôn trả về true.
+ * Nếu là Nhân viên: cấm tuyệt đối cài đặt nhạy cảm (settings, account), kiểm tra các quyền còn lại.
+ */
+function staff_can(string $module): bool
+{
+    if (!is_staff()) return true;
+    if (in_array($module, ['settings', 'account', 'staff'], true)) return false;
+    $perms = current_staff()['permissions'] ?? [];
+    if (in_array('all', $perms, true)) return true;
+    return in_array($module, $perms, true);
+}
+
+/** Chặn thao tác nếu nhân viên không có quyền. */
+function staff_need(string $module): void
+{
+    if (!staff_can($module)) {
+        json_error('Tài khoản nhân viên của bạn chưa được cấp quyền thao tác mục này.', 403);
+    }
+}
+
+/** Đăng nhập phiên nhân viên cơ sở. */
+function login_staff(array $st): void
+{
+    if (!headers_sent()) session_regenerate_id(true);
+    $_SESSION['user_id'] = (int) $st['owner_id'];
+    $_SESSION['staff_id'] = (string) $st['id'];
+    $_SESSION['staff_owner_id'] = (int) $st['owner_id'];
+    $_SESSION['staff_name'] = (string) $st['full_name'];
+    $_SESSION['staff_email'] = (string) $st['email'];
+    $_SESSION['staff_phone'] = (string) ($st['phone'] ?? '');
+    $_SESSION['staff_role_name'] = (string) ($st['role_name'] ?? 'Nhân viên');
+    $_SESSION['staff_permissions'] = is_array($st['permissions']) ? $st['permissions'] : jd($st['permissions'] ?? '[]');
 }
 
 function logout_user(): void
@@ -112,59 +182,81 @@ function activate_sudo(int $seconds = 900): void
 
 /**
  * Lấy URL đích hợp lệ sau khi đăng nhập / đăng ký:
- * Ưu tiên: tham số truyền vào -> $_GET['redirect'] -> HTTP_REFERER -> session -> mặc định '/' (trang chủ).
- * Đảm bảo mọi vai trò khi login đều quay lại đúng trang người dùng đang xem dở (ví dụ trang đặt sân, thanh toán).
+ * Ưu tiên: tham số truyền vào -> $_GET['redirect'] -> HTTP_REFERER -> session -> điều hướng theo vai trò (role) -> '/'.
+ * Đảm bảo mọi vai trò khi login đều quay lại đúng trang người dùng đang xem dở (ví dụ trang đặt sân, chi tiết sân, thanh toán).
  */
-function get_auth_redirect_target(?string $explicit = null): string
+function get_auth_redirect_target(?string $explicit = null, ?string $role = null): string
 {
     $authPages = ['/dang-nhap', '/dang-ky', '/dang-ky-chu-san', '/quen-mat-khau', '/dat-lai-mat-khau', '/dang-xuat'];
-    $cleanPath = function (string $target) use ($authPages): ?string {
-        $target = trim($target);
+    $cleanPath = function (?string $target) use ($authPages): ?string {
+        if (!$target) return null;
+        $target = trim(rawurldecode($target));
+        if ($target === '') return null;
+
+        // Nếu là full URL (http://... hoặc https://...)
+        if (preg_match('#^https?://#i', $target)) {
+            $p = parse_url($target);
+            $reqHost = explode(':', $_SERVER['HTTP_HOST'] ?? 'localhost')[0];
+            $targetHost = explode(':', $p['host'] ?? '')[0];
+            if ($targetHost && $targetHost !== $reqHost && $targetHost !== 'localhost' && $targetHost !== '127.0.0.1') {
+                return null; // Reject external domain
+            }
+            $target = ($p['path'] ?? '/') . (!empty($p['query']) ? '?' . $p['query'] : '');
+        }
+
         if ($target === '' || $target[0] !== '/' || strpos($target, '//') === 0) return null;
         $base = base_path();
         if ($base && strpos($target, $base) === 0) {
             $target = substr($target, strlen($base));
             if ($target === '' || $target[0] !== '/') $target = '/' . $target;
         }
+
         $pathOnly = parse_url($target, PHP_URL_PATH) ?: '/';
         if (in_array($pathOnly, $authPages, true)) return null;
         return $target;
     };
 
-    // 1. Tham số tường minh hoặc $_GET['redirect']
-    $cand = $explicit !== null ? $explicit : ($_GET['redirect'] ?? '');
-    if ($cand) {
-        $valid = $cleanPath($cand);
-        if ($valid !== null) return $valid;
+    // 1. Tham số tường minh truyền vào
+    if ($explicit !== null && $explicit !== '') {
+        $valid = $cleanPath($explicit);
+        if ($valid !== null && $valid !== '/') return $valid;
     }
 
-    // 2. Kiểm tra HTTP_REFERER nếu người dùng điều hướng từ trang nội bộ
+    // 2. Tham số query ?redirect= trên URL
+    $getRedirect = $_GET['redirect'] ?? '';
+    if ($getRedirect !== '') {
+        $valid = $cleanPath($getRedirect);
+        if ($valid !== null && $valid !== '/') return $valid;
+    }
+
+    // 3. Kiểm tra HTTP_REFERER nếu người dùng điều hướng từ trang nội bộ
     $referer = $_SERVER['HTTP_REFERER'] ?? '';
     if ($referer) {
-        $p = parse_url($referer);
-        $host = $_SERVER['HTTP_HOST'] ?? '';
-        if (empty($p['host']) || $p['host'] === $host) {
-            $refPath = $p['path'] ?? '/';
-            $refQuery = !empty($p['query']) ? '?' . $p['query'] : '';
-            $valid = $cleanPath($refPath . $refQuery);
-            if ($valid !== null) return $valid;
-        }
+        $valid = $cleanPath($referer);
+        if ($valid !== null && $valid !== '/') return $valid;
     }
 
-    // 3. Kiểm tra session
+    // 4. Kiểm tra session
     if (!empty($_SESSION['auth_redirect'])) {
         $valid = $cleanPath($_SESSION['auth_redirect']);
-        if ($valid !== null) return $valid;
+        if ($valid !== null && $valid !== '/') return $valid;
     }
 
-    // Mặc định về trang chủ (không ép về trang cá nhân hay trang quản trị)
+    // 5. Nếu explicit là '/', ưu tiên trả về '/'
+    if ($explicit === '/') return '/';
+
+    // 6. Nếu không có trang xem dở cụ thể, tự động mở đúng trang chủ theo vai trò (Role Home)
+    if ($role === 'admin') return '/quan-tri';
+    if ($role === 'owner' || $role === 'staff') return '/chu-san';
+
+    // Mặc định về trang chủ
     return '/';
 }
 /** Thông tin hồ sơ gọn để gửi cho JavaScript. */
 function public_profile(?array $u): ?array
 {
     if (!$u) return null;
-    return [
+    $p = [
         'id' => (int) $u['id'],
         'email' => $u['email'],
         'fullName' => $u['full_name'],
@@ -176,6 +268,10 @@ function public_profile(?array $u): ?array
         'favorites' => jd($u['favorites']),
         'createdAt' => iso($u['created_at']),
     ];
+    if (is_staff()) {
+        $p['staff'] = current_staff();
+    }
+    return $p;
 }
 
 // ---------------- Phân quyền quản trị ----------------

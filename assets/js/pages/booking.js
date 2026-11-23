@@ -2,15 +2,19 @@
  * Module: Controller luồng Đặt sân 3 bước (Mã Minh Hoan - PK04409)
  * - Quản lý state đặt sân, tải slot bận theo ngày và vẽ lưới giờ kèm giá động
  * - Validate form thông tin, kiểm tra điều kiện voucher và tính tổng tiền real-time
+<<<<<<< HEAD
  * - Điều khiển luồng duyệt đơn & đồng hồ giữ chỗ, đối soát thanh toán VietQR và render vé QR
+=======
+ * - Điều khiển luồng duyệt đơn & đồng hồ giữ chỗ 5 phút, đối soát thanh toán VietQR và render vé QR
+>>>>>>> Dev
  */
 
-import { $, $$, PAGE, APP, api, esc, url, cx, formatVnd, copyText } from '../core/ui.js';
+import { $, $$, PAGE, APP, api, esc, url, cx, formatVnd, copyText, openModal } from '../core/ui.js';
 import { ticketData, ticketQrUrl, downloadTicket, openShareSheet } from '../core/ticket.js';
 import { buildDaySlots, calcCourtPriceForRange, getPriceBands, lowestPrice, priceBandAt } from '../lib/courtPricing.js';
 import { DURATION_OPTIONS, calcDeposit, endTimeOf, extraServices, formatCountdown, formatTimeRange, remainingHoldSeconds, slotsInRange } from '../lib/booking.js';
 import { formatLongDate, getUpcomingDates, isPastSlot, isTodayIso, toIsoDate } from '../lib/format.js';
-import { describeDiscount, normalizePromoCode } from '../lib/promotions.js';
+import { describeDiscount, describeConditions, computeDiscount, checkPromotion, normalizePromoCode } from '../lib/promotions.js';
 import { rememberBookingCode } from '../lib/myBookings.js';
 import { bankAccount, buildVietQrUrl, AUTO_CONFIRM_SECONDS, HOTLINE, HOLD_MINUTES } from '../lib/payment.js';
 import { formatCancelDeadline, isBeforeCancelCutoff, CANCEL_CUTOFF_HOURS } from '../lib/cancelPolicy.js';
@@ -66,13 +70,13 @@ function saveDraft() {
         savedAt: Date.now(),
       })
     );
-  } catch (e) {}
+  } catch (e) { }
 }
 
 function clearDraft() {
   try {
     sessionStorage.removeItem(DRAFT_KEY);
-  } catch (e) {}
+  } catch (e) { }
 }
 
 function restoreDraft() {
@@ -128,12 +132,86 @@ function restoreDraft() {
       S.step = 2;
       return true;
     }
-  } catch (e) {}
+  } catch (e) { }
   return false;
 }
 
 const court = () => courts.find((c) => c.slug === S.courtSlug);
-const extrasTotal = () => S.extras.reduce((s, id) => s + (extraServices.find((x) => x.id === id)?.price || 0), 0);
+const currentServices = () => {
+  const c = court();
+  const all = Array.isArray(PAGE.services) && PAGE.services.length > 0
+    ? PAGE.services
+    : extraServices.map((x) => ({ id: x.id, name: x.label, price: x.price, unit: 'lượt', hasVariants: false, variants: [], sport: 'all' }));
+  if (!c) return all;
+
+  // Lọc chỉ những dịch vụ thuộc đúng môn thể thao của sân đang chọn (hoặc dùng chung 'all'):
+  const sport = c.sport; // 'football' hoặc 'badminton'
+  let list = all.filter((s) => !s.sport || s.sport === 'all' || s.sport === sport);
+
+  if (c.ownerId) {
+    const ownerList = list.filter((s) => s.ownerId === c.ownerId);
+    if (ownerList.length > 0) return ownerList;
+  }
+  return list;
+};
+
+/** Lấy số lượng đã chọn của 1 biến thể cụ thể */
+const getVarQty = (vid) => {
+  const it = S.extras.find((x) => typeof x === 'object' && x?.variantId === vid);
+  return it ? Math.max(0, Number(it.quantity) || 0) : 0;
+};
+
+/** Lấy số lượng đã chọn của 1 dịch vụ đơn giản (không có biến thể) */
+const getSimpleQty = (sid) => {
+  const it = S.extras.find((x) => typeof x === 'string' ? x === sid : (x.id === sid && !x.variantId));
+  return it ? (typeof it === 'string' ? 1 : Math.max(1, Number(it.quantity) || 1)) : 0;
+};
+
+/** Lấy tổng số lượng tất cả biến thể của 1 dịch vụ */
+const getServiceTotalQty = (sid) => {
+  return S.extras.reduce((sum, x) => {
+    if (typeof x === 'string') return x === sid ? sum + 1 : sum;
+    if (x && x.id === sid) return sum + Math.max(1, Number(x.quantity) || 1);
+    return sum;
+  }, 0);
+};
+
+/** Lấy tổng tiền đã chọn của 1 dịch vụ */
+const getServiceTotalPrice = (sid) => {
+  return S.extras.reduce((sum, x) => {
+    if (typeof x === 'string') {
+      if (x === sid) {
+        const s = currentServices().find((s0) => s0.id === sid);
+        return sum + Number(s?.price || 0);
+      }
+      return sum;
+    }
+    if (x && x.id === sid) {
+      return sum + Number(x.price || 0) * Math.max(1, Number(x.quantity) || 1);
+    }
+    return sum;
+  }, 0);
+};
+
+/** Kiểm tra xem dịch vụ này có ít nhất 1 biến thể / lượt chọn hay không */
+const isServiceSelected = (sid) => getServiceTotalQty(sid) > 0;
+
+/** Danh sách các biến thể đang được chọn của 1 dịch vụ */
+const getServiceSelectedVariants = (sid) => {
+  return S.extras.filter((x) => typeof x === 'object' && x?.id === sid && x?.variantId && (Number(x.quantity) || 0) > 0);
+};
+const findExtra = (id) => S.extras.find((x) => (typeof x === 'string' ? x === id : x.id === id));
+const extrasTotal = () => {
+  return S.extras.reduce((sum, item) => {
+    if (typeof item === 'string') {
+      const s = currentServices().find((x) => x.id === item) || extraServices.find((x) => x.id === item);
+      return sum + (s ? Number(s.price || 0) : 0);
+    }
+    const price = Number(item.price || 0);
+    const qty = Math.max(1, Number(item.quantity) || 1);
+    return sum + price * qty;
+  }, 0);
+};
 const courtPrice = () => (court() && S.startSlot ? calcCourtPriceForRange(court(), S.startSlot, S.duration) : 0);
 const subtotal = () => courtPrice() + extrasTotal();
 const discount = () => (S.applied ? S.applied.discount : 0);
@@ -205,10 +283,9 @@ function renderError() {
 function renderNav() {
   if (S.step === 3) return ($('#step-nav').innerHTML = '');
   $('#step-nav').innerHTML = `<div class="mt-6 flex flex-col-reverse gap-2.5 border-t border-background-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
-    ${
-      S.step > 1
-        ? `<button type="button" data-back-step class="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-background-300 px-4 py-2.5 text-sm font-semibold text-foreground-800 transition-colors hover:border-primary-400 hover:text-primary-700"><i class="ri-arrow-left-line" aria-hidden="true"></i>Quay lại</button>`
-        : `<a href="${url('/tim-san')}" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md border border-background-300 px-4 py-2.5 text-sm font-semibold text-foreground-800 transition-colors hover:border-primary-400 hover:text-primary-700"><i class="ri-arrow-left-line" aria-hidden="true"></i>Xem danh sách sân</a>`
+    ${S.step > 1
+      ? `<button type="button" data-back-step class="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-background-300 px-4 py-2.5 text-sm font-semibold text-foreground-800 transition-colors hover:border-primary-400 hover:text-primary-700"><i class="ri-arrow-left-line" aria-hidden="true"></i>Quay lại</button>`
+      : `<a href="${url('/tim-san')}" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md border border-background-300 px-4 py-2.5 text-sm font-semibold text-foreground-800 transition-colors hover:border-primary-400 hover:text-primary-700"><i class="ri-arrow-left-line" aria-hidden="true"></i>Xem danh sách sân</a>`
     }
     <button type="button" data-next ${S.busy ? 'disabled' : ''} class="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md bg-accent-500 px-5 py-3 text-sm font-bold text-background-950 transition-colors hover:bg-accent-600 disabled:cursor-not-allowed disabled:opacity-60">
       ${S.busy ? '<i class="ri-loader-4-line animate-spin text-base" aria-hidden="true"></i>' : ''}${S.step === 2 ? 'Gửi yêu cầu đặt sân' : 'Tiếp tục'}<i class="ri-arrow-right-line" aria-hidden="true"></i></button></div>`;
@@ -236,8 +313,26 @@ function renderSummary() {
       ${row('Ngày chơi', formatLongDate(S.date))}
       ${row('Khung giờ', S.startSlot ? formatTimeRange(S.startSlot, S.duration) : 'Chưa chọn')}
       ${row('Thời lượng', `${S.duration} phút`)}
-      ${row('Khung giá', band ? `${esc(band.shortLabel)}<span class="block text-[11px] font-normal text-foreground-500">${band.start} - ${band.end} · ${formatVnd(band.price)}/giờ</span>` : 'Chưa chọn giờ')}
-      ${extrasTotal() > 0 ? row('Dịch vụ thêm', formatVnd(extrasTotal())) : ''}
+      ${band ? `${row('Khung giá', `${esc(band.shortLabel)}<span class="block text-[11px] font-normal text-foreground-500">${band.start} - ${band.end} · ${formatVnd(band.price)}/giờ</span>`)}` : row('Khung giá', 'Chưa chọn giờ')}
+      ${extrasTotal() > 0 ? `
+        <div class="space-y-1.5 border-t border-dashed border-background-200 pt-2 text-xs">
+          <div class="flex items-center justify-between font-bold text-foreground-800">
+            <span>Dịch vụ thêm:</span>
+            <span class="text-primary-700">${formatVnd(extrasTotal())}</span>
+          </div>
+          ${S.extras.map((x) => {
+    if (typeof x === 'string') {
+      const s = currentServices().find((s0) => s0.id === x) || extraServices.find((s0) => s0.id === x);
+      return `<div class="flex justify-between text-foreground-600 pl-2"><span>• ${esc(s?.name || s?.label || x)}</span><span>${formatVnd(s?.price || 0)}</span></div>`;
+    }
+    const q = Math.max(1, x.quantity || 1);
+    return `<div class="flex justify-between text-foreground-600 pl-2">
+              <span class="truncate max-w-[210px]">• ${esc(x.label || x.name)}${x.variantName ? ` <i class="text-[11px] text-primary-700 font-normal">(${esc(x.variantName)})</i>` : ''}${q > 1 ? ` x${q}` : ''}</span>
+              <span class="shrink-0 font-medium">${formatVnd((x.price || 0) * q)}</span>
+            </div>`;
+  }).join('')}
+        </div>
+      ` : ''}
       ${discount() > 0 ? `<div class="flex items-center justify-between gap-3"><dt class="flex items-center gap-1 text-foreground-500"><i class="ri-coupon-3-line text-primary-600" aria-hidden="true"></i>Mã ${esc(S.applied.promotion.code)}</dt><dd class="font-semibold text-accent-700">-${formatVnd(discount())}</dd></div>` : ''}
     </dl>
     <div class="mt-4 rounded-lg border border-background-200 bg-background-50 p-4">
@@ -334,14 +429,13 @@ function renderCourtList() {
   $('#f-sport').innerHTML = [['all', 'Tất cả'], ['football', 'Bóng đá'], ['badminton', 'Cầu lông']]
     .map(([v, l]) => `<button type="button" data-sport="${v}" class="cursor-pointer whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${f.sport === v ? 'bg-primary-500 text-white' : 'text-foreground-500 hover:bg-background-200 hover:text-foreground-900'}">${l}</button>`)
     .join('');
-  $('#f-count').innerHTML = `<p class="text-xs text-foreground-500">Tìm thấy <span class="font-bold text-foreground-950">${list.length}</span> / ${courts.length} sân</p>${
-    hasFilters ? `<button type="button" data-reset-filters class="inline-flex cursor-pointer items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-xs font-semibold text-primary-600 transition-colors hover:bg-primary-50 hover:text-primary-700"><i class="ri-refresh-line text-sm" aria-hidden="true"></i>Xóa bộ lọc</button>` : ''
-  }`;
+  $('#f-count').innerHTML = `<p class="text-xs text-foreground-500">Tìm thấy <span class="font-bold text-foreground-950">${list.length}</span> / ${courts.length} sân</p>${hasFilters ? `<button type="button" data-reset-filters class="inline-flex cursor-pointer items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-xs font-semibold text-primary-600 transition-colors hover:bg-primary-50 hover:text-primary-700"><i class="ri-refresh-line text-sm" aria-hidden="true"></i>Xóa bộ lọc</button>` : ''
+    }`;
   $('#court-list').innerHTML = list.length
     ? `<div class="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">${list
-        .map((c) => {
-          const on = c.slug === S.courtSlug;
-          return `<button type="button" data-court="${c.slug}" class="flex cursor-pointer items-center gap-3 rounded-lg border p-2.5 text-left transition-colors ${on ? 'border-primary-400 bg-primary-50' : 'border-background-200 bg-white hover:border-primary-300'}">
+      .map((c) => {
+        const on = c.slug === S.courtSlug;
+        return `<button type="button" data-court="${c.slug}" class="flex cursor-pointer items-center gap-3 rounded-lg border p-2.5 text-left transition-colors ${on ? 'border-primary-400 bg-primary-50' : 'border-background-200 bg-white hover:border-primary-300'}">
           <div class="h-16 w-16 shrink-0 overflow-hidden rounded-md bg-background-100"><img src="${esc(c.images[0])}" alt="${esc(c.name)}" loading="lazy" class="h-full w-full object-cover object-top"></div>
           <div class="min-w-0 flex-1">
             <p class="truncate font-heading text-sm font-bold text-foreground-950">${esc(c.name)}</p>
@@ -349,8 +443,8 @@ function renderCourtList() {
             <p class="mt-1 truncate text-xs font-bold text-primary-600">từ ${formatVnd(lowestPrice(c))}/giờ</p>
           </div>
           <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${on ? 'border-primary-500 bg-primary-500 text-white' : 'border-background-400 bg-white'}">${on ? '<i class="ri-check-line text-xs" aria-hidden="true"></i>' : ''}</span></button>`;
-        })
-        .join('')}</div>`
+      })
+      .join('')}</div>`
     : `<div class="mt-3 rounded-lg border border-dashed border-background-300 bg-background-50 px-4 py-10 text-center"><div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-background-100 text-foreground-400"><i class="ri-search-eye-line text-xl" aria-hidden="true"></i></div><p class="mt-3 text-sm font-semibold text-foreground-900">Không tìm thấy sân phù hợp</p><p class="mt-1 text-xs text-foreground-500">Thử từ khóa khác, hoặc bỏ bớt điều kiện lọc để xem toàn bộ sân.</p><button type="button" data-reset-filters class="mt-4 inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border border-primary-300 bg-primary-50 px-3.5 py-2 text-xs font-semibold text-primary-700 transition-colors hover:bg-primary-100"><i class="ri-refresh-line text-sm" aria-hidden="true"></i>Xóa bộ lọc</button></div>`;
 }
 
@@ -404,6 +498,195 @@ function inputCls(key) {
   return `w-full rounded-md border bg-white px-3 py-2.5 text-sm text-foreground-950 placeholder:text-foreground-400 focus:outline-none ${S.fieldErrors[key] ? 'border-accent-400' : 'border-background-300 focus:border-primary-400'}`;
 }
 
+/** Hộp thoại Pop-up chọn phân loại biến thể đa thuộc tính */
+function openVariantModal(serviceId) {
+  const s = currentServices().find((x) => x.id === serviceId);
+  if (!s || !s.variants || s.variants.length === 0) return;
+
+  const tempQty = {};
+  s.variants.forEach((v) => {
+    tempQty[v.id] = getVarQty(v.id);
+  });
+
+  let activeFilter = 'all';
+  const firstAttr = Array.isArray(s.attributesSchema) && s.attributesSchema.length > 0 ? s.attributesSchema[0] : null;
+
+  const countForOpt = (opt) => s.variants.filter((v) => {
+    if (!v.attributes || typeof v.attributes !== 'object') return false;
+    return Object.values(v.attributes).some((val) => val === opt || String(val).includes(opt));
+  }).length;
+
+  const validFilterOptions = firstAttr && Array.isArray(firstAttr.options)
+    ? firstAttr.options.filter((opt) => countForOpt(opt) > 0)
+    : [];
+
+  const modalInstance = openModal({
+    size: 'max-w-lg',
+    html: `<div id="modal-var-body"></div>`,
+    dismissible: true,
+  });
+
+  const renderModalContent = () => {
+    const totalSelectedQty = Object.values(tempQty).reduce((a, b) => a + b, 0);
+    const totalSelectedMoney = s.variants.reduce((sum, v) => sum + (tempQty[v.id] || 0) * v.price, 0);
+
+    const filteredVariants = activeFilter === 'all'
+      ? s.variants
+      : s.variants.filter((v) => {
+        if (!v.attributes || typeof v.attributes !== 'object') return true;
+        return Object.values(v.attributes).some((val) => val === activeFilter || String(val).includes(activeFilter));
+      });
+
+    const body = modalInstance.el.querySelector('#modal-var-body');
+    if (!body) return;
+
+    body.innerHTML = `
+      <div class="p-5 md:p-6">
+        <div class="flex items-start justify-between gap-3 border-b border-background-200 pb-3.5">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="inline-flex items-center justify-center h-7 w-7 rounded-md bg-primary-100 text-primary-700 text-sm"><i class="ri-apps-2-line"></i></span>
+              <h3 class="font-heading text-lg font-bold text-foreground-950">${esc(s.name)}</h3>
+            </div>
+            <p class="mt-1 text-xs text-foreground-500">
+              Chọn phân loại và số lượng phù hợp cho nhu cầu của bạn. Có thể chọn cùng lúc nhiều loại.
+            </p>
+          </div>
+          <button type="button" data-modal-close class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-background-200 bg-white text-foreground-500 hover:bg-background-100 hover:text-foreground-900 transition-colors cursor-pointer" aria-label="Đóng">
+            <i class="ri-close-line text-lg"></i>
+          </button>
+        </div>
+
+        ${validFilterOptions.length > 1 ? `
+          <div class="mt-3.5 flex items-center gap-1.5 overflow-x-auto pb-1 text-xs" style="scrollbar-width:none">
+            <span class="text-foreground-500 font-medium shrink-0 mr-1">${esc(firstAttr.name)}:</span>
+            <button type="button" data-filter-attr="all" class="cursor-pointer whitespace-nowrap rounded-full px-3 py-1 font-semibold transition-colors ${activeFilter === 'all' ? 'bg-primary-600 text-white shadow-2xs' : 'bg-background-100 text-foreground-700 hover:bg-background-200'}">Tất cả (${s.variants.length})</button>
+            ${validFilterOptions.map((opt) => `
+              <button type="button" data-filter-attr="${esc(opt)}" class="cursor-pointer whitespace-nowrap rounded-full px-3 py-1 font-semibold transition-colors ${activeFilter === opt ? 'bg-primary-600 text-white shadow-2xs' : 'bg-background-100 text-foreground-700 hover:bg-background-200'}">${esc(opt)} (${countForOpt(opt)})</button>
+            `).join('')}
+          </div>
+        ` : ''}
+
+        <div class="mt-3.5 space-y-2 min-h-[160px] max-h-[50vh] overflow-y-auto pr-1">
+          ${filteredVariants.length === 0 ? `
+            <div class="py-12 text-center text-xs text-foreground-400 flex flex-col items-center justify-center">
+              <i class="ri-inbox-line text-3xl text-foreground-300 mb-2"></i>
+              <span>Không có phân loại nào thuộc nhóm này.</span>
+            </div>
+          ` : filteredVariants.map((v) => {
+      const qty = tempQty[v.id] || 0;
+      const on = qty > 0;
+      const maxStock = Number(v.stock) || 99;
+      const attrLabels = v.attributes && typeof v.attributes === 'object'
+        ? Object.entries(v.attributes).map(([k, val]) => `<span class="inline-flex items-center rounded bg-background-100 px-2 py-0.5 text-[11px] font-medium text-foreground-700">${esc(k)}: <b class="ml-1 text-foreground-900">${esc(val)}</b></span>`).join(' ')
+        : '';
+
+      return `
+              <div class="flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors ${on ? 'border-primary-400 bg-primary-50/60 shadow-2xs' : 'border-background-200 bg-white hover:border-background-300'}">
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <p class="font-bold text-sm text-foreground-950">${esc(v.name)}</p>
+                    ${v.sku ? `<span class="text-[10px] font-mono text-foreground-400 bg-background-100 px-1 rounded">${esc(v.sku)}</span>` : ''}
+                  </div>
+                  <div class="flex flex-wrap items-center gap-1.5 mt-1">
+                    ${attrLabels}
+                  </div>
+                  <div class="flex items-center gap-2 mt-1.5 text-xs">
+                    <span class="font-extrabold text-primary-700 text-sm">${formatVnd(v.price)}</span>
+                    <span class="text-foreground-300">•</span>
+                    <span class="${v.stock <= 5 ? 'text-accent-600 font-bold' : 'text-foreground-500'}">Còn ${v.stock} ${esc(s.unit || 'món')}</span>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-1.5 shrink-0 bg-background-100 p-1 rounded-md border border-background-200">
+                  <button type="button" data-m-var="${esc(v.id)}" data-m-delta="-1" class="flex h-7 w-7 items-center justify-center rounded border border-background-300 bg-white text-xs font-bold text-foreground-800 hover:bg-background-50 transition-colors ${qty <= 0 ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}" ${qty <= 0 ? 'disabled' : ''}>-</button>
+                  <span class="w-7 text-center font-bold text-sm ${on ? 'text-primary-800' : 'text-foreground-500'}">${qty}</span>
+                  <button type="button" data-m-var="${esc(v.id)}" data-m-delta="1" class="flex h-7 w-7 items-center justify-center rounded border border-background-300 bg-white text-xs font-bold text-foreground-800 hover:bg-background-50 transition-colors ${v.stock > 0 && qty >= maxStock ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}" ${v.stock > 0 && qty >= maxStock ? 'disabled' : ''}>+</button>
+                </div>
+              </div>
+            `;
+    }).join('')}
+        </div>
+
+        <div class="mt-4 pt-3.5 border-t border-background-200 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-foreground-500 block">Tổng phân loại đã chọn:</span>
+              ${totalSelectedQty > 0 ? `<button type="button" data-m-reset class="cursor-pointer text-[11px] font-semibold text-accent-600 hover:underline">Bỏ chọn hết</button>` : ''}
+            </div>
+            <div class="flex items-baseline gap-1.5 mt-0.5">
+              <span class="font-heading text-lg font-extrabold text-primary-700">${formatVnd(totalSelectedMoney)}</span>
+              <span class="text-xs font-semibold text-foreground-700">(${totalSelectedQty} ${esc(s.unit || 'món')})</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 ml-auto">
+            <button type="button" data-modal-cancel class="cursor-pointer rounded-md border border-background-300 bg-white px-3.5 py-2 text-xs font-semibold text-foreground-700 hover:bg-background-100 transition-colors">Hủy</button>
+            <button type="button" data-modal-apply class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-primary-600 px-4 py-2 text-xs font-bold text-white hover:bg-primary-700 transition-colors shadow-xs">
+              <i class="ri-check-line text-sm"></i>Áp dụng vào đơn
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  };
+
+  renderModalContent();
+
+  modalInstance.el.addEventListener('click', (ev) => {
+    const t = ev.target;
+    if (t.closest('[data-modal-close]') || t.closest('[data-modal-cancel]')) {
+      return modalInstance.close();
+    }
+    const filterBtn = t.closest('[data-filter-attr]');
+    if (filterBtn) {
+      activeFilter = filterBtn.dataset.filterAttr;
+      return renderModalContent();
+    }
+    if (t.closest('[data-m-reset]')) {
+      s.variants.forEach((v) => {
+        tempQty[v.id] = 0;
+      });
+      return renderModalContent();
+    }
+    const qtyBtn = t.closest('[data-m-var]');
+    if (qtyBtn) {
+      const vid = qtyBtn.dataset.mVar;
+      const delta = Number(qtyBtn.dataset.mDelta) || 0;
+      const v = s.variants.find((v0) => v0.id === vid);
+      const cur = tempQty[vid] || 0;
+      const next = Math.max(0, cur + delta);
+      if (v && v.stock > 0 && next > v.stock) {
+        tempQty[vid] = v.stock;
+      } else {
+        tempQty[vid] = next;
+      }
+      return renderModalContent();
+    }
+    if (t.closest('[data-modal-apply]')) {
+      S.extras = S.extras.filter((x) => (typeof x === 'string' ? x !== s.id : x.id !== s.id));
+      s.variants.forEach((v) => {
+        const qty = tempQty[v.id] || 0;
+        if (qty > 0) {
+          S.extras.push({
+            id: s.id,
+            variantId: v.id,
+            sku: v.sku,
+            label: s.name,
+            variantName: v.name,
+            price: v.price,
+            quantity: qty,
+          });
+        }
+      });
+      saveDraft();
+      modalInstance.close();
+      renderStep2();
+      renderSummary();
+      revalidatePromo();
+    }
+  });
+}
+
 function renderStep2() {
   const f = S.form;
   const loggedIn = !!PAGE.contact;
@@ -421,6 +704,7 @@ function renderStep2() {
       <div class="min-w-0"><label for="b-phone" class="mb-1.5 block text-sm font-medium text-foreground-800">Số điện thoại <span class="text-accent-600">*</span></label><input id="b-phone" data-form="phone" type="tel" inputmode="numeric" maxlength="12" value="${esc(f.phone)}" placeholder="0912345678" class="${inputCls('phone')}">${fieldError('phone') || '<p class="mt-1 text-xs text-foreground-400">10 số, bắt đầu bằng 0. Chủ sân gọi xác nhận theo số này.</p>'}</div>
       <div class="min-w-0 sm:col-span-2"><label for="b-email" class="mb-1.5 block text-sm font-medium text-foreground-800">Email <span class="font-normal text-foreground-400">(không bắt buộc)</span></label><input id="b-email" data-form="email" type="email" value="${esc(f.email)}" placeholder="minhquan@gmail.com" class="${inputCls('email')}">${fieldError('email')}</div>
     </div>
+<<<<<<< HEAD
     <!-- Bẫy honeypot chống bot tự động điền form -->
     <div class="hidden" style="display:none;" aria-hidden="true"><label for="b-website-check">Kiểm tra website</label><input id="b-website-check" data-form="website_check" type="text" tabindex="-1" autocomplete="off" value=""></div>
     <div class="mt-5"><p class="text-sm font-medium text-foreground-800">Dịch vụ thêm</p><p class="mt-0.5 text-xs text-foreground-500">Trả cùng lúc tại sân, không bắt buộc.</p>
@@ -430,6 +714,90 @@ function renderStep2() {
           return `<label class="flex cursor-pointer items-center justify-between gap-3 rounded-md border px-3.5 py-2.5 transition-colors ${on ? 'border-primary-400 bg-primary-50' : 'border-background-300 bg-white hover:border-primary-300'}"><span class="flex items-center gap-2 text-sm text-foreground-900"><input type="checkbox" data-extra="${s.id}" ${on ? 'checked' : ''} class="h-4 w-4 cursor-pointer accent-primary-500">${esc(s.label)}</span><span class="whitespace-nowrap text-xs font-semibold text-foreground-600">${formatVnd(s.price)}</span></label>`;
         })
         .join('')}</div></div>
+=======
+    <div class="mt-5">
+      <div class="flex items-center justify-between gap-2">
+        <div>
+          <p class="text-sm font-bold text-foreground-900 flex items-center gap-1.5"><i class="ri-shopping-basket-line text-primary-600"></i>Dịch vụ &amp; Đồ thuê tại sân</p>
+          <p class="mt-0.5 text-xs text-foreground-500">Phục vụ trực tiếp tại sân. Bấm "Chọn phân loại" để chọn quy cách, kích cỡ theo nhu cầu.</p>
+        </div>
+        ${extrasTotal() > 0 ? `<span class="rounded bg-primary-100 text-primary-800 px-2.5 py-0.5 text-xs font-bold">+${formatVnd(extrasTotal())}</span>` : ''}
+      </div>
+      <div class="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        ${currentServices().map((s) => {
+    const hasVars = s.hasVariants && Array.isArray(s.variants) && s.variants.length > 0;
+    const totalQty = getServiceTotalQty(s.id);
+    const totalPrice = getServiceTotalPrice(s.id);
+    const isSelected = totalQty > 0;
+    const minPrice = hasVars ? Math.min(...s.variants.map((v) => v.price)) : s.price;
+    const selVars = hasVars ? getServiceSelectedVariants(s.id) : [];
+    const attrHint = Array.isArray(s.attributesSchema) && s.attributesSchema.length > 0
+      ? `Chọn ${s.attributesSchema.map((a) => a.name.toLowerCase()).join(', ')}`
+      : `${s.variants?.length || 0} lựa chọn`;
+
+    return `
+            <div class="rounded-lg border p-3.5 transition-all ${isSelected ? 'border-primary-400 bg-primary-50/50 shadow-xs' : 'border-background-300 bg-white hover:border-primary-300'}">
+              <div class="flex items-start justify-between gap-2.5 ${hasVars ? 'cursor-pointer' : ''}" ${hasVars ? `data-open-variants="${esc(s.id)}"` : ''}>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <p class="font-bold text-sm text-foreground-950">${esc(s.name)}</p>
+                    ${hasVars ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-primary-100 text-primary-800"><i class="ri-apps-2-line mr-1 text-[11px]"></i>${s.variants.length} phân loại</span>` : ''}
+                  </div>
+                  <p class="text-xs text-foreground-500 mt-0.5">
+                    ${hasVars ? `Giá từ <span class="font-bold text-primary-700">${formatVnd(minPrice)}</span>/${esc(s.unit || 'món')}` : `${formatVnd(s.price)}/${esc(s.unit || 'món')}`}
+                  </p>
+                </div>
+                <div class="text-right shrink-0">
+                  ${isSelected ? `
+                    <span class="block text-xs font-extrabold text-primary-700">${formatVnd(totalPrice)}</span>
+                    <span class="block text-[10px] font-semibold text-primary-800">${totalQty} ${esc(s.unit || 'món')}</span>
+                  ` : `
+                    <span class="block text-xs font-bold text-foreground-700">${formatVnd(minPrice)}</span>
+                    <span class="block text-[10px] text-foreground-400">/${esc(s.unit || 'món')}</span>
+                  `}
+                </div>
+              </div>
+
+              ${hasVars ? `
+                <div class="mt-3 pt-2.5 border-t border-primary-200/60 flex items-center justify-between text-xs">
+                  ${isSelected ? `
+                    <div class="min-w-0 flex-1 mr-2 cursor-pointer" data-open-variants="${esc(s.id)}">
+                      <p class="text-[11px] text-foreground-700 truncate" title="${selVars.map((v) => `${v.variantName} x${v.quantity}`).join(', ')}">
+                        Đã chọn: <span class="font-bold text-foreground-950">${selVars.map((v) => `${v.variantName} x${v.quantity}`).join(', ')}</span>
+                      </p>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                      <button type="button" data-open-variants="${esc(s.id)}" class="cursor-pointer font-bold text-primary-700 hover:text-primary-800 hover:underline inline-flex items-center gap-1"><i class="ri-edit-line"></i>Đổi loại</button>
+                      <button type="button" data-clear-service="${esc(s.id)}" class="cursor-pointer text-foreground-400 hover:text-accent-600 p-1" title="Bỏ chọn dịch vụ này"><i class="ri-close-circle-line text-base"></i></button>
+                    </div>
+                  ` : `
+                    <span class="text-foreground-500 text-[11px] truncate max-w-[55%]">${esc(attrHint)}</span>
+                    <button type="button" data-open-variants="${esc(s.id)}" class="cursor-pointer inline-flex items-center gap-1.5 rounded border border-primary-500 bg-primary-50 px-2.5 py-1 text-xs font-bold text-primary-700 hover:bg-primary-100 transition-colors shadow-2xs">
+                      <i class="ri-add-line font-bold"></i>Chọn phân loại
+                    </button>
+                  `}
+                </div>
+              ` : `
+                <div class="mt-3 pt-2.5 border-t border-primary-200/60 flex items-center justify-between text-xs">
+                  <label class="flex cursor-pointer items-center gap-2">
+                    <input type="checkbox" data-simple-toggle="${esc(s.id)}" ${isSelected ? 'checked' : ''} class="h-4 w-4 rounded accent-primary-600 cursor-pointer">
+                    <span class="text-foreground-700">${isSelected ? 'Đã thêm' : 'Chọn dùng'}</span>
+                  </label>
+                  ${isSelected ? `
+                    <div class="flex items-center gap-1.5">
+                      <button type="button" data-extra-simple-qty="${esc(s.id)}" data-delta="-1" class="flex h-6 w-6 items-center justify-center rounded border border-background-300 bg-white font-bold hover:bg-background-100 transition-colors cursor-pointer">-</button>
+                      <span class="w-6 text-center font-bold text-foreground-950">${getSimpleQty(s.id)}</span>
+                      <button type="button" data-extra-simple-qty="${esc(s.id)}" data-delta="1" class="flex h-6 w-6 items-center justify-center rounded border border-background-300 bg-white font-bold hover:bg-background-100 transition-colors cursor-pointer">+</button>
+                    </div>
+                  ` : ''}
+                </div>
+              `}
+            </div>
+          `;
+  }).join('')}
+      </div>
+    </div>
+>>>>>>> Dev
     <div class="mt-5" id="promo-box"></div>
     <div class="mt-5"><label for="b-note" class="mb-1.5 block text-sm font-medium text-foreground-800">Ghi chú cho chủ sân</label><textarea id="b-note" data-form="note" rows="3" maxlength="500" placeholder="Ví dụ: đội mình 7 người, cần thêm 10 áo bib..." class="w-full rounded-md border border-background-300 bg-white px-3 py-2.5 text-sm text-foreground-950 placeholder:text-foreground-400 focus:border-primary-400 focus:outline-none">${esc(f.note)}</textarea><p class="mt-1 text-right text-xs text-foreground-400" data-note-count>${f.note.length}/500</p></div>
     <label class="mt-2 flex cursor-pointer items-start gap-2.5 rounded-md border border-background-200 bg-background-50 px-3.5 py-3"><input type="checkbox" data-agree ${S.agree ? 'checked' : ''} class="mt-0.5 h-4 w-4 cursor-pointer accent-primary-500"><span class="text-xs leading-relaxed text-foreground-600">Tôi đồng ý với chính sách hủy sân: chỉ hủy và hoàn 100% tiền cọc khi còn cách giờ chơi từ ${CANCEL_CUTOFF_HOURS} giờ trở lên. Trong ${CANCEL_CUTOFF_HOURS} giờ cuối, nút hủy sẽ khóa và tôi liên hệ hotline để chủ sân hỗ trợ. Lỗi từ phía sân hoàn 100%.</span></label>`;
@@ -439,14 +807,325 @@ function renderStep2() {
 function renderPromo() {
   const box = $('#promo-box');
   if (!box) return;
-  box.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-1.5"><p class="text-sm font-medium text-foreground-800">Mã giảm giá</p><a href="${url('/uu-dai')}" class="inline-flex items-center gap-1 whitespace-nowrap text-[11px] font-semibold text-primary-700 transition-colors hover:text-primary-800"><i class="ri-coupon-3-line" aria-hidden="true"></i>Xem tất cả mã đang chạy</a></div>
-    <p class="mt-0.5 text-xs text-foreground-500">Nhập mã ưu đãi của chủ sân nếu bạn có.</p>
-    ${
-      S.applied
-        ? `<div class="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary-300 bg-primary-50 px-3.5 py-3"><div class="min-w-0"><p class="flex items-center gap-1.5 text-sm font-bold text-primary-900"><i class="ri-coupon-3-fill" aria-hidden="true"></i>${esc(S.applied.promotion.code)}</p><p class="mt-0.5 text-[11px] text-primary-800">${esc(describeDiscount(S.applied.promotion))}</p></div><div class="flex items-center gap-3"><span class="whitespace-nowrap text-sm font-extrabold text-accent-700">-${formatVnd(S.applied.discount)}</span><button type="button" data-remove-promo class="cursor-pointer whitespace-nowrap text-[11px] font-semibold text-foreground-600 underline transition-colors hover:text-accent-700">Bỏ mã</button></div></div>`
-        : `<div class="mt-2.5 flex flex-col gap-2 sm:flex-row"><input type="text" id="promo-input" value="${esc(S.promoCode)}" maxlength="16" placeholder="Nhập mã, ví dụ BMT20" aria-label="Mã giảm giá" class="w-full min-w-0 rounded-md border border-background-300 bg-white px-3 py-2.5 font-mono text-sm font-semibold uppercase tracking-wider text-foreground-950 placeholder:font-sans placeholder:font-normal placeholder:normal-case placeholder:tracking-normal placeholder:text-foreground-400 focus:border-primary-400 focus:outline-none"><button type="button" data-apply-promo class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-600 disabled:cursor-not-allowed disabled:bg-background-300 disabled:text-foreground-500"><i class="ri-price-tag-3-line" aria-hidden="true"></i>Áp dụng</button></div>`
+  box.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-1.5"><p class="text-sm font-medium text-foreground-800">Mã giảm giá</p><button type="button" data-open-voucher-modal class="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs font-semibold text-primary-700 transition-colors hover:text-primary-800 hover:underline"><i class="ri-coupon-3-line text-sm" aria-hidden="true"></i>Xem tất cả mã đang chạy</button></div>
+    <p class="mt-0.5 text-xs text-foreground-500">Nhập mã ưu đãi của chủ sân nếu bạn có hoặc chọn từ danh sách voucher.</p>
+    ${S.applied
+      ? `<div class="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary-300 bg-primary-50 px-3.5 py-3"><div class="min-w-0"><p class="flex items-center gap-1.5 text-sm font-bold text-primary-900"><i class="ri-coupon-3-fill" aria-hidden="true"></i>${esc(S.applied.promotion.code)}<span class="rounded bg-primary-200 px-1.5 py-0.2 text-[10px] font-bold text-primary-800">Đang áp dụng</span></p><p class="mt-0.5 text-[11px] text-primary-800">${esc(describeDiscount(S.applied.promotion))}</p></div><div class="flex items-center gap-2.5"><span class="whitespace-nowrap text-sm font-extrabold text-accent-700">-${formatVnd(S.applied.discount)}</span><button type="button" data-open-voucher-modal class="cursor-pointer whitespace-nowrap text-[11px] font-semibold text-primary-700 underline transition-colors hover:text-primary-900">Đổi mã</button><button type="button" data-remove-promo class="cursor-pointer whitespace-nowrap text-[11px] font-semibold text-foreground-600 underline transition-colors hover:text-accent-700">Bỏ mã</button></div></div>`
+      : `<div class="mt-2.5 flex flex-col gap-2 sm:flex-row"><div class="relative flex-1"><input type="text" id="promo-input" value="${esc(S.promoCode)}" maxlength="16" placeholder="Nhập mã, ví dụ BMT20" aria-label="Mã giảm giá" class="w-full min-w-0 rounded-md border border-background-300 bg-white px-3 py-2.5 font-mono text-sm font-semibold uppercase tracking-wider text-foreground-950 placeholder:font-sans placeholder:font-normal placeholder:normal-case placeholder:tracking-normal placeholder:text-foreground-400 focus:border-primary-400 focus:outline-none"></div><div class="flex items-center gap-2 shrink-0"><button type="button" data-apply-promo class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-600 disabled:cursor-not-allowed disabled:bg-background-300 disabled:text-foreground-500"><i class="ri-price-tag-3-line" aria-hidden="true"></i>Áp dụng</button><button type="button" data-open-voucher-modal class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-primary-300 bg-primary-50 px-3.5 py-2.5 text-sm font-semibold text-primary-700 transition-colors hover:bg-primary-100 hover:border-primary-400"><i class="ri-coupon-3-line" aria-hidden="true"></i>Chọn voucher</button></div></div>`
     }
     ${S.promoError ? `<p class="mt-1.5 flex items-start gap-1 text-xs text-accent-700"><i class="ri-error-warning-line mt-0.5" aria-hidden="true"></i>${esc(S.promoError)}</p>` : ''}`;
+}
+
+let voucherModalTab = 'all';
+
+async function openVoucherModal() {
+  let promos = PAGE.promotions;
+  if (!promos || !promos.length) {
+    try {
+      promos = await api('booking', 'promotions');
+      PAGE.promotions = promos;
+    } catch (e) {
+      promos = [];
+    }
+  }
+
+  const orderTotal = subtotal();
+  const c = court();
+  const currentSlot = S.startSlot;
+  const currentDate = S.date;
+
+  // Đánh giá từng voucher theo điều kiện của đơn hiện tại
+  const evaluated = (promos || []).map((p) => {
+    let eligible = true;
+    let reason = '';
+    let discountAmount = 0;
+
+    // 1. Kiểm tra giới hạn chủ sân
+    if (p.ownerId && c?.ownerId && Number(p.ownerId) !== Number(c.ownerId)) {
+      eligible = false;
+      reason = `Chỉ áp dụng cho các sân thuộc cơ sở "${p.ownerName || 'Chủ sân khác'}"`;
+    } else if (!currentSlot) {
+      if (p.minOrder > 0) {
+        eligible = false;
+        reason = `Đơn tối thiểu ${formatVnd(p.minOrder)} (Vui lòng chọn khung giờ để tính tiền đơn)`;
+      } else {
+        eligible = true;
+        reason = '';
+      }
+    } else {
+      const ctx = {
+        date: currentDate,
+        startSlot: currentSlot,
+        orderTotal,
+        usedCount: 0,
+      };
+      const check = checkPromotion(p, ctx);
+      if (!check.ok) {
+        eligible = false;
+        if (p.minOrder > 0 && orderTotal < p.minOrder) {
+          const needed = p.minOrder - orderTotal;
+          reason = `Đơn tối thiểu ${formatVnd(p.minOrder)} (Đơn hiện tại: ${formatVnd(orderTotal)} — cần thêm ${formatVnd(needed)} để dùng)`;
+        } else {
+          reason = check.message;
+        }
+      } else {
+        eligible = true;
+        discountAmount = computeDiscount(p, orderTotal);
+      }
+    }
+
+    return {
+      ...p,
+      eligible,
+      reason,
+      discountAmount,
+    };
+  });
+
+  const eligibleList = evaluated.filter((x) => x.eligible);
+  const ineligibleList = evaluated.filter((x) => !x.eligible);
+
+  function renderModalContent(activeTab = voucherModalTab) {
+    voucherModalTab = activeTab;
+    const isAll = activeTab === 'all';
+    const isEligible = activeTab === 'eligible';
+    const isIneligible = activeTab === 'ineligible';
+
+    const displayList = isEligible ? eligibleList : isIneligible ? ineligibleList : evaluated;
+
+    const renderVoucherCard = (item) => {
+      const isSelected = S.applied && S.applied.promotion.code === item.code;
+      const isPercent = item.discountType === 'percent';
+      const badgeVal = isPercent ? `${item.discountValue}%` : (item.discountValue >= 1000 ? `${Math.round(item.discountValue / 1000)}K` : formatVnd(item.discountValue));
+      const endFormatted = item.endDate ? item.endDate.split('-').reverse().join('/') : '';
+
+      if (item.eligible) {
+        return `
+          <div class="relative flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3.5 rounded-xl border-2 ${isSelected ? 'border-primary-500 bg-primary-50/60 shadow-md' : 'border-background-200 bg-white hover:border-primary-400 hover:shadow-xs'} p-3.5 transition-all">
+            <div class="flex items-start gap-3 min-w-0 flex-1">
+              <div class="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-xs">
+                <span class="text-base font-extrabold leading-none">${badgeVal}</span>
+                <span class="mt-0.5 text-[10px] font-bold uppercase tracking-wider opacity-90">GIẢM</span>
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <span class="rounded bg-primary-100 px-2 py-0.5 font-mono text-xs font-bold text-primary-900">${esc(item.code)}</span>
+                  ${item.ownerName ? `<span class="rounded bg-background-100 px-1.5 py-0.5 text-[10px] font-medium text-foreground-600">${esc(item.ownerName)}</span>` : '<span class="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">Toàn hệ thống</span>'}
+                  ${item.isUserVoucher ? '<span class="rounded bg-accent-100 px-1.5 py-0.5 text-[10px] font-bold text-accent-800">Ví cá nhân</span>' : ''}
+                </div>
+                <h4 class="mt-1 font-heading text-sm font-bold text-foreground-950 truncate">${esc(item.title)}</h4>
+                <p class="text-xs text-foreground-600 line-clamp-1">${esc(describeDiscount(item))} &bull; ${esc(describeConditions(item))}</p>
+                <div class="mt-1 flex flex-wrap items-center gap-3 text-[11px]">
+                  <span class="text-foreground-400 flex items-center gap-1"><i class="ri-time-line"></i>HSD: ${esc(endFormatted)}</span>
+                  ${item.discountAmount > 0 ? `<span class="font-bold text-emerald-700 flex items-center gap-0.5"><i class="ri-checkbox-circle-fill"></i>Tiết kiệm: -${formatVnd(item.discountAmount)}</span>` : ''}
+                </div>
+              </div>
+            </div>
+            <div class="shrink-0 flex sm:flex-col justify-end items-center gap-2">
+              ${isSelected
+                ? `<button type="button" data-modal-select="${esc(item.code)}" class="w-full sm:w-auto inline-flex items-center justify-center gap-1 rounded-lg border border-primary-500 bg-primary-500 px-3.5 py-2 text-xs font-bold text-white shadow-xs transition-colors cursor-pointer"><i class="ri-check-line"></i>Đang dùng</button>`
+                : `<button type="button" data-modal-select="${esc(item.code)}" class="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary-500 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-primary-600 transition-all cursor-pointer"><i class="ri-coupon-3-line"></i>Áp dụng</button>`
+              }
+            </div>
+          </div>
+        `;
+      } else {
+        return `
+          <div class="relative flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3.5 rounded-xl border border-background-200 bg-background-50/70 p-3.5 opacity-85 transition-all">
+            <div class="flex items-start gap-3 min-w-0 flex-1">
+              <div class="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl bg-background-200 text-foreground-400">
+                <span class="text-base font-extrabold leading-none">${badgeVal}</span>
+                <span class="mt-0.5 text-[10px] font-bold uppercase tracking-wider opacity-80">GIẢM</span>
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <span class="rounded bg-background-200 px-2 py-0.5 font-mono text-xs font-semibold text-foreground-600">${esc(item.code)}</span>
+                  ${item.ownerName ? `<span class="text-[10px] text-foreground-500">${esc(item.ownerName)}</span>` : ''}
+                </div>
+                <h4 class="mt-1 font-heading text-sm font-semibold text-foreground-800 truncate">${esc(item.title)}</h4>
+                <p class="text-xs text-foreground-500 line-clamp-1">${esc(describeDiscount(item))} &bull; ${esc(describeConditions(item))}</p>
+                <div class="mt-2 flex items-start gap-1.5 rounded-md border border-amber-200/80 bg-amber-50/90 px-2.5 py-1.5 text-xs font-medium text-amber-800">
+                  <i class="ri-error-warning-line shrink-0 text-amber-600 mt-0.5"></i>
+                  <span>${esc(item.reason)}</span>
+                </div>
+              </div>
+            </div>
+            <div class="shrink-0 flex justify-end">
+              <button type="button" disabled class="w-full sm:w-auto inline-flex items-center justify-center rounded-lg border border-background-300 bg-background-200 px-3.5 py-2 text-xs font-medium text-foreground-400 cursor-not-allowed">
+                Chưa đủ ĐK
+              </button>
+            </div>
+          </div>
+        `;
+      }
+    };
+
+    let listHtml = '';
+    if (!displayList.length) {
+      listHtml = `
+        <div class="py-10 text-center">
+          <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-background-100 text-2xl text-foreground-400">
+            <i class="ri-coupon-3-line"></i>
+          </div>
+          <p class="mt-3 text-sm font-semibold text-foreground-800">Không có mã nào ở mục này</p>
+          <p class="mt-1 text-xs text-foreground-500">Hãy chuyển sang tab "Tất cả" để khám phá thêm ưu đãi nhé!</p>
+        </div>
+      `;
+    } else if (isAll) {
+      listHtml = `
+        ${eligibleList.length ? `
+          <div class="mb-4">
+            <div class="mb-2.5 flex items-center justify-between">
+              <h4 class="text-xs font-bold uppercase tracking-wide text-primary-800 flex items-center gap-1.5">
+                <i class="ri-checkbox-circle-fill text-emerald-600"></i> Mã khả dụng cho đơn này (${eligibleList.length})
+              </h4>
+            </div>
+            <div class="space-y-2.5">
+              ${eligibleList.map(renderVoucherCard).join('')}
+            </div>
+          </div>
+        ` : ''}
+        ${ineligibleList.length ? `
+          <div class="mt-5">
+            <div class="mb-2.5 flex items-center justify-between">
+              <h4 class="text-xs font-bold uppercase tracking-wide text-foreground-500 flex items-center gap-1.5">
+                <i class="ri-error-warning-line text-amber-600"></i> Mã chưa đủ điều kiện (${ineligibleList.length})
+              </h4>
+              <span class="text-[11px] text-foreground-400">Xem lý do chi tiết dưới mỗi mã</span>
+            </div>
+            <div class="space-y-2.5">
+              ${ineligibleList.map(renderVoucherCard).join('')}
+            </div>
+          </div>
+        ` : ''}
+      `;
+    } else {
+      listHtml = `<div class="space-y-2.5">${displayList.map(renderVoucherCard).join('')}</div>`;
+    }
+
+    return `
+      <div class="flex items-center justify-between border-b border-background-200 bg-background-50 px-5 py-4">
+        <div class="flex items-center gap-2.5">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-100 text-primary-700 text-xl">
+            <i class="ri-coupon-3-fill"></i>
+          </div>
+          <div>
+            <h3 class="font-heading text-base font-bold text-foreground-950">Mã giảm giá & Voucher</h3>
+            <p class="text-xs text-foreground-500">Đơn hiện tại: <b class="text-foreground-900">${formatVnd(orderTotal)}</b> &bull; ${c ? esc(c.name) : 'Chưa chọn sân'}</p>
+          </div>
+        </div>
+        <button type="button" data-close class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-foreground-400 transition-colors hover:bg-background-200 hover:text-foreground-700" aria-label="Đóng popup">
+          <i class="ri-close-line text-xl"></i>
+        </button>
+      </div>
+
+      <div class="border-b border-background-200 bg-white p-4">
+        <form id="modal-promo-form" class="flex gap-2">
+          <div class="relative flex-1">
+            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-foreground-400">
+              <i class="ri-price-tag-3-line text-sm"></i>
+            </span>
+            <input type="text" name="code" placeholder="Nhập mã ưu đãi khác (vd: BMT20)..." maxlength="16" value="${esc(S.promoCode)}" class="w-full rounded-lg border border-background-300 bg-background-50 pl-9 pr-3 py-2 text-sm font-mono font-semibold uppercase text-foreground-950 placeholder:font-sans placeholder:font-normal placeholder:normal-case placeholder:text-foreground-400 focus:border-primary-500 focus:bg-white focus:outline-none">
+          </div>
+          <button type="submit" class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-primary-500 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-primary-600">
+            Áp dụng
+          </button>
+        </form>
+        <p id="modal-promo-msg" class="mt-2 hidden text-xs flex items-center gap-1"></p>
+      </div>
+
+      <div class="border-b border-background-200 bg-background-100/60 px-4 py-2">
+        <div class="flex flex-wrap items-center gap-1.5">
+          <button type="button" data-vtab="all" class="cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition-colors ${isAll ? 'bg-primary-500 text-white shadow-xs' : 'bg-background-200 text-foreground-700 hover:bg-background-300'}">
+            Tất cả (${evaluated.length})
+          </button>
+          <button type="button" data-vtab="eligible" class="cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition-colors ${isEligible ? 'bg-primary-500 text-white shadow-xs' : 'bg-background-200 text-foreground-700 hover:bg-background-300'}">
+            Khả dụng (${eligibleList.length})
+          </button>
+          <button type="button" data-vtab="ineligible" class="cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition-colors ${isIneligible ? 'bg-primary-500 text-white shadow-xs' : 'bg-background-200 text-foreground-700 hover:bg-background-300'}">
+            Chưa đủ điều kiện (${ineligibleList.length})
+          </button>
+        </div>
+      </div>
+
+      <div id="voucher-list-body" class="max-h-[50vh] overflow-y-auto p-4 md:p-5 space-y-3">
+        ${listHtml}
+      </div>
+
+      <div class="flex items-center justify-between border-t border-background-200 bg-background-50 px-5 py-3">
+        <a href="${url('/uu-dai')}" target="_blank" class="inline-flex items-center gap-1 text-xs font-semibold text-primary-700 hover:underline">
+          <i class="ri-gift-line"></i> Vòng quay & ưu đãi khác <i class="ri-external-link-line text-[10px]"></i>
+        </a>
+        <button type="button" data-close class="cursor-pointer rounded-lg border border-background-300 bg-white px-4 py-1.5 text-xs font-semibold text-foreground-700 hover:bg-background-100">
+          Đóng
+        </button>
+      </div>
+    `;
+  }
+
+  const modalInstance = openModal({
+    size: 'max-w-xl',
+    html: renderModalContent('all'),
+  });
+
+  const modalEl = modalInstance.el;
+
+  modalEl.addEventListener('click', async (e) => {
+    const tabBtn = e.target.closest('[data-vtab]');
+    if (tabBtn) {
+      modalEl.innerHTML = renderModalContent(tabBtn.dataset.vtab);
+      return;
+    }
+
+    const selectBtn = e.target.closest('[data-modal-select]');
+    if (selectBtn) {
+      const code = selectBtn.dataset.modalSelect;
+      if (S.applied && S.applied.promotion.code === code) {
+        S.applied = null;
+        S.promoCode = '';
+        S.promoError = '';
+        renderPromo();
+        renderSummary();
+        modalEl.innerHTML = renderModalContent(voucherModalTab);
+        return;
+      }
+      S.promoCode = code;
+      selectBtn.disabled = true;
+      selectBtn.innerHTML = '<i class="ri-loader-4-line animate-spin"></i>';
+      await applyPromo();
+      modalInstance.close();
+      return;
+    }
+  });
+
+  modalEl.addEventListener('submit', async (e) => {
+    const form = e.target.closest('#modal-promo-form');
+    if (!form) return;
+    e.preventDefault();
+    const val = form.code.value.trim();
+    if (!val) return;
+    S.promoCode = val;
+    const submitBtn = form.querySelector('button[type=submit]');
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<i class="ri-loader-4-line animate-spin"></i>';
+    }
+    await applyPromo();
+    if (S.applied) {
+      modalInstance.close();
+    } else {
+      const msgEl = modalEl.querySelector('#modal-promo-msg');
+      if (msgEl) {
+        msgEl.className = 'mt-2 text-xs flex items-center gap-1 text-accent-700';
+        msgEl.innerHTML = `<i class="ri-error-warning-line"></i> ${esc(S.promoError || 'Mã không hợp lệ.')}`;
+        msgEl.classList.remove('hidden');
+      }
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = 'Áp dụng';
+      }
+    }
+  });
 }
 
 async function applyPromo(silent = false) {
@@ -502,7 +1181,7 @@ function startWaitingApprovalPoll() {
           showTicket(latest);
         }
       }
-    } catch (e) {}
+    } catch (e) { }
   }, 3000);
 }
 
@@ -792,8 +1471,8 @@ function showTicket(b) {
         </h1>
         <p class="mt-2 max-w-md text-sm leading-relaxed text-foreground-600">
           ${confirmed
-            ? 'Chủ sân đã xác nhận và duyệt đơn đặt sân của bạn. Vé điện tử bên dưới là căn cứ check-in tại sân — bạn chỉ cần trả phần còn lại khi ra sân.'
-            : 'Hệ thống đã ghi nhận khoản cọc của bạn và gửi yêu cầu tới chủ sân. Khi chủ sân duyệt đơn, thông báo giữ sân chính thức và vé QR check-in sẽ được kích hoạt tại đây.'}
+      ? 'Chủ sân đã xác nhận và duyệt đơn đặt sân của bạn. Vé điện tử bên dưới là căn cứ check-in tại sân — bạn chỉ cần trả phần còn lại khi ra sân.'
+      : 'Hệ thống đã ghi nhận khoản cọc của bạn và gửi yêu cầu tới chủ sân. Khi chủ sân duyệt đơn, thông báo giữ sân chính thức và vé QR check-in sẽ được kích hoạt tại đây.'}
         </p>
       </div>
 
@@ -810,13 +1489,13 @@ function showTicket(b) {
       <div class="mt-5 rounded-xl border border-dashed border-primary-300 bg-primary-50/40 p-5 dark:border-primary-800 dark:bg-primary-950/30">
         <div class="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
           ${confirmed
-            ? `<div class="h-[180px] w-[180px] shrink-0 overflow-hidden rounded-md border border-background-200 bg-white p-2"><img src="${ticketQrUrl(b)}" alt="Mã QR vé đặt sân ${esc(b.code)}" class="h-full w-full object-contain"></div>`
-            : `<div class="flex h-[180px] w-[180px] shrink-0 flex-col items-center justify-center gap-2 rounded-md border border-dashed border-accent-300 bg-white p-4 text-center dark:bg-background-100">
+      ? `<div class="h-[180px] w-[180px] shrink-0 overflow-hidden rounded-md border border-background-200 bg-white p-2"><img src="${ticketQrUrl(b)}" alt="Mã QR vé đặt sân ${esc(b.code)}" class="h-full w-full object-contain"></div>`
+      : `<div class="flex h-[180px] w-[180px] shrink-0 flex-col items-center justify-center gap-2 rounded-md border border-dashed border-accent-300 bg-white p-4 text-center dark:bg-background-100">
                 <i class="ri-time-line text-3xl text-accent-600 animate-pulse" aria-hidden="true"></i>
                 <p class="text-xs font-bold text-accent-900">Chờ chủ sân duyệt</p>
                 <p class="text-[10px] leading-relaxed text-foreground-500">Mã QR check-in mở ngay khi chủ sân duyệt đơn</p>
                </div>`
-          }
+    }
           <div class="min-w-0 flex-1">
             <p class="text-xs font-medium text-foreground-500">Mã vé điện tử</p>
             <p class="mt-1 font-heading text-xl font-extrabold tracking-wide text-primary-900 dark:text-primary-300">${esc(b.code)}</p>
@@ -859,16 +1538,15 @@ function showTicket(b) {
         <p class="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-foreground-700"><i class="${canCancel ? 'ri-checkbox-circle-fill text-primary-600' : 'ri-lock-2-fill text-foreground-500'}" aria-hidden="true"></i>${canCancel ? 'Hiện vẫn còn trong thời gian được hủy' : 'Đã qua hạn hủy, cần liên hệ hotline'}</p></div>
       </div></div>
       <div class="mt-4 rounded-md bg-accent-50 px-4 py-3 text-xs leading-relaxed text-accent-900"><span class="font-semibold">Lưu ý:</span> Có mặt trước giờ chơi 10 phút và đưa mã vé cho nhân viên. Cần đổi giờ, hãy gọi ${HOTLINE}; cần hủy, hãy làm trước hạn ghi trên vé để được hoàn 100% cọc.</div>
-      ${
-        confirmed
-          ? `<div class="mt-6 flex flex-col gap-2.5 sm:flex-row">
+      ${confirmed
+      ? `<div class="mt-6 flex flex-col gap-2.5 sm:flex-row">
         <button type="button" data-download class="flex flex-1 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary-500 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-600 disabled:opacity-70"><i class="ri-download-2-line text-base" aria-hidden="true"></i>Tải vé về máy</button>
         <button type="button" data-share class="flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-primary-300 bg-primary-50 px-4 py-3 text-sm font-semibold text-primary-800 transition-colors hover:bg-primary-100 sm:flex-none sm:px-5"><i class="ri-share-forward-2-line text-base" aria-hidden="true"></i>Chia sẻ vé</button>
         <button type="button" onclick="window.print()" class="flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-background-300 px-4 py-3 text-sm font-semibold text-foreground-800 transition-colors hover:border-primary-400 hover:text-primary-700 sm:flex-none sm:px-5"><i class="ri-printer-line" aria-hidden="true"></i>In vé</button></div>
         <p class="mt-2 text-center text-[11px] leading-relaxed text-foreground-500">Ảnh vé có đầy đủ mã QR, giờ chơi và hạn hủy — không cần in giấy. Chia sẻ nhanh cho người cùng đội qua Zalo hoặc Messenger.</p>
         <p data-save-note class="mt-3 hidden"></p>`
-          : ''
-      }
+      : ''
+    }
       <a href="${url('/dat-san')}" class="mt-2.5 block w-full cursor-pointer whitespace-nowrap rounded-md border border-background-300 px-4 py-3 text-center text-sm font-semibold text-foreground-800 transition-colors hover:border-primary-400 hover:text-primary-700">Đặt sân mới</a>
       <a href="${url(`/don-dat-san/${encodeURIComponent(b.code)}`)}" class="mt-3 flex items-center justify-between gap-2 rounded-md bg-primary-500 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-600"><span class="flex items-center gap-2"><i class="ri-qr-code-line" aria-hidden="true"></i>Mở trang đơn: vé QR, chia sẻ link, nhắc lịch</span><i class="ri-arrow-right-line" aria-hidden="true"></i></a>
       <a href="${url('/tai-khoan?tab=upcoming')}" class="mt-2.5 flex items-center justify-between gap-2 rounded-md bg-primary-50 px-4 py-3 text-sm font-semibold text-primary-800 transition-colors hover:bg-primary-100"><span class="flex items-center gap-2"><i class="ri-calendar-event-line" aria-hidden="true"></i>Theo dõi đơn trong tài khoản của tôi</span><i class="ri-arrow-right-line" aria-hidden="true"></i></a>
@@ -884,7 +1562,7 @@ function showTicket(b) {
           clearInterval(ticketPollInterval);
           showTicket(latest);
         }
-      } catch (e) {}
+      } catch (e) { }
     }, 4000);
   }
   const data = ticketData(b);
@@ -982,7 +1660,7 @@ async function goNext() {
 function goBack() {
   S.error = '';
   if (S.step === 3 && S.booking) {
-    api('booking', 'cancel_hold', { id: S.booking.id }).catch(() => {});
+    api('booking', 'cancel_hold', { id: S.booking.id }).catch(() => { });
     S.booking = null;
     clearInterval(holdTimer);
   }
@@ -1001,13 +1679,20 @@ app.addEventListener('click', async (event) => {
   if (el('[data-next]')) return goNext();
   if (el('[data-back-step]')) return goBack();
   if (el('[data-court]')) {
-    S.courtSlug = el('[data-court]').dataset.court;
-    S.startSlot = '';
-    S.error = '';
-    renderError();
-    renderCourtList();
-    renderSlots();
-    return renderSummary();
+    const nextSlug = el('[data-court]').dataset.court;
+    if (nextSlug !== S.courtSlug) {
+      S.courtSlug = nextSlug;
+      S.startSlot = '';
+      S.error = '';
+      // Lọc bỏ các dịch vụ đã chọn nếu không thuộc môn thể thao của sân mới:
+      const validSids = new Set(currentServices().map((s) => s.id));
+      S.extras = S.extras.filter((x) => validSids.has(typeof x === 'string' ? x : x?.id));
+      renderError();
+      renderCourtList();
+      renderSlots();
+      return renderSummary();
+    }
+    return;
   }
   if (el('[data-sport]')) {
     S.filters.sport = el('[data-sport]').dataset.sport;
@@ -1044,6 +1729,7 @@ app.addEventListener('click', async (event) => {
     renderSlots();
     return renderSummary();
   }
+  if (el('[data-open-voucher-modal]')) return openVoucherModal();
   if (el('[data-apply-promo]')) return applyPromo();
   if (el('[data-remove-promo]')) {
     S.applied = null;
@@ -1084,7 +1770,7 @@ app.addEventListener('click', async (event) => {
     return;
   }
   if (el('[data-cancel-hold]')) {
-    if (S.booking) await api('booking', 'cancel_hold', { id: S.booking.id }).catch(() => {});
+    if (S.booking) await api('booking', 'cancel_hold', { id: S.booking.id }).catch(() => { });
     S.booking = null;
     S.error = '';
     S.step = 2;
@@ -1093,6 +1779,88 @@ app.addEventListener('click', async (event) => {
     renderAll();
     saveDraft();
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+  const varQtyBtn = el('[data-var-qty]');
+  if (varQtyBtn) {
+    const vid = varQtyBtn.dataset.varQty;
+    const sid = varQtyBtn.dataset.sid;
+    const delta = Number(varQtyBtn.dataset.delta) || 0;
+    const s = currentServices().find((x) => x.id === sid);
+    const v = s?.variants?.find((v0) => v0.id === vid);
+    if (s && v) {
+      const idx = S.extras.findIndex((x) => typeof x === 'object' && x?.variantId === vid);
+      if (idx === -1) {
+        if (delta > 0) {
+          S.extras.push({
+            id: s.id,
+            variantId: v.id,
+            sku: v.sku,
+            label: s.name,
+            variantName: v.name,
+            price: v.price,
+            quantity: 1,
+          });
+        }
+      } else {
+        const cur = Number(S.extras[idx].quantity) || 1;
+        const next = cur + delta;
+        if (next <= 0) {
+          S.extras.splice(idx, 1);
+        } else if (v.stock > 0 && next > v.stock) {
+          S.extras[idx].quantity = v.stock;
+        } else {
+          S.extras[idx].quantity = next;
+        }
+      }
+      saveDraft();
+      renderStep2();
+      renderSummary();
+      revalidatePromo();
+    }
+    return;
+  }
+
+  const clearSvcBtn = el('[data-clear-service]');
+  if (clearSvcBtn) {
+    const sid = clearSvcBtn.dataset.clearService;
+    S.extras = S.extras.filter((x) => (typeof x === 'string' ? x !== sid : x.id !== sid));
+    saveDraft();
+    renderStep2();
+    renderSummary();
+    revalidatePromo();
+    return;
+  }
+  const openVarBtn = el('[data-open-variants]');
+  if (openVarBtn) {
+    openVariantModal(openVarBtn.dataset.openVariants);
+    return;
+  }
+
+  const simpleQtyBtn = el('[data-extra-simple-qty]');
+  if (simpleQtyBtn) {
+    const sid = simpleQtyBtn.dataset.extraSimpleQty;
+    const delta = Number(simpleQtyBtn.dataset.delta) || 0;
+    const s = currentServices().find((x) => x.id === sid);
+    const idx = S.extras.findIndex((x) => typeof x === 'string' ? x === sid : (x.id === sid && !x.variantId));
+    if (idx !== -1 && s) {
+      const cur = typeof S.extras[idx] === 'string' ? 1 : Math.max(1, Number(S.extras[idx].quantity) || 1);
+      const next = Math.max(1, cur + delta);
+      if (s.stock > 0 && next > s.stock) {
+        S.extras[idx].quantity = s.stock;
+      } else {
+        if (typeof S.extras[idx] === 'string') {
+          S.extras[idx] = { id: s.id, variantId: '', label: s.name, variantName: '', price: s.price, quantity: next };
+        } else {
+          S.extras[idx].quantity = next;
+        }
+      }
+      saveDraft();
+      renderStep2();
+      renderSummary();
+      revalidatePromo();
+    }
+    return;
   }
 });
 
@@ -1122,15 +1890,62 @@ app.addEventListener('change', (event) => {
   if (t.id === 'f-price') S.filters.priceId = t.value;
   if (t.id === 'f-sort') S.filters.sort = t.value;
   if (['f-area', 'f-price', 'f-sort'].includes(t.id)) return renderCourtList();
-  if (t.dataset.extra) {
-    const id = t.dataset.extra;
-    S.extras = t.checked ? [...S.extras, id] : S.extras.filter((x) => x !== id);
-    const label = t.closest('label');
-    label.classList.toggle('border-primary-400', t.checked);
-    label.classList.toggle('bg-primary-50', t.checked);
-    label.classList.toggle('border-background-300', !t.checked);
-    label.classList.toggle('bg-white', !t.checked);
+  if (t.dataset.simpleToggle) {
+    const sid = t.dataset.simpleToggle;
+    const s = currentServices().find((x) => x.id === sid);
+    if (t.checked) {
+      if (s && !isServiceSelected(sid)) {
+        S.extras.push({
+          id: s.id,
+          variantId: '',
+          label: s.name,
+          variantName: '',
+          price: s.price,
+          quantity: 1,
+        });
+      }
+    } else {
+      S.extras = S.extras.filter((x) => (typeof x === 'string' ? x !== sid : x.id !== sid));
+    }
     saveDraft();
+    renderStep2();
+    renderSummary();
+    return revalidatePromo();
+  }
+  if (t.dataset.serviceToggle) {
+    const sid = t.dataset.serviceToggle;
+    const s = currentServices().find((x) => x.id === sid);
+    const hasVars = s && s.hasVariants && Array.isArray(s.variants) && s.variants.length > 0;
+    if (t.checked) {
+      if (s && !isServiceSelected(sid)) {
+        if (hasVars) {
+          const v = s.variants[0];
+          S.extras.push({
+            id: s.id,
+            variantId: v.id,
+            sku: v.sku,
+            label: s.name,
+            variantName: v.name,
+            price: v.price,
+            quantity: 1,
+          });
+        } else {
+          S.extras.push({
+            id: s.id,
+            variantId: '',
+            label: s.name,
+            variantName: '',
+            price: s.price,
+            quantity: 1,
+          });
+        }
+      }
+    } else {
+      S.extras = S.extras.filter((x) => (typeof x === 'string' ? x !== sid : x.id !== sid));
+    }
+    saveDraft();
+    renderStep2();
+    renderSummary();
     return revalidatePromo();
   }
   if (t.dataset.agree !== undefined) {

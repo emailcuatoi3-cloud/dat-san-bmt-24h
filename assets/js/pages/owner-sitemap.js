@@ -17,7 +17,7 @@ import {
   chip, statCard, sectionTitle, modal, slotText, dateText, money, isActive,
 } from './owner-shared.js';
 import { renderOverview, renderBookings, renderInvoices, renderCourts, renderSchedule, renderReviews, openCounterBooking, openBookingDetail } from './owner-ops.js';
-import { renderReports, renderCustomers, renderServices, renderPromotions, renderDeposits } from './owner-biz.js';
+import { renderReports, renderCustomers, renderServices, renderPromotions, renderDeposits } from './owner-biz.js?v=20261122_03';
 
 const subState = {};
 const getSub = (tab, def) => {
@@ -309,10 +309,22 @@ async function renderInventoryView(mode) {
   const typeLabel = { import: ['Nhập kho', 'bg-primary-50 text-primary-700', '+'], export: ['Xuất kho', 'bg-accent-50 text-accent-800', '-'], adjust: ['Kiểm kê', 'bg-secondary-50 text-secondary-800', '='] };
 
   if (mode === 'import') {
+    const serviceOptions = services.map((s) => {
+      if (s.hasVariants && s.variants && s.variants.length > 0) {
+        return `<optgroup label="${esc(s.name)} (Đa thuộc tính)">
+          ${s.variants.map((v) => `<option value="${esc(s.id)}:::${esc(v.id)}">${esc(s.name)} — ${esc(v.name)} (Tồn: ${v.stock} ${esc(s.unit)})</option>`).join('')}
+        </optgroup>`;
+      }
+      return `<option value="${esc(s.id)}:::">${esc(s.name)} (Tồn: ${s.stock} ${esc(s.unit)})</option>`;
+    }).join('');
+
     main().innerHTML = `<div class="grid grid-cols-1 gap-5 lg:grid-cols-[380px_1fr]">
       <form id="inv-form" class="${CARD} p-5 space-y-3.5 h-fit">
         <h3 class="font-heading text-base font-bold text-foreground-950">Tạo phiếu nhập / xuất kho</h3>
-        <div><label class="${LABEL}">Dịch vụ / mặt hàng</label><select name="serviceId" class="${INPUT}">${services.map((s) => `<option value="${esc(s.id)}">${esc(s.name)} (Tồn: ${s.stock} ${esc(s.unit)})</option>`).join('')}</select></div>
+        <div>
+          <label class="${LABEL}">Dịch vụ / mặt hàng &amp; Phân loại</label>
+          <select name="serviceIdCombined" class="${INPUT}">${serviceOptions}</select>
+        </div>
         <div class="grid grid-cols-2 gap-3">
           <div><label class="${LABEL}">Loại phiếu</label><select name="type" class="${INPUT}"><option value="import">Nhập kho (+)</option><option value="export">Xuất kho (-)</option><option value="adjust">Đặt lại số tồn (=)</option></select></div>
           <div><label class="${LABEL}">Số lượng</label><input type="number" name="quantity" min="1" value="24" class="${INPUT}"></div>
@@ -335,8 +347,16 @@ async function renderInventoryView(mode) {
     main().querySelector('#inv-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const f = formData(e.target);
+      const [serviceId, variantId] = (f.serviceIdCombined || '').split(':::');
       try {
-        await api('owner', 'inventory_adjust', { ...f, quantity: Number(f.quantity), unitCost: Number(f.unitCost) || 0 });
+        await api('owner', 'inventory_adjust', {
+          serviceId,
+          variantId: variantId || '',
+          type: f.type,
+          quantity: Number(f.quantity),
+          unitCost: Number(f.unitCost) || 0,
+          note: f.note || '',
+        });
         toast('Đã cập nhật phiếu kho & số tồn!');
         renderSitemapServices();
       } catch (err) { toast(err.message, 'error'); }
@@ -352,12 +372,35 @@ async function renderInventoryView(mode) {
       ${sectionTitle('Bảng kiểm soát tồn kho hiện tại')}
       <div class="overflow-x-auto"><table class="w-full min-w-[600px] text-sm">
         <thead class="bg-background-100 text-left text-xs font-semibold uppercase text-foreground-500"><tr><th class="px-4 py-3">Mặt hàng</th><th class="px-4 py-3 text-right">Giá bán</th><th class="px-4 py-3 text-right">Tồn kho</th><th class="px-4 py-3">Tình trạng</th></tr></thead>
-        <tbody class="divide-y divide-background-200">${services.map((s) => `<tr>
-          <td class="px-4 py-3 font-semibold">${esc(s.name)} <span class="text-xs font-normal text-foreground-500">(${esc(s.unit)})</span></td>
-          <td class="px-4 py-3 text-right">${money(s.price)}</td>
-          <td class="px-4 py-3 text-right font-heading font-extrabold ${s.stock <= 10 ? 'text-accent-700' : 'text-primary-700'}">${s.stock}</td>
-          <td class="px-4 py-3">${s.stock === 0 ? '<span class="rounded-full bg-accent-100 px-2 py-0.5 text-[11px] font-bold text-accent-800">Hết hàng</span>' : s.stock <= 10 ? '<span class="rounded-full bg-accent-50 px-2 py-0.5 text-[11px] font-bold text-accent-700">Sắp hết</span>' : '<span class="rounded-full bg-primary-50 px-2 py-0.5 text-[11px] font-bold text-primary-700">Đủ hàng</span>'}</td>
-        </tr>`).join('')}</tbody>
+        <tbody class="divide-y divide-background-200">${services.map((s) => {
+          const hasVars = s.hasVariants && s.variants && s.variants.length > 0;
+          return `
+            <tr>
+              <td class="px-4 py-3 font-semibold">
+                <div class="flex items-center gap-1.5">
+                  <span>${esc(s.name)}</span>
+                  ${hasVars ? `<span class="rounded bg-primary-100 px-1.5 py-0.5 text-[10px] font-bold text-primary-800">${s.variants.length} phân loại</span>` : ''}
+                </div>
+                <span class="text-xs font-normal text-foreground-500">(${esc(s.unit)})</span>
+              </td>
+              <td class="px-4 py-3 text-right">${hasVars ? `<span class="text-xs text-foreground-500">từ </span>` : ''}${money(s.price)}</td>
+              <td class="px-4 py-3 text-right font-heading font-extrabold ${s.stock <= 10 ? 'text-accent-700' : 'text-primary-700'}">${s.stock}</td>
+              <td class="px-4 py-3">${s.stock === 0 ? '<span class="rounded-full bg-accent-100 px-2 py-0.5 text-[11px] font-bold text-accent-800">Hết hàng</span>' : s.stock <= 10 ? '<span class="rounded-full bg-accent-50 px-2 py-0.5 text-[11px] font-bold text-accent-700">Sắp hết</span>' : '<span class="rounded-full bg-primary-50 px-2 py-0.5 text-[11px] font-bold text-primary-700">Đủ hàng</span>'}</td>
+            </tr>
+            ${hasVars ? s.variants.map((v) => `
+              <tr class="bg-background-50/60 text-xs">
+                <td class="px-4 py-2 pl-8 text-foreground-700 flex items-center gap-1.5">
+                  <i class="ri-corner-down-right-line text-foreground-400"></i>
+                  <b>${esc(v.name)}</b>
+                  <span class="font-mono text-[10px] text-foreground-400">(${esc(v.sku || 'N/A')})</span>
+                </td>
+                <td class="px-4 py-2 text-right text-foreground-700">${money(v.price)}</td>
+                <td class="px-4 py-2 text-right font-bold ${v.stock <= 5 ? 'text-accent-700' : 'text-foreground-800'}">${v.stock}</td>
+                <td class="px-4 py-2 text-foreground-500">${v.stock === 0 ? 'Hết' : v.stock <= 5 ? 'Ít hàng' : 'Sẵn sàng'}</td>
+              </tr>
+            `).join('') : ''}
+          `;
+        }).join('')}</tbody>
       </table></div>
     </section>`;
   }
@@ -501,57 +544,6 @@ export async function renderSitemapSettings() {
       await api('owner', 'settings_save', { depositRate: Number(f.depositRate.value), cancelCutoffHours: Number(f.cancelCutoffHours.value), holdMinutes: Number(f.holdMinutes.value), autoApprove: f.autoApprove.checked, policyNote: f.policyNote.value });
       toast('Đã lưu chính sách cơ sở.');
     };
-  } else if (sub === 'staff') {
-    const list = await api('owner', 'staff_list').catch(() => []);
-    actions().innerHTML = `<button type="button" id="ow-staff-add" class="${BTN}"><i class="ri-user-add-line"></i>Thêm nhân viên</button>`;
-    const PERMS = [['bookings', 'Đơn đặt sân'], ['courts', 'Quản lý sân'], ['services', 'Dịch vụ & kho'], ['payments', 'Thanh toán'], ['reviews', 'Đánh giá']];
-    const openStaffModal = (s = null) => {
-      const m = modal(s ? 'Sửa nhân viên' : 'Thêm nhân viên cơ sở', `<form id="st-form" class="space-y-3">
-        <div class="grid grid-cols-2 gap-3">
-          <div><label class="${LABEL}">Họ tên *</label><input name="fullName" value="${esc(s?.fullName || '')}" class="${INPUT}"></div>
-          <div><label class="${LABEL}">Chức vụ</label><input name="roleName" value="${esc(s?.roleName || 'Nhân viên lễ tân')}" class="${INPUT}"></div>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div><label class="${LABEL}">Số điện thoại</label><input name="phone" value="${esc(s?.phone || '')}" class="${INPUT}"></div>
-          <div><label class="${LABEL}">Email</label><input name="email" value="${esc(s?.email || '')}" class="${INPUT}"></div>
-        </div>
-        <div><label class="${LABEL}">Quyền thao tác</label><div class="flex flex-wrap gap-2">${PERMS.map(([k, l]) => `<label class="inline-flex items-center gap-1.5 rounded border border-background-300 px-2.5 py-1.5 text-xs font-semibold"><input type="checkbox" name="perm" value="${k}" ${(s?.permissions || ['bookings']).includes(k) ? 'checked' : ''} class="accent-primary-500">${l}</label>`).join('')}</div></div>
-        <div><label class="${LABEL}">Trạng thái</label><select name="status" class="${INPUT}"><option value="active" ${!s || s.status === 'active' ? 'selected' : ''}>Đang làm việc</option><option value="inactive" ${s?.status === 'inactive' ? 'selected' : ''}>Tạm nghỉ</option></select></div>
-      </form>`, `<button type="button" data-close class="${BTN_OUT}">Hủy</button><button type="button" data-ok class="${BTN}">Lưu nhân viên</button>`, 'max-w-lg');
-      m.el.querySelector('[data-ok]').onclick = async () => {
-        const f = m.el.querySelector('#st-form');
-        const permissions = [...f.querySelectorAll('[name=perm]:checked')].map((i) => i.value);
-        try {
-          await api('owner', 'staff_save', { ...formData(f), id: s?.id || '', permissions });
-          m.close();
-          toast('Đã lưu thông tin nhân viên.');
-          renderSitemapSettings();
-        } catch (err) { toast(err.message, 'error'); }
-      };
-    };
-    actions().querySelector('#ow-staff-add').onclick = () => openStaffModal(null);
-    main().innerHTML = `<section class="${CARD} overflow-hidden">
-      ${sectionTitle(`Nhân viên & phân quyền (${list.length})`)}
-      ${list.length ? `<div class="divide-y divide-background-200">${list.map((s) => `<div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
-        <div>
-          <p class="text-sm font-bold text-foreground-950">${esc(s.fullName)} <span class="ml-1 rounded bg-background-100 px-2 py-0.5 text-[11px] font-semibold text-foreground-600">${esc(s.roleName)}</span></p>
-          <p class="mt-0.5 text-xs text-foreground-500">${esc(s.phone || '—')} · ${esc(s.email || '—')}</p>
-          <div class="mt-1.5 flex flex-wrap gap-1">${(s.permissions || []).map((k) => `<span class="rounded bg-primary-50 px-1.5 py-0.5 text-[10px] font-semibold text-primary-700">${(PERMS.find((p) => p[0] === k) || [])[1] || k}</span>`).join('')}</div>
-        </div>
-        <div class="flex items-center gap-1.5">
-          <button type="button" data-st-edit="${s.id}" class="${BTN_SM}"><i class="ri-edit-line"></i>Sửa</button>
-          <button type="button" data-st-del="${s.id}" class="${BTN_SM_DANGER}"><i class="ri-delete-bin-line"></i></button>
-        </div>
-      </div>`).join('')}</div>` : `<div class="p-6">${emptyState('ri-team-line', 'Chưa có nhân viên nào')}</div>`}
-    </section>`;
-    on(main(), 'click', '[data-st-edit]', (e, el) => openStaffModal(list.find((x) => x.id === el.dataset.stEdit)));
-    on(main(), 'click', '[data-st-del]', async (e, el) => {
-      if (await confirmBox({ title: 'Xóa nhân viên?', message: 'Xác nhận xóa tài khoản nhân viên này khỏi cơ sở?', danger: true })) {
-        await api('owner', 'staff_delete', { id: el.dataset.stDel });
-        toast('Đã xóa nhân viên.');
-        renderSitemapSettings();
-      }
-    });
   } else {
     const [cfg, notifs] = await Promise.all([api('owner', 'settings_get').catch(() => ({})), api('account', 'notifications').catch(() => [])]);
     main().innerHTML = `<div class="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -578,12 +570,237 @@ export async function renderSitemapSettings() {
     'settings',
     [
       ['policy', 'Chính sách đặt, cọc, hủy', 'ri-shield-check-line'],
-      ['staff', 'Nhân viên & phân quyền', 'ri-team-line'],
-      ['notifications', 'Thông báo', 'ri-notification-3-line'],
+      ['notifications', 'Cấu hình thông báo', 'ri-notification-3-line'],
     ],
     sub,
     renderSitemapSettings,
   );
+}
+
+// =====================================================================
+// 8B. QUẢN LÝ NHÂN VIÊN (Phân quyền & Tài khoản nhân viên cơ sở)
+// =====================================================================
+export async function renderSitemapStaff() {
+  actions().innerHTML = `<button type="button" id="ow-staff-add" class="${BTN}"><i class="ri-user-add-line"></i>Thêm nhân viên</button>`;
+  main().innerHTML = loadingBlock('Đang tải danh sách nhân viên...');
+
+  const list = await api('owner', 'staff_list').catch(() => []);
+  const PERMS = [
+    ['bookings', 'Đơn đặt & Check-in', 'ri-calendar-check-line'],
+    ['courts', 'Quản lý & khóa sân', 'ri-football-line'],
+    ['services', 'Dịch vụ & kho nước', 'ri-cup-line'],
+    ['payments', 'Thu ngân & hóa đơn', 'ri-money-dollar-circle-line'],
+    ['promotions', 'Khuyến mãi & ưu đãi', 'ri-coupon-3-line'],
+    ['customers', 'Khách hàng & đánh giá', 'ri-group-line'],
+  ];
+
+  let filterStatus = 'all';
+  let searchText = '';
+
+  const renderList = () => {
+    const totalStaff = list.length;
+    const activeStaff = list.filter((s) => s.status === 'active').length;
+    const inactiveStaff = totalStaff - activeStaff;
+    const hasPwdStaff = list.filter((s) => s.hasPassword).length;
+
+    const filtered = list.filter((s) => {
+      if (filterStatus !== 'all' && s.status !== filterStatus) return false;
+      if (searchText) {
+        const q = searchText.toLowerCase();
+        const match = (s.fullName || '').toLowerCase().includes(q)
+          || (s.email || '').toLowerCase().includes(q)
+          || (s.phone || '').toLowerCase().includes(q)
+          || (s.roleName || '').toLowerCase().includes(q);
+        if (!match) return false;
+      }
+      return true;
+    });
+
+    main().innerHTML = `
+      <div class="grid grid-cols-2 gap-3 lg:grid-cols-4 mb-5">
+        ${statCard('ri-team-line', 'Tổng số nhân sự', totalStaff, 'Tài khoản nhân viên cơ sở')}
+        ${statCard('ri-user-follow-line', 'Đang làm việc', activeStaff, 'Được phép đăng nhập', 'primary')}
+        ${statCard('ri-user-unfollow-line', 'Tạm khóa / Nghỉ', inactiveStaff, 'Đang bị khóa quyền', inactiveStaff ? 'accent' : 'neutral')}
+        ${statCard('ri-key-line', 'Đã cấp mật khẩu', hasPwdStaff, 'Có thể vào kênh làm việc', 'secondary')}
+      </div>
+
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" data-f-status="all" class="${chip(filterStatus === 'all')}">Tất cả (${totalStaff})</button>
+          <button type="button" data-f-status="active" class="${chip(filterStatus === 'active')}">Đang làm việc (${activeStaff})</button>
+          <button type="button" data-f-status="inactive" class="${chip(filterStatus === 'inactive')}">Tạm khóa (${inactiveStaff})</button>
+        </div>
+        <div class="w-full sm:w-72">
+          <div class="relative">
+            <i class="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-foreground-400"></i>
+            <input type="search" id="ow-st-search" value="${esc(searchText)}" placeholder="Tìm theo tên, email, SĐT..." class="${INPUT} pl-9 py-2 text-xs">
+          </div>
+        </div>
+      </div>
+
+      <section class="${CARD} overflow-hidden">
+        ${sectionTitle(`<i class="ri-team-line text-primary-600 mr-1.5"></i>Danh sách nhân viên cơ sở (${filtered.length})`)}
+        ${filtered.length ? `<div class="divide-y divide-background-200">${filtered.map((s) => {
+          const initials = (s.fullName || 'NV').split(' ').map(w => w[0]).slice(-2).join('').toUpperCase();
+          return `
+            <div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between transition-colors hover:bg-background-50/60">
+              <div class="flex items-start gap-3 min-w-0">
+                <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${s.status === 'active' ? 'bg-primary-600 text-white' : 'bg-background-300 text-foreground-600'} text-sm font-bold shadow-sm">
+                  ${esc(initials)}
+                </span>
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <p class="font-heading text-sm font-bold text-foreground-950">${esc(s.fullName)}</p>
+                    <span class="rounded bg-background-100 px-2 py-0.5 text-[11px] font-semibold text-foreground-700">${esc(s.roleName)}</span>
+                    ${s.status === 'active' 
+                      ? '<span class="inline-flex items-center gap-1 rounded-full bg-primary-50 px-2 py-0.5 text-[10px] font-bold text-primary-700"><span class="h-1.5 w-1.5 rounded-full bg-primary-500 animate-pulse"></span>Đang làm việc</span>' 
+                      : '<span class="rounded-full bg-accent-100 px-2 py-0.5 text-[10px] font-bold text-accent-800">Tạm khóa</span>'}
+                  </div>
+                  <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-foreground-500">
+                    <span class="flex items-center gap-1"><i class="ri-mail-line text-foreground-400"></i> ${esc(s.email || '—')}</span>
+                    ${s.phone ? `<span class="flex items-center gap-1">· <i class="ri-phone-line text-foreground-400"></i> <a href="tel:${esc(s.phone)}" class="text-primary-700 hover:underline">${esc(s.phone)}</a></span>` : ''}
+                    <span class="flex items-center gap-1">· <i class="ri-key-line ${s.hasPassword ? 'text-primary-600' : 'text-accent-500'}"></i> ${s.hasPassword ? '<span class="text-foreground-600">Đã cấp mật khẩu</span>' : '<span class="text-accent-600 font-medium">Chưa có mật khẩu</span>'}</span>
+                  </div>
+                  <div class="mt-2 flex flex-wrap gap-1.5">
+                    ${(s.permissions || []).map((k) => {
+                      const p = PERMS.find((x) => x[0] === k);
+                      return `<span class="inline-flex items-center gap-1 rounded bg-primary-50/80 border border-primary-200/50 px-2 py-0.5 text-[10px] font-semibold text-primary-800"><i class="${p ? p[2] : 'ri-check-line'} text-[11px]"></i>${p ? p[1] : k}</span>`;
+                    }).join('')}
+                  </div>
+                </div>
+              </div>
+              <div class="flex items-center gap-1.5 sm:self-center shrink-0">
+                <button type="button" data-st-edit="${s.id}" class="${BTN_SM}" title="Chỉnh sửa thông tin & phân quyền"><i class="ri-edit-line"></i>Sửa</button>
+                <button type="button" data-st-pwd="${s.id}" class="${BTN_SM}" title="Đổi hoặc cấp mật khẩu mới"><i class="ri-key-2-line text-primary-600"></i>Đổi pass</button>
+                ${s.status === 'active'
+                  ? `<button type="button" data-st-toggle="${s.id}" class="${BTN_SM_DANGER}" title="Tạm khóa quyền đăng nhập"><i class="ri-lock-line"></i>Khóa</button>`
+                  : `<button type="button" data-st-toggle="${s.id}" class="${BTN_SM}" title="Mở khóa cho nhân viên làm việc"><i class="ri-lock-unlock-line text-primary-600"></i>Mở</button>`}
+                <button type="button" data-st-del="${s.id}" class="${BTN_SM_DANGER} !bg-accent-700 hover:!bg-accent-800 text-white" title="Xóa nhân viên"><i class="ri-delete-bin-line"></i></button>
+              </div>
+            </div>`;
+        }).join('')}</div>` : `<div class="p-8 text-center">${emptyState('ri-team-line', 'Không tìm thấy nhân viên nào phù hợp', 'Bạn có thể bấm nút "Thêm nhân viên" ở trên để tạo tài khoản mới.')}</div>`}
+      </section>
+    `;
+
+    const searchInput = main().querySelector('#ow-st-search');
+    if (searchInput) {
+      searchInput.oninput = (e) => {
+        searchText = e.target.value.trim();
+        renderList();
+      };
+    }
+  };
+
+  const openStaffModal = (s = null) => {
+    const m = modal(s ? 'Sửa thông tin nhân viên' : 'Thêm tài khoản nhân viên cơ sở', `<form id="st-form" class="space-y-3.5">
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="${LABEL}">Họ và tên *</label><input name="fullName" value="${esc(s?.fullName || '')}" required class="${INPUT}" placeholder="Nguyễn Văn A"></div>
+        <div><label class="${LABEL}">Chức vụ / Vị trí</label><input name="roleName" value="${esc(s?.roleName || 'Nhân viên lễ tân')}" class="${INPUT}" placeholder="Lễ tân ca tối"></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="${LABEL}">Số điện thoại</label><input name="phone" value="${esc(s?.phone || '')}" class="${INPUT}" placeholder="09xx xxx xxx"></div>
+        <div><label class="${LABEL}">Email đăng nhập *</label><input type="email" name="email" value="${esc(s?.email || '')}" required class="${INPUT}" placeholder="nhanvien@sanbong.vn"></div>
+      </div>
+      <div class="rounded-lg border border-background-200 bg-background-50 p-3">
+        <label class="${LABEL} flex items-center justify-between">
+          <span><i class="ri-lock-password-line text-primary-600 mr-1"></i>Mật khẩu đăng nhập ${s ? '<span class="text-xs font-normal text-foreground-500">(để trống nếu giữ nguyên)</span>' : '*'}</span>
+        </label>
+        <input type="password" name="password" minlength="6" ${s ? '' : 'required'} class="${INPUT} mt-1 bg-white" placeholder="${s ? 'Nhập mật khẩu mới nếu muốn đổi' : 'Tối thiểu 6 ký tự (vd: 123456)'}">
+        <p class="mt-1.5 text-[11px] text-foreground-500">Nhân viên sẽ sử dụng Email và Mật khẩu này để đăng nhập trực tiếp tại trang <b>/dang-nhap</b>.</p>
+      </div>
+      <div>
+        <label class="${LABEL}">Phân quyền thao tác</label>
+        <div class="grid grid-cols-2 gap-2 mt-1">
+          ${PERMS.map(([k, l, icon]) => `<label class="inline-flex items-center gap-2 rounded border border-background-300 bg-white p-2 text-xs font-medium hover:border-primary-400 cursor-pointer transition-colors">
+            <input type="checkbox" name="perm" value="${k}" ${(s?.permissions || ['bookings', 'services']).includes(k) ? 'checked' : ''} class="h-4 w-4 rounded accent-primary-600">
+            <span class="flex items-center gap-1.5"><i class="${icon} text-primary-600"></i>${l}</span>
+          </label>`).join('')}
+        </div>
+        <p class="mt-1 text-[11px] text-foreground-400 italic">Lưu ý: Nhân viên tuyệt đối không thể xem số tài khoản nhận tiền cọc VietQR và cài đặt tài chính của chủ sân.</p>
+      </div>
+      <div>
+        <label class="${LABEL}">Trạng thái làm việc</label>
+        <select name="status" class="${INPUT}">
+          <option value="active" ${!s || s.status === 'active' ? 'selected' : ''}>🟢 Đang làm việc (Được phép đăng nhập)</option>
+          <option value="inactive" ${s?.status === 'inactive' ? 'selected' : ''}>🔴 Tạm nghỉ / Khóa đăng nhập</option>
+        </select>
+      </div>
+    </form>`, `<button type="button" data-close class="${BTN_OUT}">Hủy</button><button type="button" data-ok class="${BTN}">Lưu tài khoản nhân viên</button>`, 'max-w-lg');
+
+    m.el.querySelector('[data-ok]').onclick = async () => {
+      const f = m.el.querySelector('#st-form');
+      if (!f.reportValidity()) return;
+      const permissions = [...f.querySelectorAll('[name=perm]:checked')].map((i) => i.value);
+      if (!permissions.length) {
+        toast('Vui lòng chọn ít nhất 1 quyền thao tác cho nhân viên.', 'warning');
+        return;
+      }
+      try {
+        await api('owner', 'staff_save', { ...formData(f), id: s?.id || '', permissions });
+        m.close();
+        toast(s ? 'Đã cập nhật thông tin nhân viên.' : 'Đã tạo tài khoản nhân viên thành công.');
+        renderSitemapStaff();
+      } catch (err) { toast(err.message, 'error'); }
+    };
+  };
+
+  const openResetPasswordModal = (s) => {
+    const m = modal(`Cấp mật khẩu mới cho ${esc(s.fullName)}`, `<form id="st-pwd-form" class="space-y-3">
+      <p class="text-xs text-foreground-600">Đặt mật khẩu mới cho tài khoản đăng nhập <b>${esc(s.email)}</b>:</p>
+      <div>
+        <label class="${LABEL}">Mật khẩu mới *</label>
+        <input type="password" name="password" minlength="6" required class="${INPUT}" placeholder="Tối thiểu 6 ký tự (vd: 123456)">
+      </div>
+      <p class="text-[11px] text-foreground-400">Sau khi lưu, nhân viên sẽ dùng ngay mật khẩu này để đăng nhập vào Kênh chủ sân.</p>
+    </form>`, `<button type="button" data-close class="${BTN_OUT}">Hủy</button><button type="button" data-ok class="${BTN}">Cập nhật mật khẩu</button>`, 'max-w-md');
+
+    m.el.querySelector('[data-ok]').onclick = async () => {
+      const f = m.el.querySelector('#st-pwd-form');
+      if (!f.reportValidity()) return;
+      const pwd = f.password.value;
+      try {
+        await api('owner', 'staff_save', { id: s.id, fullName: s.fullName, roleName: s.roleName, phone: s.phone, email: s.email, status: s.status, permissions: s.permissions, password: pwd });
+        m.close();
+        toast(`Đã cập nhật mật khẩu cho ${s.fullName}.`);
+        renderSitemapStaff();
+      } catch (err) { toast(err.message, 'error'); }
+    };
+  };
+
+  renderList();
+
+  actions().querySelector('#ow-staff-add').onclick = () => openStaffModal(null);
+
+  on(main(), 'click', '[data-f-status]', (e, el) => {
+    filterStatus = el.dataset.fStatus;
+    renderList();
+  });
+
+  on(main(), 'click', '[data-st-edit]', (e, el) => openStaffModal(list.find((x) => x.id === el.dataset.stEdit)));
+
+  on(main(), 'click', '[data-st-pwd]', (e, el) => openResetPasswordModal(list.find((x) => x.id === el.dataset.stPwd)));
+
+  on(main(), 'click', '[data-st-toggle]', async (e, el) => {
+    const s = list.find((x) => x.id === el.dataset.stToggle);
+    if (!s) return;
+    const newStatus = s.status === 'active' ? 'inactive' : 'active';
+    const actionLabel = newStatus === 'active' ? 'Mở khóa tài khoản' : 'Tạm khóa tài khoản';
+    if (await confirmBox({ title: `${actionLabel}?`, message: `Xác nhận ${actionLabel.toLowerCase()} của nhân viên <b>${esc(s.fullName)}</b>?`, danger: newStatus === 'inactive' })) {
+      try {
+        await api('owner', 'staff_save', { id: s.id, fullName: s.fullName, roleName: s.roleName, phone: s.phone, email: s.email, status: newStatus, permissions: s.permissions });
+        toast(`Đã ${actionLabel.toLowerCase()} thành công.`);
+        renderSitemapStaff();
+      } catch (err) { toast(err.message, 'error'); }
+    }
+  });
+
+  on(main(), 'click', '[data-st-del]', async (e, el) => {
+    if (await confirmBox({ title: 'Xóa nhân viên?', message: 'Xác nhận xóa tài khoản nhân viên này khỏi cơ sở? Nhân viên sẽ không thể đăng nhập được nữa.', danger: true })) {
+      await api('owner', 'staff_delete', { id: el.dataset.stDel });
+      toast('Đã xóa nhân viên.');
+      renderSitemapStaff();
+    }
+  });
 }
 
 // =====================================================================

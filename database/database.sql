@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost:3306
--- Generation Time: Nov 18, 2026 at 02:23 PM
+-- Generation Time: Nov 22, 2026 at 01:52 PM
 -- Server version: 8.4.3
 -- PHP Version: 8.3.36
 
@@ -63,7 +63,6 @@ CREATE TABLE IF NOT EXISTS `admin_role_assignments` (
 --
 
 INSERT INTO `admin_role_assignments` (`user_id`, `role_key`, `assigned_by`, `updated_at`) VALUES
-(1, 'super_admin', 'Hệ thống', '2026-11-09 17:48:57'),
 (4, 'moderator', 'Quản trị viên BMT', '2026-11-09 17:48:57');
 
 -- --------------------------------------------------------
@@ -95,7 +94,35 @@ INSERT INTO `audit_logs` (`id`, `actor_id`, `actor_name`, `actor_role`, `module`
 (3, 1, 'Quản trị viên BMT', 'super_admin', 'content', 'Xuất bản nội dung', 'Giờ vàng giảm 20% buổi sáng', 'Banner trang chủ', 'info', '2026-11-08 17:48:57'),
 (4, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Duyệt đăng ký chủ sân', 'Sân bóng đá Điện Biên · abc@gmail.com', '', 'success', '2026-11-13 16:25:14'),
 (5, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Duyệt đăng ký chủ sân', 'Sân bóng đá Điện Biên · khach@bmt24h.vn', '', 'success', '2026-11-13 16:25:55'),
-(6, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Đổi vai trò tài khoản', 'khach@bmt24h.vn', 'Chủ sân → Khách hàng', 'warning', '2026-11-16 16:38:45');
+(6, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Đổi vai trò tài khoản', 'khach@bmt24h.vn', 'Chủ sân → Khách hàng', 'warning', '2026-11-16 16:38:45'),
+(7, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Xác thực Sudo Mode', 'admin@bmt24h.vn', 'Mở khóa phiên quản trị nhạy cảm thành công (15 phút)', 'info', '2026-11-22 19:30:37'),
+(8, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Ghost Login (Đăng nhập danh nghĩa)', 'abc@gmail.com', 'Quản trị viên Quản trị viên BMT bắt đầu phiên giả lập tài khoản ID 7', 'warning', '2026-11-22 19:30:37'),
+(9, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Thoát Ghost Login', 'abc@gmail.com', 'Quản trị viên đã kết thúc phiên giả lập và trở lại tài khoản quản trị.', 'info', '2026-11-22 19:32:43'),
+(10, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Ghost Login (Đăng nhập danh nghĩa)', 'khach@bmt24h.vn', 'Quản trị viên Quản trị viên BMT bắt đầu phiên giả lập tài khoản ID 3', 'warning', '2026-11-22 19:33:36'),
+(11, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Thoát Ghost Login', 'khach@bmt24h.vn', 'Quản trị viên đã kết thúc phiên giả lập và trở lại tài khoản quản trị.', 'info', '2026-11-22 19:33:45'),
+(12, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Ghost Login (Đăng nhập danh nghĩa)', 'abc@gmail.com', 'Quản trị viên Quản trị viên BMT bắt đầu phiên giả lập tài khoản ID 7', 'warning', '2026-11-22 19:34:23'),
+(13, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Xác thực Sudo Mode', 'admin@bmt24h.vn', 'Mở khóa phiên quản trị nhạy cảm thành công (15 phút)', 'info', '2026-11-22 19:36:08'),
+(14, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Ghost Login (Đăng nhập danh nghĩa)', 'abc@gmail.com', 'Quản trị viên Quản trị viên BMT bắt đầu phiên giả lập tài khoản ID 7', 'warning', '2026-11-22 19:36:09'),
+(15, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Thoát Ghost Login', 'abc@gmail.com', 'Quản trị viên đã kết thúc phiên giả lập và trở lại tài khoản quản trị.', 'info', '2026-11-22 19:51:52'),
+(16, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Xác thực Sudo Mode', 'admin@bmt24h.vn', 'Mở khóa phiên quản trị nhạy cảm thành công (15 phút)', 'info', '2026-11-22 19:51:59'),
+(17, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Ghost Login (Đăng nhập danh nghĩa)', 'khach@bmt24h.vn', 'Quản trị viên Quản trị viên BMT bắt đầu phiên giả lập tài khoản ID 3', 'warning', '2026-11-22 19:51:59'),
+(18, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Thoát Ghost Login', 'khach@bmt24h.vn', 'Quản trị viên đã kết thúc phiên giả lập và trở lại tài khoản quản trị.', 'info', '2026-11-22 19:54:07'),
+(19, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Ghost Login (Đăng nhập danh nghĩa)', 'chusan2@bmt24h.vn', 'Quản trị viên Quản trị viên BMT bắt đầu phiên giả lập tài khoản ID 5', 'warning', '2026-11-22 19:54:25'),
+(20, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Thoát Ghost Login', 'chusan2@bmt24h.vn', 'Quản trị viên đã kết thúc phiên giả lập và trở lại tài khoản quản trị.', 'info', '2026-11-22 19:54:29'),
+(21, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Xác thực Sudo Mode', 'admin@bmt24h.vn', 'Mở khóa phiên quản trị nhạy cảm thành công (15 phút)', 'info', '2026-11-22 20:09:30'),
+(22, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Ghost Login (Đăng nhập danh nghĩa)', 'vunamphi1202@gmail.com', 'Quản trị viên Quản trị viên BMT bắt đầu phiên giả lập tài khoản ID 6', 'warning', '2026-11-22 20:09:31'),
+(23, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Thoát Ghost Login', 'vunamphi1202@gmail.com', 'Quản trị viên đã kết thúc phiên giả lập và trở lại tài khoản quản trị.', 'info', '2026-11-22 20:10:38'),
+(24, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Ghost Login (Đăng nhập danh nghĩa)', 'chusan2@bmt24h.vn', 'Quản trị viên Quản trị viên BMT bắt đầu phiên giả lập tài khoản ID 5', 'warning', '2026-11-22 20:10:45'),
+(25, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Thoát Ghost Login', 'chusan2@bmt24h.vn', 'Quản trị viên đã kết thúc phiên giả lập và trở lại tài khoản quản trị.', 'info', '2026-11-22 20:10:58'),
+(26, 1, 'Quản trị viên BMT', 'super_admin', 'moderation', 'Tiếp nhận báo cáo', 'Sân bóng FC Đắk Lắk', '', 'info', '2026-11-22 20:17:07'),
+(27, 1, 'Quản trị viên BMT', 'super_admin', 'moderation', 'Tiếp nhận báo cáo', 'Sân bóng FC Đắk Lắk', '', 'info', '2026-11-22 20:17:07'),
+(28, 1, 'Quản trị viên BMT', 'super_admin', 'moderation', 'Tiếp nhận báo cáo', 'Tài khoản Lộc Sport', '', 'info', '2026-11-22 20:17:25'),
+(29, 1, 'Quản trị viên BMT', 'super_admin', 'moderation', 'Tiếp nhận báo cáo', 'Tài khoản Lộc Sport', '', 'info', '2026-11-22 20:17:25'),
+(30, 1, 'Quản trị viên BMT', 'super_admin', 'moderation', 'Tiếp nhận báo cáo', 'Tài khoản Lộc Sport', '', 'info', '2026-11-22 20:17:25'),
+(31, 1, 'Quản trị viên BMT', 'super_admin', 'moderation', 'Tiếp nhận báo cáo', 'Tài khoản Lộc Sport', '', 'info', '2026-11-22 20:17:25'),
+(32, 1, 'Quản trị viên BMT', 'super_admin', 'bookings', 'Duyệt đơn đặt sân', 'BMT20261120-7887 · Sân bóng Hòa Thắng', '', 'success', '2026-11-22 20:17:40'),
+(33, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Xác thực Sudo Mode', 'admin@bmt24h.vn', 'Mở khóa phiên quản trị nhạy cảm thành công (15 phút)', 'info', '2026-11-22 20:36:57'),
+(34, 1, 'Quản trị viên BMT', 'super_admin', 'accounts', 'Thu hồi bộ quyền quản trị', 'admin@bmt24h.vn', '', 'warning', '2026-11-22 20:36:57');
 
 -- --------------------------------------------------------
 
@@ -172,12 +199,14 @@ CREATE TABLE IF NOT EXISTS `bookings` (
 INSERT INTO `bookings` (`id`, `code`, `source`, `court_id`, `court_name`, `sport`, `area`, `image`, `customer_id`, `customer_name`, `customer_phone`, `customer_email`, `booking_date`, `start_slot`, `duration_minutes`, `slots`, `unit_price`, `base_total`, `discount_amount`, `promo_code`, `total_price`, `deposit_amount`, `extras`, `payment_method`, `payment_status`, `payment_label`, `status`, `approved_at`, `reject_reason`, `cancel_reason`, `hold_expires_at`, `checked_in_at`, `note`, `created_at`, `updated_at`) VALUES
 ('cb-261109180458-0918a4', 'BMT20261109-3150', 'online', 'c06', 'Sân bóng Thắng Lợi', 'football', 'Thắng Lợi', 'https://readdy.ai/api/search-image?query=Premium%20five%20a%20side%20football%20court%20illuminated%20at%20night%2C%20lush%20green%20turf%2C%20glowing%20floodlights%2C%20modern%20clubhouse%20building%20beside%20the%20pitch%2C%20cinematic%20sports%20photography%2C%20no%20people&width=1000&height=700&seq=bmt-court-fb-06a&orientation=landscape', 6, 'Nguyễn Văn A', '0123456789', 'vunamphi1202@gmail.com', '2026-11-13', '08:00', 60, '[\"08:00\"]', 200000, 200000, 0, NULL, 200000, 60000, '[]', 'vietqr-deposit', 'deposit_paid', NULL, 'completed', NULL, NULL, NULL, '2026-11-09 18:14:58', NULL, NULL, '2026-11-09 18:04:58', '2026-11-13 16:25:05'),
 ('cb-261111173415-a663d8', 'BMT20261111-1904', 'online', 'c10', 'Cầu lông Victory BMT', 'badminton', 'Thành Công', 'https://readdy.ai/api/search-image?query=Premium%20indoor%20badminton%20club%20with%20eight%20green%20BWF%20mats%2C%20very%20high%20ceiling%2C%20professional%20sports%20lighting%2C%20modern%20interior%20design%2C%20wide%20architectural%20shot%2C%20no%20people&width=1000&height=700&seq=bmt-court-bd-04a&orientation=landscape', NULL, 'svdv', '0123456789', NULL, '2026-11-11', '21:00', 60, '[\"21:00\"]', 100000, 130000, 0, NULL, 130000, 39000, '[]', 'vietqr-deposit', 'deposit_paid', NULL, 'completed', NULL, NULL, NULL, '2026-11-11 17:44:15', NULL, NULL, '2026-11-11 17:34:15', '2026-11-13 16:25:05'),
-('cb-261111175022-6a2e73', 'BMT20261111-6553', 'online', 'c02', 'Sân bóng FC Đắk Lắk', 'football', 'Tân An', 'https://readdy.ai/api/search-image?query=Full%20size%20eleven%20a%20side%20football%20pitch%20with%20green%20artificial%20turf%20and%20small%20spectator%20stand%2C%20evening%20sky%2C%20floodlight%20towers%2C%20clean%20highway%20fence%2C%20professional%20sports%20venue%20photography%2C%20no%20people&width=1000&height=700&seq=bmt-court-fb-02a&orientation=landscape', NULL, 'svdv', '0123456789', NULL, '2026-11-20', '16:00', 60, '[\"16:00\"]', 350000, 400000, 0, NULL, 400000, 120000, '[]', 'vietqr-deposit', 'deposit_paid', NULL, 'confirmed', NULL, NULL, NULL, '2026-11-11 18:00:22', NULL, NULL, '2026-11-11 17:50:22', '2026-11-11 17:50:40'),
+('cb-261111175022-6a2e73', 'BMT20261111-6553', 'online', 'c02', 'Sân bóng FC Đắk Lắk', 'football', 'Tân An', 'https://readdy.ai/api/search-image?query=Full%20size%20eleven%20a%20side%20football%20pitch%20with%20green%20artificial%20turf%20and%20small%20spectator%20stand%2C%20evening%20sky%2C%20floodlight%20towers%2C%20clean%20highway%20fence%2C%20professional%20sports%20venue%20photography%2C%20no%20people&width=1000&height=700&seq=bmt-court-fb-02a&orientation=landscape', NULL, 'svdv', '0123456789', NULL, '2026-11-20', '16:00', 60, '[\"16:00\"]', 350000, 400000, 0, NULL, 400000, 120000, '[]', 'vietqr-deposit', 'deposit_paid', NULL, 'completed', NULL, NULL, NULL, '2026-11-11 18:00:22', NULL, NULL, '2026-11-11 17:50:22', '2026-11-21 15:26:14'),
 ('cb-261116165022-26abc0', 'BMT20261116-6119', 'online', 'c06', 'Sân bóng Thắng Lợi', 'football', 'Thắng Lợi', 'https://readdy.ai/api/search-image?query=Premium%20five%20a%20side%20football%20court%20illuminated%20at%20night%2C%20lush%20green%20turf%2C%20glowing%20floodlights%2C%20modern%20clubhouse%20building%20beside%20the%20pitch%2C%20cinematic%20sports%20photography%2C%20no%20people&width=1000&height=700&seq=bmt-court-fb-06a&orientation=landscape', 3, 'Nguyễn Minh Quân', '0912345678', 'khach@bmt24h.vn', '2026-11-28', '08:00', 60, '[\"08:00\"]', 200000, 200000, 0, NULL, 200000, 60000, '[]', 'vietqr-deposit', 'deposit_paid', NULL, 'confirmed', NULL, NULL, NULL, '2026-11-16 17:00:22', NULL, NULL, '2026-11-16 16:50:22', '2026-11-16 16:56:45'),
 ('cb-261116170624-582fec', 'BMT20261116-4517', 'online', 'c10', 'Cầu lông Victory BMT', 'badminton', 'Thành Công', 'https://readdy.ai/api/search-image?query=Premium%20indoor%20badminton%20club%20with%20eight%20green%20BWF%20mats%2C%20very%20high%20ceiling%2C%20professional%20sports%20lighting%2C%20modern%20interior%20design%2C%20wide%20architectural%20shot%2C%20no%20people&width=1000&height=700&seq=bmt-court-bd-04a&orientation=landscape', 3, 'Nguyễn Minh Quân', '0912345678', 'khach@bmt24h.vn', '2026-11-16', '21:00', 60, '[\"21:00\"]', 100000, 130000, 0, NULL, 130000, 39000, '[]', 'vietqr-deposit', 'deposit_paid', NULL, 'completed', '2026-11-16 17:21:33', NULL, NULL, '2026-11-16 17:16:24', NULL, NULL, '2026-11-16 17:06:24', '2026-11-18 20:15:00'),
 ('cb-261116172016-b04880', 'BMT20261116-8152', 'online', 'c06', 'Sân bóng Thắng Lợi', 'football', 'Thắng Lợi', 'https://readdy.ai/api/search-image?query=Premium%20five%20a%20side%20football%20court%20illuminated%20at%20night%2C%20lush%20green%20turf%2C%20glowing%20floodlights%2C%20modern%20clubhouse%20building%20beside%20the%20pitch%2C%20cinematic%20sports%20photography%2C%20no%20people&width=1000&height=700&seq=bmt-court-fb-06a&orientation=landscape', 3, 'Nguyễn Minh Quân', '0912345678', 'khach@bmt24h.vn', '2026-11-27', '15:00', 60, '[\"15:00\"]', 200000, 200000, 0, NULL, 200000, 60000, '[]', 'vietqr-deposit', 'unpaid', NULL, 'cancelled', '2026-11-16 17:21:46', NULL, 'Hết thời gian giữ chỗ (5 phút) do chưa thanh toán tiền cọc.', '2026-11-16 17:26:46', NULL, NULL, '2026-11-16 17:20:16', '2026-11-16 17:28:33'),
 ('cb-261116174126-bc6e88', 'BMT20261116-3515', 'online', 'c07', 'Nhà thi đấu Cầu lông Buôn Ma Thuột', 'badminton', 'Tân Lợi', 'https://readdy.ai/api/search-image?query=Indoor%20badminton%20hall%20with%20several%20courts%2C%20green%20court%20mats%2C%20high%20ceiling%20and%20bright%20even%20lighting%2C%20clean%20modern%20sports%20facility%2C%20wide%20angle%2C%20no%20people&width=1000&height=700&seq=bmt-court-bd-01a&orientation=landscape', 3, 'Nguyễn Minh Quân', '0912345678', 'khach@bmt24h.vn', '2026-11-28', '09:00', 60, '[\"09:00\"]', 90000, 90000, 0, NULL, 90000, 27000, '[]', 'vietqr-deposit', 'unpaid', NULL, 'cancelled', '2026-11-16 17:57:27', NULL, 'Hết thời gian giữ chỗ (5 phút) do chưa thanh toán tiền cọc.', '2026-11-16 18:02:27', NULL, NULL, '2026-11-16 17:41:26', '2026-11-16 18:03:12'),
 ('cb-261116174243-991f4d', 'BMT20261116-6429', 'online', 'c08', 'Cầu lông Tân An Smash', 'badminton', 'Tân An', 'https://readdy.ai/api/search-image?query=Clean%20indoor%20badminton%20courts%20with%20PVC%20floor%20mats%20in%20a%20simple%20sports%20hall%2C%20white%20net%20dividers%2C%20bright%20ceiling%20lights%2C%20no%20people&width=1000&height=700&seq=bmt-court-bd-02a&orientation=landscape', 3, 'Nguyễn Minh Quân', '0912345678', 'khach@bmt24h.vn', '2026-11-18', '09:30', 60, '[\"09:30\"]', 70000, 60000, 0, NULL, 60000, 18000, '[]', 'vietqr-deposit', 'deposit_paid', NULL, 'completed', '2026-11-16 17:45:22', NULL, NULL, '2026-11-16 17:50:22', NULL, NULL, '2026-11-16 17:42:43', '2026-11-18 20:15:00'),
+('cb-261120131543-53c73d', 'BMT20261120-7887', 'online', 'c03', 'Sân bóng Hòa Thắng', 'football', 'Hòa Thắng', 'https://readdy.ai/api/search-image?query=Compact%20neighborhood%20five%20a%20side%20football%20court%20with%20green%20turf%20surrounded%20by%20tropical%20trees%2C%20warm%20late%20afternoon%20sunlight%2C%20simple%20fence%2C%20friendly%20local%20sports%20setting%2C%20no%20people&width=1000&height=700&seq=bmt-court-fb-03a&orientation=landscape', 3, 'Nguyễn Minh Quân', '0912345678', 'khach@bmt24h.vn', '2026-11-21', '19:30', 60, '[\"19:30\"]', 150000, 540000, 0, NULL, 540000, 162000, '[{\"id\":\"sv-bib\",\"variantId\":\"sv-bib-v1\",\"sku\":\"BIB-CAM-L\",\"label\":\"Thuê áo bib\",\"variantName\":\"Màu Cam · Size L\",\"price\":30000,\"quantity\":6,\"total\":180000},{\"id\":\"sv-bib\",\"variantId\":\"sv-bib-v3\",\"sku\":\"BIB-XANH-L\",\"label\":\"Thuê áo bib\",\"variantName\":\"Màu Xanh neon · Size L\",\"price\":30000,\"quantity\":6,\"total\":180000}]', 'vietqr-deposit', 'unpaid', NULL, 'completed', '2026-11-22 20:17:40', NULL, NULL, '2026-11-22 20:22:40', NULL, NULL, '2026-11-20 13:15:43', '2026-11-22 20:17:40'),
+('cb-261122191525-fb489e', 'BMT20261122-2985', 'online', 'c02', 'Sân bóng FC Đắk Lắk', 'football', 'Tân An', 'https://readdy.ai/api/search-image?query=Full%20size%20eleven%20a%20side%20football%20pitch%20with%20green%20artificial%20turf%20and%20small%20spectator%20stand%2C%20evening%20sky%2C%20floodlight%20towers%2C%20clean%20highway%20fence%2C%20professional%20sports%20venue%20photography%2C%20no%20people&width=1000&height=700&seq=bmt-court-fb-02a&orientation=landscape', 3, 'Nguyễn Minh Quân', '0912345678', 'khach@bmt24h.vn', '2026-11-24', '13:00', 60, '[\"13:00\"]', 350000, 730000, 40000, 'CHAOMUNG', 690000, 207000, '[{\"id\":\"sv-water\",\"variantId\":\"sv-water-v1\",\"sku\":\"AQ-500-COLD\",\"label\":\"Nước suối Aquafina 500ml\",\"variantName\":\"Chai 500ml · Ướp lạnh\",\"price\":10000,\"quantity\":2,\"total\":20000},{\"id\":\"sv-bib\",\"variantId\":\"sv-bib-v1\",\"sku\":\"BIB-CAM-L\",\"label\":\"Thuê áo bib\",\"variantName\":\"Màu Cam · Size L\",\"price\":30000,\"quantity\":6,\"total\":180000},{\"id\":\"sv-bib\",\"variantId\":\"sv-bib-v3\",\"sku\":\"BIB-XANH-L\",\"label\":\"Thuê áo bib\",\"variantName\":\"Màu Xanh neon · Size L\",\"price\":30000,\"quantity\":6,\"total\":180000}]', 'vietqr-deposit', 'deposit_claimed', NULL, 'confirmed', '2026-11-22 20:10:55', NULL, NULL, '2026-11-22 20:15:55', NULL, NULL, '2026-11-22 19:15:25', '2026-11-22 20:11:30'),
 ('cb-b01', 'BMT20261106-142', 'online', 'c01', 'Sân bóng BMT Arena', 'football', 'Tân Lợi', 'https://readdy.ai/api/search-image?query=Modern%20artificial%20grass%20five%20a%20side%20football%20pitch%20under%20bright%20floodlights%20at%20night%2C%20vivid%20green%20turf%2C%20white%20line%20markings%2C%20green%20net%20fence%2C%20clean%20sports%20photography%2C%20no%20people&width=1000&height=700&seq=bmt-court-fb-01a&orientation=landscape', 3, 'Nguyễn Minh Quân', '0912 345 678', 'minhquan.nguyen@gmail.com', '2026-11-09', '18:00', 120, '[\"18:00\", \"19:00\"]', 180000, 360000, 0, NULL, 360000, 108000, NULL, 'vietqr', 'deposit_paid', NULL, 'completed', NULL, NULL, NULL, NULL, NULL, 'Đội mình 10 người, cần thuê thêm 2 bộ áo bib.', '2026-11-05 09:00:00', '2026-11-10 14:30:13'),
 ('cb-b02', 'BMT20261109-318', 'online', 'c10', 'Cầu lông Victory BMT', 'badminton', 'Thành Công', 'https://readdy.ai/api/search-image?query=Premium%20indoor%20badminton%20club%20with%20eight%20green%20BWF%20mats%2C%20very%20high%20ceiling%2C%20professional%20sports%20lighting%2C%20modern%20interior%20design%2C%20wide%20architectural%20shot%2C%20no%20people&width=1000&height=700&seq=bmt-court-bd-04a&orientation=landscape', 3, 'Nguyễn Minh Quân', '0912 345 678', 'minhquan.nguyen@gmail.com', '2026-11-12', '19:00', 60, '[\"19:00\"]', 100000, 100000, 0, NULL, 100000, 30000, NULL, 'vietqr', 'unpaid', NULL, 'cancelled', '2026-11-16 17:21:47', NULL, 'Hết thời gian giữ chỗ (5 phút) do chưa thanh toán tiền cọc.', '2026-11-16 17:26:47', NULL, 'Nhóm 4 người, cần thuê 2 vợt.', '2026-11-06 09:00:00', '2026-11-16 17:28:33'),
 ('cb-b03', 'BMT20261114-075', 'online', 'c04', 'Sân bóng Tân Thành', 'football', 'Tân Thành', 'https://readdy.ai/api/search-image?query=Seven%20a%20side%20football%20field%20with%20high%20ball%20netting%20around%20the%20pitch%2C%20evening%20floodlights%2C%20green%20turf%2C%20clean%20urban%20sports%20facility%2C%20no%20people&width=1000&height=700&seq=bmt-court-fb-04a&orientation=landscape', 3, 'Nguyễn Minh Quân', '0912 345 678', 'minhquan.nguyen@gmail.com', '2026-11-17', '17:00', 120, '[\"17:00\", \"18:00\"]', 250000, 500000, 0, NULL, 500000, 150000, NULL, 'vietqr', 'deposit_paid', NULL, 'completed', NULL, NULL, NULL, NULL, NULL, 'Trận giao hữu với FC Ea Tam.', '2026-11-04 09:00:00', '2026-11-18 20:15:00'),
@@ -354,6 +383,7 @@ INSERT INTO `courts` (`id`, `slug`, `owner_id`, `name`, `sport`, `sport_label`, 
 ('c10', 'cau-long-victory-bmt', 2, 'Cầu lông Victory BMT', 'badminton', 'Sân cầu lông', 'Thành Công', '17 Tôn Đức Thắng, P. Thành Công, TP. Buôn Ma Thuột', 100000, 130000, '100.000đ/giờ • Sân VIP 130.000đ', '[{\"id\": \"morning\", \"label\": \"Buổi sáng và chiều\", \"shortLabel\": \"Sáng – chiều\", \"start\": \"05:00\", \"end\": \"17:00\", \"price\": 100000}, {\"id\": \"evening\", \"label\": \"Buổi tối\", \"shortLabel\": \"Tối\", \"start\": \"17:00\", \"end\": \"23:00\", \"price\": 130000, \"peak\": true}]', 30000, 'Mở cửa tất cả các ngày trong tuần', 4.9, 203, 326, 'Câu lạc bộ cầu lông cao cấp nhất Buôn Ma Thuột với 8 sân thảm BWF, trần cao 12m và hệ thống chiếu sáng chống chói. Có khu vực khởi động và phòng tập thể lực riêng.', '[\"8 sân thảm chuẩn BWF\", \"Trần cao 12m\", \"Khu khởi động riêng\"]', '[\"Điều hòa\", \"Phòng thay đồ\", \"Tủ đồ có khóa\", \"Bãi giữ xe\", \"Căng tin\", \"Wifi miễn phí\", \"Cho thuê vợt\"]', '[\"https://readdy.ai/api/search-image?query=Premium%20indoor%20badminton%20club%20with%20eight%20green%20BWF%20mats%2C%20very%20high%20ceiling%2C%20professional%20sports%20lighting%2C%20modern%20interior%20design%2C%20wide%20architectural%20shot%2C%20no%20people&width=1000&height=700&seq=bmt-court-bd-04a&orientation=landscape\", \"https://readdy.ai/api/search-image?query=Badminton%20court%20corner%20with%20green%20mat%2C%20net%20post%2C%20white%20lines%20and%20polished%20floor%2C%20warm%20indoor%20lighting%2C%20premium%20sports%20interior%20detail%2C%20no%20people&width=1000&height=700&seq=bmt-court-bd-04b&orientation=landscape\"]', '05:00', '23:00', NULL, '[\"Sân tiêu chuẩn\", \"Sân VIP\"]', 1, 'active', '17 Tôn Đức Thắng, Thành Công, Buôn Ma Thuột, Đắk Lắk', '8 sân thảm BWF, trần cao 12m, có điều hòa.', 9, NULL, '2026-11-09 17:48:57', '2026-11-09 17:48:57'),
 ('c11', 'cau-long-pho-nui', NULL, 'Cầu lông Phố Núi', 'badminton', 'Sân cầu lông', 'Thống Nhất', '05 Nơ Trang Long, P. Thống Nhất, TP. Buôn Ma Thuột', 65000, 80000, '65.000đ/giờ', '[{\"id\": \"morning\", \"label\": \"Buổi sáng và chiều\", \"shortLabel\": \"Sáng – chiều\", \"start\": \"06:00\", \"end\": \"17:00\", \"price\": 65000}, {\"id\": \"evening\", \"label\": \"Buổi tối\", \"shortLabel\": \"Tối\", \"start\": \"17:00\", \"end\": \"21:00\", \"price\": 80000, \"peak\": true}]', NULL, 'Mở cửa tất cả các ngày trong tuần', 4.3, 38, 210, 'Sân cầu lông giá rẻ dành cho học sinh, sinh viên tại phường Thống Nhất. Sân đang bảo trì 1 trong 3 sân, 2 sân còn lại hoạt động bình thường.', '[\"Giá rẻ cho sinh viên\", \"Gần trường học\", \"Nhận đặt theo tháng\"]', '[\"Bãi giữ xe\", \"Nước uống\", \"Quạt trần\"]', '[\"https://readdy.ai/api/search-image?query=Basic%20indoor%20badminton%20court%20with%20green%20floor%20mat%20and%20white%20net%2C%20simple%20gym%20hall%20interior%2C%20daylight%2C%20no%20people&width=1000&height=700&seq=bmt-court-bd-05a&orientation=landscape\", \"https://readdy.ai/api/search-image?query=Badminton%20shuttlecock%20on%20wooden%20bench%20beside%20an%20indoor%20court%2C%20soft%20light%2C%20minimal%20clean%20composition%2C%20no%20people&width=1000&height=700&seq=bmt-court-bd-05b&orientation=landscape\"]', '06:00', '21:00', NULL, '[\"Sân tiêu chuẩn\"]', 0, 'maintenance', '05 Nơ Trang Long, Thống Nhất, Buôn Ma Thuột, Đắk Lắk', '', 10, NULL, '2026-11-09 17:48:57', '2026-11-18 20:29:22'),
 ('c12', 'cau-long-hoa-thang-arena', NULL, 'Cầu lông Hòa Thắng Arena', 'badminton', 'Sân cầu lông', 'Hòa Thắng', '210 Lý Thường Kiệt, P. Hòa Thắng, TP. Buôn Ma Thuột', 75000, 95000, '75.000đ/giờ • Combo 3 giờ 200.000đ', '[{\"id\": \"morning\", \"label\": \"Buổi sáng và chiều\", \"shortLabel\": \"Sáng – chiều\", \"start\": \"05:00\", \"end\": \"17:00\", \"price\": 75000}, {\"id\": \"evening\", \"label\": \"Buổi tối\", \"shortLabel\": \"Tối\", \"start\": \"17:00\", \"end\": \"22:00\", \"price\": 95000, \"peak\": true}]', NULL, 'Mở cửa tất cả các ngày trong tuần', 4.6, 81, 223, 'Sân cầu lông mới khai trương cuối năm 2025 với 5 sân thảm xanh, trần cao và hệ thống thông gió tốt. Có ưu đãi combo 3 giờ cho nhóm đông người.', '[\"5 sân mới khai trương\", \"Ưu đãi combo 3 giờ\", \"Thông gió tốt\"]', '[\"Bãi giữ xe\", \"Phòng thay đồ\", \"Quạt trần\", \"Nước uống\", \"Wifi miễn phí\"]', '[\"https://readdy.ai/api/search-image?query=New%20indoor%20badminton%20arena%20with%20five%20green%20mats%2C%20high%20ceiling%20with%20ventilation%20fans%2C%20bright%20even%20lighting%2C%20modern%20clean%20sports%20hall%2C%20no%20people&width=1000&height=700&seq=bmt-court-bd-06a&orientation=landscape\", \"https://readdy.ai/api/search-image?query=Badminton%20net%20and%20green%20court%20mat%20in%20a%20bright%20air%20conditioned%20sports%20hall%2C%20white%20walls%2C%20minimal%20modern%20interior%2C%20no%20people&width=1000&height=700&seq=bmt-court-bd-06b&orientation=landscape\"]', '05:00', '22:00', NULL, '[\"Sân tiêu chuẩn\"]', 1, 'active', '210 Lý Thường Kiệt, Hòa Thắng, Buôn Ma Thuột, Đắk Lắk', '', 11, NULL, '2026-11-09 17:48:57', '2026-11-18 20:29:22'),
+('oc-c6a828f1', 'san-bong-da-dien-bien-49', 3, 'Sân bóng đá Điện Biên', 'football', 'Sân bóng đá', 'Tân Lợi', '241 Hà Huy Tập, TP. Buôn Ma Thuột', 180000, 240000, '', '[{\"id\":\"morning\",\"label\":\"Buổi sáng và chiều\",\"shortLabel\":\"Sáng – chiều\",\"start\":\"05:00\",\"end\":\"17:00\",\"price\":180000},{\"id\":\"evening\",\"label\":\"Buổi tối\",\"shortLabel\":\"Tối\",\"start\":\"17:00\",\"end\":\"23:00\",\"price\":240000,\"peak\":true}]', NULL, '', 0.0, 0, 0, 'Cơ sở Sân bóng đá Điện Biên tại Buôn Ma Thuột.', '[\"Sân mới đăng ký\",\"Đặt lịch online 24/7\"]', '[\"Bãi giữ xe\",\"Nước uống\"]', '[\"https://readdy.ai/api/search-image?query=Modern%20artificial%20grass%20football%20field%20with%20white%20goal%20net%20at%20golden%20hour%2C%20trimmed%20green%20turf%2C%20surrounding%20green%20mesh%20fence%2C%20warm%20sunlight%2C%20clean%20editorial%20sports%20photography%2C%20no%20people&width=900&height=700&seq=bmt-cat-football-01&orientation=landscape\"]', '05:00', '23:00', NULL, NULL, 0, 'active', '241 Hà Huy Tập, TP. Buôn Ma Thuột', NULL, 0, NULL, '2026-11-22 20:38:28', '2026-11-22 20:38:28'),
 ('oc-u7-01', 'san-bong-da-dien-bien', 7, 'Sân bóng đá Điện Biên', 'football', 'Sân bóng đá', 'Tân Lợi', '241 hà huy tập', 180000, 240000, '', '[{\"id\":\"morning\",\"label\":\"Buổi sáng và chiều\",\"shortLabel\":\"Sáng – chiều\",\"start\":\"05:00\",\"end\":\"17:00\",\"price\":180000},{\"id\":\"evening\",\"label\":\"Buổi tối\",\"shortLabel\":\"Tối\",\"start\":\"17:00\",\"end\":\"23:00\",\"price\":240000,\"peak\":true}]', NULL, '', 0.0, 0, 0, 'Sân đăng ký bởi Nguyễn Văn A', '[\"Sân mới đăng ký\",\"Đặt lịch online 24/7\"]', '[\"Bãi giữ xe\",\"Nước uống\"]', '[\"https://readdy.ai/api/search-image?query=Modern%20artificial%20grass%20football%20field%20with%20white%20goal%20net%20at%20golden%20hour%2C%20trimmed%20green%20turf%2C%20surrounding%20green%20mesh%20fence%2C%20warm%20sunlight%2C%20clean%20editorial%20sports%20photography%2C%20no%20people&width=900&height=700&seq=bmt-cat-football-01&orientation=landscape\"]', '05:00', '23:00', NULL, NULL, 0, 'active', '241 hà huy tập', NULL, 0, NULL, '2026-11-18 20:29:22', '2026-11-18 20:29:22');
 
 -- --------------------------------------------------------
@@ -405,7 +435,10 @@ CREATE TABLE IF NOT EXISTS `notifications` (
 INSERT INTO `notifications` (`id`, `user_id`, `title`, `body`, `type`, `link`, `is_read`, `created_at`) VALUES
 ('nt-01', 3, 'Chào mừng bạn đến với Đặt Sân BMT 24H!', 'Bạn đang có 2 voucher ưu đãi trong Ví voucher. Đặt sân ngay để áp dụng nhé.', 'promo', '/tai-khoan?tab=vouchers', 0, '2026-11-18 19:53:53'),
 ('nt-02', 3, 'Lịch cố định đang hoạt động', 'Lịch cố định Sân bóng BMT Arena (Thứ 3 & Thứ 6, 18:00) đã được chủ sân xác nhận.', 'booking', '/tai-khoan?tab=recurring', 0, '2026-11-18 19:53:53'),
-('nt-03', 2, 'Có đơn đặt sân mới cần duyệt', 'Kiểm tra danh sách đơn đặt sân hôm nay để xác nhận lịch sớm cho khách.', 'booking', '/chu-san?tab=bookings', 0, '2026-11-18 19:53:53');
+('nt-03', 2, 'Có đơn đặt sân mới cần duyệt', 'Kiểm tra danh sách đơn đặt sân hôm nay để xác nhận lịch sớm cho khách.', 'booking', '/chu-san?tab=bookings', 0, '2026-11-18 19:53:53'),
+('nt-261122203828-375a7a', 3, 'Đăng ký chủ sân đã được duyệt!', 'Chúc mừng bạn! Yêu cầu đăng ký cơ sở \"Sân bóng đá Điện Biên\" đã được phê duyệt. Kênh chủ sân đã sẵn sàng hoạt động.', 'system', '/chu-san', 0, '2026-11-22 20:38:28'),
+('nt-261122203828-bc93e9', 3, 'Đơn đặt sân #BMT20261116-6119 đã được duyệt!', 'Chủ sân đã xác nhận đơn đặt sân tại Sân bóng Thắng Lợi ngày 28/11/2026. Vui lòng kiểm tra vé và giờ chơi.', 'booking', '/tai-khoan?tab=history', 0, '2026-11-22 20:38:28'),
+('nt-261122203828-d2fc1d', 3, 'Xác nhận thanh toán đơn #BMT20261116-6119 thành công!', 'Hệ thống đã nhận tiền cọc 114.000đ cho đơn đặt sân tại Sân bóng Thắng Lợi. Vé đặt sân của bạn đã chính thức được kích hoạt!', 'payment', '/tai-khoan?tab=history', 0, '2026-11-22 20:38:28');
 
 -- --------------------------------------------------------
 
@@ -450,9 +483,12 @@ CREATE TABLE IF NOT EXISTS `owner_services` (
   `owner_id` int NOT NULL,
   `name` varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,
   `category` enum('drink','rental','food','other') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'drink',
+  `sport` enum('all','football','badminton') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'all',
   `unit` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'cái',
   `price` int NOT NULL DEFAULT '0',
   `stock` int NOT NULL DEFAULT '0',
+  `has_variants` tinyint(1) NOT NULL DEFAULT '0',
+  `attributes_schema` text COLLATE utf8mb4_unicode_ci,
   `active` tinyint(1) NOT NULL DEFAULT '1',
   `sort_order` int NOT NULL DEFAULT '0'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -461,15 +497,14 @@ CREATE TABLE IF NOT EXISTS `owner_services` (
 -- Dumping data for table `owner_services`
 --
 
-INSERT INTO `owner_services` (`id`, `owner_id`, `name`, `category`, `unit`, `price`, `stock`, `active`, `sort_order`) VALUES
-('sv-ball', 2, 'Thuê bóng thi đấu', 'rental', 'quả', 20000, 12, 1, 3),
-('sv-bib', 2, 'Thuê áo bib', 'rental', 'bộ', 30000, 6, 1, 4),
-('sv-noodle', 2, 'Mì tôm trứng', 'food', 'tô', 25000, 3, 1, 7),
-('sv-racket', 2, 'Thuê vợt cầu lông', 'rental', 'cây', 25000, 8, 1, 5),
-('sv-revive', 2, 'Revive chanh muối', 'drink', 'chai', 15000, 86, 1, 1),
-('sv-shuttle', 2, 'Hộp cầu lông (12 quả)', 'other', 'hộp', 65000, 15, 1, 6),
-('sv-sting', 2, 'Sting dâu', 'drink', 'chai', 12000, 4, 1, 2),
-('sv-water', 2, 'Nước suối Aquafina 500ml', 'drink', 'chai', 10000, 120, 1, 0);
+INSERT INTO `owner_services` (`id`, `owner_id`, `name`, `category`, `sport`, `unit`, `price`, `stock`, `has_variants`, `attributes_schema`, `active`, `sort_order`) VALUES
+('sv-ball', 2, 'Thuê bóng thi đấu', 'rental', 'football', 'quả', 20000, 12, 1, '[{\"name\":\"Loại bóng\",\"options\":[\"Bóng số 4 (Sân 5 người)\",\"Bóng số 5 (Sân 7 & 11 người)\"]}]', 1, 3),
+('sv-bib', 2, 'Thuê áo bib', 'rental', 'football', 'bộ', 30000, 41, 1, '[{\"name\":\"Màu sắc\",\"options\":[\"Cam\",\"Xanh neon\",\"Đỏ\"]},{\"name\":\"Kích cỡ\",\"options\":[\"L (Dưới 70kg)\",\"XL (Trên 70kg)\"]}]', 1, 4),
+('sv-racket', 2, 'Thuê vợt cầu lông', 'rental', 'badminton', 'cây', 25000, 8, 1, '[{\"name\":\"Dòng vợt\",\"options\":[\"Yonex Nanoray\",\"Lining Windstorm\"]},{\"name\":\"Độ căng cước\",\"options\":[\"10.5 kg\",\"11.0 kg\"]}]', 1, 5),
+('sv-revive', 2, 'Revive chanh muối', 'drink', 'all', 'chai', 15000, 86, 0, NULL, 1, 1),
+('sv-shuttle', 2, 'Hộp cầu lông (12 quả)', 'other', 'badminton', 'hộp', 65000, 15, 0, NULL, 1, 6),
+('sv-sting', 2, 'Sting dâu', 'drink', 'all', 'chai', 12000, 4, 0, NULL, 1, 2),
+('sv-water', 2, 'Nước suối Aquafina 500ml', 'drink', 'all', 'chai', 10000, 118, 1, '[{\"name\":\"Quy cách & Nhiệt độ\",\"options\":[\"Chai 500ml (Ướp lạnh)\",\"Chai 500ml (Nhiệt độ phòng)\",\"Chai lớn 1.5L (Ướp lạnh)\"]}]', 1, 0);
 
 -- --------------------------------------------------------
 
@@ -512,6 +547,7 @@ CREATE TABLE IF NOT EXISTS `owner_staff` (
   `full_name` varchar(120) COLLATE utf8mb4_unicode_ci NOT NULL,
   `phone` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
   `email` varchar(190) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `password_hash` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `role_name` varchar(80) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Nhân viên lễ tân',
   `permissions` text COLLATE utf8mb4_unicode_ci COMMENT 'JSON',
   `status` enum('active','inactive') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active',
@@ -522,9 +558,9 @@ CREATE TABLE IF NOT EXISTS `owner_staff` (
 -- Dumping data for table `owner_staff`
 --
 
-INSERT INTO `owner_staff` (`id`, `owner_id`, `full_name`, `phone`, `email`, `role_name`, `permissions`, `status`, `created_at`) VALUES
-('st-01', 2, 'Nguyễn Văn Tài', '0935 111 222', 'tai.nv@hungsport.vn', 'Quản lý ca tối', '[\"bookings\",\"services\",\"payments\"]', 'active', '2026-11-18 19:53:53'),
-('st-02', 2, 'Lê Thị Ngọc', '0935 333 444', 'ngoc.lt@hungsport.vn', 'Lễ tân & thu ngân', '[\"bookings\",\"services\"]', 'active', '2026-11-18 19:53:53');
+INSERT INTO `owner_staff` (`id`, `owner_id`, `full_name`, `phone`, `email`, `password_hash`, `role_name`, `permissions`, `status`, `created_at`) VALUES
+('st-01', 2, 'Nguyễn Văn Tài', '0935 111 222', 'tai.nv@hungsport.vn', '$2y$10$WDOt.9ErHNHVUJMQHd/pc.h4kRjdDpU7L6vrHCWnOCrZV2A7Iz6SS', 'Quản lý ca tối', '[\"bookings\",\"services\",\"payments\"]', 'active', '2026-11-18 19:53:53'),
+('st-02', 2, 'Lê Thị Ngọc', '0935 333 444', 'ngoc.lt@hungsport.vn', '$2y$10$WDOt.9ErHNHVUJMQHd/pc.h4kRjdDpU7L6vrHCWnOCrZV2A7Iz6SS', 'Lễ tân & thu ngân', '[\"bookings\",\"services\"]', 'active', '2026-11-18 19:53:53');
 
 -- --------------------------------------------------------
 
@@ -673,9 +709,9 @@ CREATE TABLE IF NOT EXISTS `reports` (
 
 INSERT INTO `reports` (`id`, `target_type`, `target_id`, `target_label`, `reporter_name`, `reporter_contact`, `reason`, `detail`, `severity`, `status`, `resolution_note`, `resolved_at`, `created_at`, `updated_at`) VALUES
 ('rp-seed-1', 'review', 'rv-seed-07', 'Đánh giá của Phan Gia Bảo – Cầu lông Hòa Thắng Arena', 'Chủ sân Hòa Thắng Arena', '0905 000 111', 'Nội dung quảng cáo', 'Đánh giá chứa số điện thoại bán hàng, không liên quan tới sân.', 'high', 'resolved', '', NULL, '2026-11-07 17:48:57', '2026-11-09 17:48:57'),
-('rp-seed-2', 'court', 'c02', 'Sân bóng FC Đắk Lắk', 'Đỗ Quang Huy', 'huy.do@gmail.com', 'Thông tin giá chưa đúng', 'Giá niêm yết sân 7 trên web thấp hơn giá thu thực tế 30.000đ.', 'medium', 'open', '', NULL, '2026-11-08 17:48:57', '2026-11-09 17:48:57'),
+('rp-seed-2', 'court', 'c02', 'Sân bóng FC Đắk Lắk', 'Đỗ Quang Huy', 'huy.do@gmail.com', 'Thông tin giá chưa đúng', 'Giá niêm yết sân 7 trên web thấp hơn giá thu thực tế 30.000đ.', 'medium', 'reviewing', '', NULL, '2026-11-08 17:48:57', '2026-11-22 20:17:07'),
 ('rp-seed-3', 'booking', 'BMT20261103-174', 'Đơn BMT20261103-174', 'Nguyễn Văn Tâm', '0977 123 456', 'Không được hoàn cọc', 'Đơn đã hủy trước 6 tiếng nhưng chưa nhận lại tiền cọc.', 'high', 'reviewing', '', NULL, '2026-11-09 12:48:57', '2026-11-09 17:48:57'),
-('rp-seed-4', 'account', '5', 'Tài khoản Lộc Sport', 'Khách ẩn danh', 'Chưa cung cấp', 'Chủ sân phản hồi thiếu lịch sự', 'Nhắn tin hỏi giá nhưng bị trả lời cộc lốc.', 'low', 'open', '', NULL, '2026-11-06 17:48:57', '2026-11-09 17:48:57');
+('rp-seed-4', 'account', '5', 'Tài khoản Lộc Sport', 'Khách ẩn danh', 'Chưa cung cấp', 'Chủ sân phản hồi thiếu lịch sự', 'Nhắn tin hỏi giá nhưng bị trả lời cộc lốc.', 'low', 'reviewing', '', NULL, '2026-11-06 17:48:57', '2026-11-22 20:17:25');
 
 -- --------------------------------------------------------
 
@@ -717,6 +753,48 @@ INSERT INTO `reviews` (`id`, `booking_id`, `booking_code`, `court_id`, `customer
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `service_variants`
+--
+
+CREATE TABLE `service_variants` (
+  `id` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `service_id` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `owner_id` int NOT NULL,
+  `sku` varchar(60) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `name` varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `attributes` text COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'JSON: {"Màu sắc":"Cam","Kích cỡ":"L"}',
+  `price` int NOT NULL DEFAULT '0',
+  `stock` int NOT NULL DEFAULT '0',
+  `active` tinyint(1) NOT NULL DEFAULT '1',
+  `sort_order` int NOT NULL DEFAULT '0',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `service_variants`
+--
+
+INSERT INTO `service_variants` (`id`, `service_id`, `owner_id`, `sku`, `name`, `attributes`, `price`, `stock`, `active`, `sort_order`, `created_at`, `updated_at`) VALUES
+('sv-ball-v1', 'sv-ball', 2, 'BALL-S4', 'Bóng số 4 (Sân 5 người)', '{\"Loại bóng\":\"Bóng số 4 (Sân 5 người)\"}', 20000, 8, 1, 12, '2026-11-20 12:29:11', '2026-11-20 12:29:11'),
+('sv-ball-v2', 'sv-ball', 2, 'BALL-S5', 'Bóng số 5 (Sân 7 & 11 người)', '{\"Loại bóng\":\"Bóng số 5 (Sân 7 & 11 người)\"}', 30000, 6, 1, 13, '2026-11-20 12:29:11', '2026-11-20 12:29:11'),
+('sv-bib-v1', 'sv-bib', 2, 'BIB-CAM-L', 'Màu Cam · Size L', '{\"Màu sắc\":\"Cam\",\"Kích cỡ\":\"L (Dưới 70kg)\"}', 30000, 0, 1, 1, '2026-11-20 12:29:11', '2026-11-22 19:15:25'),
+('sv-bib-v2', 'sv-bib', 2, 'BIB-CAM-XL', 'Màu Cam · Size XL', '{\"Màu sắc\":\"Cam\",\"Kích cỡ\":\"XL (Trên 70kg)\"}', 30000, 8, 1, 2, '2026-11-20 12:29:11', '2026-11-20 12:29:11'),
+('sv-bib-v3', 'sv-bib', 2, 'BIB-XANH-L', 'Màu Xanh neon · Size L', '{\"Màu sắc\":\"Xanh neon\",\"Kích cỡ\":\"L (Dưới 70kg)\"}', 30000, 3, 1, 3, '2026-11-20 12:29:11', '2026-11-22 19:15:25'),
+('sv-bib-v4', 'sv-bib', 2, 'BIB-XANH-XL', 'Màu Xanh neon · Size XL', '{\"Màu sắc\":\"Xanh neon\",\"Kích cỡ\":\"XL (Trên 70kg)\"}', 30000, 10, 1, 4, '2026-11-20 12:29:11', '2026-11-20 12:29:11'),
+('sv-bib-v5', 'sv-bib', 2, 'BIB-DO-L', 'Màu Đỏ · Size L', '{\"Màu sắc\":\"Đỏ\",\"Kích cỡ\":\"L (Dưới 70kg)\"}', 30000, 10, 1, 5, '2026-11-20 13:06:32', '2026-11-20 13:06:32'),
+('sv-bib-v6', 'sv-bib', 2, 'BIB-DO-XL', 'Màu Đỏ · Size XL', '{\"Màu sắc\":\"Đỏ\",\"Kích cỡ\":\"XL (Trên 70kg)\"}', 30000, 10, 1, 6, '2026-11-20 13:06:32', '2026-11-20 13:06:32'),
+('sv-racket-v1', 'sv-racket', 2, 'VOT-YN-105', 'Yonex Nanoray · 10.5 kg', '{\"Dòng vợt\":\"Yonex Nanoray\",\"Độ căng cước\":\"10.5 kg\"}', 25000, 6, 1, 5, '2026-11-20 12:29:11', '2026-11-20 12:29:11'),
+('sv-racket-v2', 'sv-racket', 2, 'VOT-YN-110', 'Yonex Nanoray · 11.0 kg', '{\"Dòng vợt\":\"Yonex Nanoray\",\"Độ căng cước\":\"11.0 kg\"}', 30000, 4, 1, 6, '2026-11-20 12:29:11', '2026-11-20 12:29:11'),
+('sv-racket-v3', 'sv-racket', 2, 'VOT-LN-105', 'Lining Windstorm · 10.5 kg', '{\"Dòng vợt\":\"Lining Windstorm\",\"Độ căng cước\":\"10.5 kg\"}', 25000, 5, 1, 7, '2026-11-20 12:29:11', '2026-11-20 12:29:11'),
+('sv-racket-v4', 'sv-racket', 2, 'VOT-LN-110', 'Lining Windstorm · 11.0 kg', '{\"Dòng vợt\":\"Lining Windstorm\",\"Độ căng cước\":\"11.0 kg\"}', 30000, 5, 1, 8, '2026-11-20 12:29:11', '2026-11-20 12:29:11'),
+('sv-water-v1', 'sv-water', 2, 'AQ-500-COLD', 'Chai 500ml · Ướp lạnh', '{\"Quy cách & Nhiệt độ\":\"Chai 500ml (Ướp lạnh)\"}', 10000, 58, 1, 9, '2026-11-20 12:29:11', '2026-11-22 19:15:25'),
+('sv-water-v2', 'sv-water', 2, 'AQ-500-ROOM', 'Chai 500ml · Nhiệt độ phòng', '{\"Quy cách & Nhiệt độ\":\"Chai 500ml (Nhiệt độ phòng)\"}', 10000, 40, 1, 10, '2026-11-20 12:29:11', '2026-11-20 12:29:11'),
+('sv-water-v3', 'sv-water', 2, 'AQ-1500-COLD', 'Chai lớn 1.5L · Ướp lạnh', '{\"Quy cách & Nhiệt độ\":\"Chai lớn 1.5L (Ướp lạnh)\"}', 20000, 20, 1, 11, '2026-11-20 12:29:11', '2026-11-20 12:29:11');
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `system_settings`
 --
 
@@ -725,6 +803,14 @@ CREATE TABLE IF NOT EXISTS `system_settings` (
   `svalue` text COLLATE utf8mb4_unicode_ci,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `system_settings`
+--
+
+INSERT INTO `system_settings` (`skey`, `svalue`, `updated_at`) VALUES
+('ai_api_key', '', '2026-11-20 14:25:26'),
+('ai_enabled', '1', '2026-11-20 14:25:02');
 
 -- --------------------------------------------------------
 
@@ -756,7 +842,7 @@ CREATE TABLE IF NOT EXISTS `users` (
 INSERT INTO `users` (`id`, `email`, `password_hash`, `full_name`, `phone`, `address`, `role`, `business_name`, `status`, `favorites`, `reset_token`, `reset_expires`, `created_at`, `updated_at`) VALUES
 (1, 'admin@bmt24h.vn', '$2y$10$a3MJzgR2ejrgmG2riBVNnuGQXDBMHKxEXoMGOguS2wgJHSnqjU3kW', 'Quản trị viên BMT', '0262 399 8888', 'TP. Buôn Ma Thuột', 'admin', '', 'active', '[]', NULL, NULL, '2025-01-01 08:00:00', '2026-11-09 17:48:57'),
 (2, 'chusan@bmt24h.vn', '$2y$10$a3MJzgR2ejrgmG2riBVNnuGQXDBMHKxEXoMGOguS2wgJHSnqjU3kW', 'Trần Quốc Hưng', '0935 771 246', '58 Nguyễn Tất Thành, P. Tân An, TP. Buôn Ma Thuột', 'owner', 'Hưng Sport BMT', 'active', '[]', NULL, NULL, '2025-01-12 09:00:00', '2026-11-09 17:48:57'),
-(3, 'khach@bmt24h.vn', '$2y$10$a3MJzgR2ejrgmG2riBVNnuGQXDBMHKxEXoMGOguS2wgJHSnqjU3kW', 'Nguyễn Minh Quân', '0912 345 678', '45 Lê Duẩn, P. Tân Lợi, TP. Buôn Ma Thuột', 'customer', 'Sân bóng đá Điện Biên', 'active', '[\"san-bong-bmt-arena\", \"cau-long-victory-bmt\"]', NULL, NULL, '2025-03-18 10:00:00', '2026-11-16 16:38:44'),
+(3, 'khach@bmt24h.vn', '$2y$10$a3MJzgR2ejrgmG2riBVNnuGQXDBMHKxEXoMGOguS2wgJHSnqjU3kW', 'Nguyễn Minh Quân', '0912 345 678', '45 Lê Duẩn, P. Tân Lợi, TP. Buôn Ma Thuột', 'owner', 'Sân bóng đá Điện Biên', 'active', '[\"san-bong-bmt-arena\", \"cau-long-victory-bmt\"]', NULL, NULL, '2025-03-18 10:00:00', '2026-11-22 20:38:28'),
 (4, 'kiemduyet@bmt24h.vn', '$2y$10$a3MJzgR2ejrgmG2riBVNnuGQXDBMHKxEXoMGOguS2wgJHSnqjU3kW', 'Lê Thu Hà', '0905 112 233', 'TP. Buôn Ma Thuột', 'admin', '', 'active', '[]', NULL, NULL, '2025-06-02 10:00:00', '2026-11-09 17:48:57'),
 (5, 'chusan2@bmt24h.vn', '$2y$10$a3MJzgR2ejrgmG2riBVNnuGQXDBMHKxEXoMGOguS2wgJHSnqjU3kW', 'Phạm Văn Lộc', '0918 556 778', 'P. Tân An, TP. Buôn Ma Thuột', 'owner', 'Lộc Sport', 'active', '[]', NULL, NULL, '2025-04-20 10:00:00', '2026-11-09 17:48:57'),
 (6, 'vunamphi1202@gmail.com', '$2y$10$6uIgp5PmDkXNR.xryD9xwuZVHQDK2PUZ7kmZqoC.1I5H5VM65SgIK', 'Nguyễn Văn A', '0123456789', '', 'customer', '', 'active', '[]', NULL, NULL, '2026-11-09 17:55:56', '2026-11-09 17:55:56'),
@@ -793,7 +879,8 @@ INSERT INTO `user_vouchers` (`id`, `user_id`, `code`, `title`, `description`, `d
 ('uv-261118204543-e895a1', 2, 'BMT30K', 'Giảm 30K cho đơn từ 300K', 'Áp dụng mọi khung giờ, mọi ngày trong tuần.', 'amount', 30000, 300000, 'promo', 'available', '2026-12-04', '2026-11-18 20:45:43'),
 ('uv-261118204743-8251e6', 2, 'QUAY50K', 'Voucher VIP 50.000đ', 'Áp dụng cho đơn đặt từ 300.000đ', 'amount', 50000, 0, 'wheel', 'available', '2026-12-18', '2026-11-18 20:47:43'),
 ('uv-261118205153-ec80a1', 2, 'QUAY10', 'Giảm 10% tiền sân', 'Áp dụng cho mọi khung giờ từ 100.000đ', 'percent', 10, 0, 'wheel', 'available', '2026-12-18', '2026-11-18 20:51:53'),
-('uv-261118210533-523095', 2, 'THEM30P', 'Tặng 30 phút chơi thêm', 'Áp dụng khi sân còn trống khung liền kề', 'gift', 0, 0, 'wheel', 'available', '2026-12-18', '2026-11-18 21:05:33');
+('uv-261118210533-523095', 2, 'THEM30P', 'Tặng 30 phút chơi thêm', 'Áp dụng khi sân còn trống khung liền kề', 'gift', 0, 0, 'wheel', 'available', '2026-12-18', '2026-11-18 21:05:33'),
+('uv-261120124322-49e0a4', 3, 'NUOCFREE', 'Tặng 2 chai nước suối', 'Đưa mã cho nhân viên sân khi check-in', 'gift', 0, 0, 'wheel', 'available', '2026-12-20', '2026-11-20 12:43:22');
 
 -- --------------------------------------------------------
 
@@ -815,7 +902,8 @@ CREATE TABLE IF NOT EXISTS `wheel_spins` (
 --
 
 INSERT INTO `wheel_spins` (`id`, `user_id`, `prize_code`, `prize_title`, `prize_desc`, `spun_at`) VALUES
-('ws-261118210533-328ce9', 2, 'THEM30P', 'Tặng 30 phút chơi thêm', 'Áp dụng khi sân còn trống khung liền kề', '2026-11-18 21:05:33');
+('ws-261118210533-328ce9', 2, 'THEM30P', 'Tặng 30 phút chơi thêm', 'Áp dụng khi sân còn trống khung liền kề', '2026-11-18 21:05:33'),
+('ws-261120124322-38c7ec', 3, 'NUOCFREE', 'Tặng 2 chai nước suối', 'Đưa mã cho nhân viên sân khi check-in', '2026-11-20 12:43:22');
 
 --
 -- Indexes for dumped tables
@@ -968,6 +1056,14 @@ ALTER TABLE `reviews`
   ADD KEY `idx_court` (`court_id`);
 
 --
+-- Indexes for table `service_variants`
+--
+ALTER TABLE `service_variants`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_sv_service` (`service_id`),
+  ADD KEY `idx_sv_owner` (`owner_id`);
+
+--
 -- Indexes for table `system_settings`
 --
 ALTER TABLE `system_settings`
@@ -1003,7 +1099,7 @@ ALTER TABLE `wheel_spins`
 -- AUTO_INCREMENT for table `audit_logs`
 --
 ALTER TABLE `audit_logs`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=35;
 
 --
 -- AUTO_INCREMENT for table `blocked_slots`

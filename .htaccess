@@ -2,6 +2,12 @@
 Options -Indexes
 DirectoryIndex index.php
 
+<IfModule mod_headers.c>
+  <FilesMatch "\.(js|css)$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+</IfModule>
+
 <IfModule mod_rewrite.c>
   RewriteEngine On
   # Không cho tải trực tiếp thư mục database, includes, pages, git

@@ -44,9 +44,9 @@ $routes = [
 
 // Các đường dẫn cũ / alias theo Sitemap
 $aliases = [
-    '/chu-san/dang-nhap' => '/dang-nhap',
+    '/chu-san/dang-nhap' => '/dang-nhap?redirect=/chu-san',
     '/chu-san/dang-ky' => '/dang-ky-chu-san',
-    '/quan-tri/dang-nhap' => '/dang-nhap',
+    '/quan-tri/dang-nhap' => '/dang-nhap?redirect=/quan-tri',
     '/danh-cho-chu-san' => '/dang-ky-chu-san',
     '/vong-quay' => '/uu-dai#vong-quay',
 ];
@@ -74,11 +74,16 @@ foreach ($routes as $pattern => $name) {
 // ---- Bảo vệ khu chủ sân / quản trị ----
 if ($page === 'owner' || $page === 'admin') {
     $u = current_user();
+    $imp = impersonating_admin();
     if (!$u) redirect('/dang-nhap?redirect=' . urlencode($path . (empty($_SERVER['QUERY_STRING']) ? '' : '?' . $_SERVER['QUERY_STRING'])));
     if ($page === 'owner') {
-        if ($u['role'] !== 'owner') redirect('/?thong-bao=khong-phai-chu-san&vai-tro=' . $u['role']);
-        if ($u['status'] !== 'active') redirect('/?thong-bao=chu-san-bi-khoa');
+        if ($u['role'] !== 'owner' && !$imp) redirect('/?thong-bao=khong-phai-chu-san&vai-tro=' . $u['role']);
+        if ($u['status'] !== 'active' && !$imp) redirect('/?thong-bao=chu-san-bi-khoa');
     } else {
+        if ($imp) {
+            stop_impersonating();
+            $u = current_user();
+        }
         if ($u['role'] !== 'admin') redirect('/?thong-bao=khong-co-quyen&vai-tro=' . $u['role']);
         if ($u['status'] !== 'active') redirect('/?thong-bao=tai-khoan-bi-khoa');
     }

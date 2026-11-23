@@ -512,6 +512,15 @@ function approve_deposit(array $b, string $status): void
     if ($status !== 'confirmed' || $b['source'] !== 'online' || $b['payment_status'] !== 'deposit_claimed') return;
     $full = $b['payment_method'] === 'vietqr-full' || (int) $b['deposit_amount'] >= (int) $b['total_price'];
     q('UPDATE bookings SET payment_status = ? WHERE id = ?', [$full ? 'paid' : 'deposit_paid', $b['id']]);
+
+    $targetUserId = (int) ($b['customer_id'] ?? 0);
+    if (!$targetUserId && !empty($b['customer_phone'])) {
+        $targetUserId = (int) q_val('SELECT id FROM users WHERE phone = ?', [$b['customer_phone']]);
+    }
+    if ($targetUserId > 0) {
+        $payText = $full ? 'toàn bộ tiền sân' : 'tiền cọc ' . number_format((int) $b['deposit_amount'], 0, ',', '.') . 'đ';
+        push_notification($targetUserId, 'Xác nhận thanh toán đơn #' . $b['code'] . ' thành công!', 'Hệ thống đã nhận ' . $payText . ' cho đơn đặt sân tại ' . ($b['court_name'] ?: 'sân thể thao') . '. Lịch đặt của bạn đã chính thức được giữ chỗ!', 'payment', '/tai-khoan?tab=history');
+    }
 }
 
 // ===================== YÊU CẦU ĐĂNG KÝ CHỦ SÂN =====================
@@ -553,4 +562,65 @@ function create_owner_request(array $user, array $d): array
         $phone, $user['email'], mb_substr($address, 0, 255), $sports, $count, mb_substr(trim((string) ($d['note'] ?? '')), 0, 1000),
     ]);
     return map_owner_request(q_one('SELECT * FROM owner_requests WHERE id = ?', [$id]));
+}
+
+// ======================= DỊCH VỤ & BIẾN THỂ (ĐA THUỘC TÍNH) =======================
+
+/** Lấy danh sách dịch vụ kèm biến thể phục vụ đặt sân và quản lý */
+function services_with_variants(int $ownerId = 0, string $sport = ''): array
+{
+    ensure_sitemap_schema();
+    $sql = 'SELECT * FROM owner_services WHERE active = 1';
+    $params = [];
+    if ($ownerId > 0) {
+        $sql .= ' AND owner_id = ?';
+        $params[] = $ownerId;
+    }
+    if ($sport !== '' && in_array($sport, ['football', 'badminton'], true)) {
+        $sql .= " AND (sport = ? OR sport = 'all')";
+        $params[] = $sport;
+    }
+    $sql .= ' ORDER BY sort_order, name';
+    $services = q_all($sql, $params);
+    if (!$services && $ownerId > 0) {
+        $fbSql = 'SELECT * FROM owner_services WHERE active = 1';
+        $fbParams = [];
+        if ($sport !== '' && in_array($sport, ['football', 'badminton'], true)) {
+            $fbSql .= " AND (sport = ? OR sport = 'all')";
+            $fbParams[] = $sport;
+        }
+        $fbSql .= ' ORDER BY sort_order, name';
+        $services = q_all($fbSql, $fbParams);
+    }
+    $sIds = array_column($services, 'id');
+    $variantsMap = [];
+    if ($sIds) {
+        $vars = q_all('SELECT * FROM service_variants WHERE active = 1 AND service_id IN (' . in_list($sIds) . ') ORDER BY sort_order, id', $sIds);
+        foreach ($vars as $v) {
+            $variantsMap[$v['service_id']][] = [
+                'id' => $v['id'],
+                'serviceId' => $v['service_id'],
+                'sku' => $v['sku'],
+                'name' => $v['name'],
+                'attributes' => jd($v['attributes'] ?? '{}'),
+                'price' => (int) $v['price'],
+                'stock' => (int) $v['stock'],
+            ];
+        }
+    }
+    return array_map(function ($s) use ($variantsMap) {
+        return [
+            'id' => $s['id'],
+            'ownerId' => (int) $s['owner_id'],
+            'name' => $s['name'],
+            'category' => $s['category'],
+            'sport' => $s['sport'] ?? 'all',
+            'unit' => $s['unit'],
+            'price' => (int) $s['price'],
+            'stock' => (int) $s['stock'],
+            'hasVariants' => (bool) ($s['has_variants'] ?? 0),
+            'attributesSchema' => jd($s['attributes_schema'] ?? '[]'),
+            'variants' => $variantsMap[$s['id']] ?? [],
+        ];
+    }, $services);
 }

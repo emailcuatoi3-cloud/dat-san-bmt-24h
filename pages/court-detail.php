@@ -76,17 +76,17 @@ render_page([
         <span data-status-badge="<?= e($court['status']) ?>"></span>
         <?php if ($court['featured']): ?><span class="inline-flex items-center gap-1 rounded-full bg-accent-50 px-2.5 py-1 text-xs font-semibold text-accent-800"><i class="ri-fire-line" aria-hidden="true"></i>Sân nổi bật</span><?php endif; ?>
       </div>
-      <h1 class="mt-3 font-heading text-2xl font-extrabold leading-tight text-foreground-950 md:text-[32px]"><?= e($court['name']) ?></h1>
+      <h1 class="mt-3 font-heading text-2xl font-extrabold leading-tight text-foreground-950 md:text-3xl"><?= e($court['name']) ?></h1>
       <div class="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2">
         <div class="flex items-center gap-1.5"><i class="ri-star-fill text-accent-500 text-sm" aria-hidden="true"></i><span class="text-sm font-semibold text-foreground-950" data-head-rating><?= number_format($court['rating'], 1) ?></span><span class="text-xs text-foreground-500" data-head-count>(<?= $court['reviewCount'] ?> đánh giá)</span></div>
         <span class="flex items-start gap-1.5 text-sm text-foreground-600"><i class="ri-map-pin-line mt-0.5 text-foreground-400" aria-hidden="true"></i><?= e($court['address']) ?></span>
       </div>
 
       <div class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div class="rounded-md border border-background-200 bg-white px-3.5 py-3"><p class="text-[11px] uppercase tracking-wide text-foreground-500">Giờ mở cửa</p><p class="mt-0.5 text-sm font-semibold text-foreground-950"><?= e($court['openTime'] . ' - ' . $court['closeTime']) ?></p><p class="mt-0.5 text-[11px] text-foreground-500">Hằng ngày</p></div>
-        <div class="rounded-md border border-background-200 bg-white px-3.5 py-3"><p class="text-[11px] uppercase tracking-wide text-foreground-500">Loại sân</p><p class="mt-0.5 text-sm font-semibold text-foreground-950"><?= count($court['fieldTypes']) ?> hình thức</p></div>
-        <div class="rounded-md border border-background-200 bg-white px-3.5 py-3"><p class="text-[11px] uppercase tracking-wide text-foreground-500">Khu vực</p><p class="mt-0.5 text-sm font-semibold text-foreground-950">P. <?= e($court['area']) ?></p></div>
-        <div class="rounded-md border border-background-200 bg-white px-3.5 py-3"><p class="text-[11px] uppercase tracking-wide text-foreground-500">Giá từ</p><p class="mt-0.5 text-sm font-semibold text-primary-600"><?= money($lowest) ?>/giờ</p><p class="mt-0.5 text-[11px] text-foreground-500">Giá thấp nhất trong ngày</p></div>
+        <div class="rounded-md border border-background-200 bg-white px-3.5 py-3"><p class="text-xs font-semibold uppercase tracking-wider text-foreground-500">Giờ mở cửa</p><p class="mt-0.5 text-sm font-semibold text-foreground-950"><?= e($court['openTime'] . ' - ' . $court['closeTime']) ?></p><p class="mt-0.5 text-xs text-foreground-500">Hằng ngày</p></div>
+        <div class="rounded-md border border-background-200 bg-white px-3.5 py-3"><p class="text-xs font-semibold uppercase tracking-wider text-foreground-500">Loại sân</p><p class="mt-0.5 text-sm font-semibold text-foreground-950"><?= count($court['fieldTypes']) ?> hình thức</p></div>
+        <div class="rounded-md border border-background-200 bg-white px-3.5 py-3"><p class="text-xs font-semibold uppercase tracking-wider text-foreground-500">Khu vực</p><p class="mt-0.5 text-sm font-semibold text-foreground-950">P. <?= e($court['area']) ?></p></div>
+        <div class="rounded-md border border-background-200 bg-white px-3.5 py-3"><p class="text-xs font-semibold uppercase tracking-wider text-foreground-500">Giá từ</p><p class="mt-0.5 text-sm font-semibold text-primary-600"><?= money($lowest) ?>/giờ</p><p class="mt-0.5 text-xs text-foreground-500">Giá thấp nhất trong ngày</p></div>
       </div>
 
       <div class="mt-5 rounded-lg border border-background-200 bg-white p-5">
@@ -103,9 +103,9 @@ render_page([
           <span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-primary-50 px-2.5 py-1 text-xs font-bold text-primary-700"><i class="ri-time-line" aria-hidden="true"></i><?= e($court['openTime'] . ' - ' . $court['closeTime']) ?></span>
         </div>
         <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div class="rounded-md border border-background-200 bg-background-50 px-3.5 py-3"><p class="text-[11px] uppercase tracking-wide text-foreground-500">Thứ 2 - Thứ 6</p><p class="mt-1 text-sm font-semibold text-foreground-950"><?= e($hours($weekday)) ?></p></div>
-          <div class="rounded-md border border-background-200 bg-background-50 px-3.5 py-3"><p class="text-[11px] uppercase tracking-wide text-foreground-500">Thứ 7 - Chủ nhật</p><p class="mt-1 text-sm font-semibold text-foreground-950"><?= e($hours($weekend)) ?></p></div>
-          <div class="rounded-md border border-background-200 bg-background-50 px-3.5 py-3"><p class="text-[11px] uppercase tracking-wide text-foreground-500">Lượt chơi cuối</p><p class="mt-1 text-sm font-semibold text-foreground-950">Kết thúc trước <?= e($court['closeTime']) ?></p></div>
+          <div class="rounded-md border border-background-200 bg-background-50 px-3.5 py-3"><p class="text-xs font-semibold uppercase tracking-wider text-foreground-500">Thứ 2 - Thứ 6</p><p class="mt-1 text-sm font-semibold text-foreground-950"><?= e($hours($weekday)) ?></p></div>
+          <div class="rounded-md border border-background-200 bg-background-50 px-3.5 py-3"><p class="text-xs font-semibold uppercase tracking-wider text-foreground-500">Thứ 7 - Chủ nhật</p><p class="mt-1 text-sm font-semibold text-foreground-950"><?= e($hours($weekend)) ?></p></div>
+          <div class="rounded-md border border-background-200 bg-background-50 px-3.5 py-3"><p class="text-xs font-semibold uppercase tracking-wider text-foreground-500">Lượt chơi cuối</p><p class="mt-1 text-sm font-semibold text-foreground-950">Kết thúc trước <?= e($court['closeTime']) ?></p></div>
         </div>
         <p class="mt-3 flex items-start gap-2 text-xs leading-relaxed text-foreground-600"><i class="ri-information-line mt-0.5 text-primary-600" aria-hidden="true"></i><?= e($court['operatingNote'] ?: 'Mở cửa tất cả các ngày trong tuần') ?> · Khung giờ tối là giờ cao điểm nên giá cao hơn khung sáng.</p>
       </div>
@@ -118,12 +118,12 @@ render_page([
           </ul>
         </div>
         <div class="rounded-lg border border-background-200 bg-white p-5">
-          <div class="flex flex-wrap items-center justify-between gap-2"><h2 class="font-heading text-base font-bold text-foreground-950">Bảng giá theo khung giờ</h2><span class="rounded-full bg-background-100 px-2 py-0.5 text-[11px] font-semibold text-foreground-600">Giá / giờ</span></div>
+          <div class="flex flex-wrap items-center justify-between gap-2"><h2 class="font-heading text-base font-bold text-foreground-950">Bảng giá theo khung giờ</h2><span class="rounded-full bg-background-100 px-2.5 py-0.5 text-xs font-semibold text-foreground-600">Giá / giờ</span></div>
           <div class="mt-3 overflow-x-auto">
             <table class="w-full min-w-[360px] text-sm">
               <thead>
-                <tr class="text-left text-[11px] uppercase tracking-wide text-foreground-500"><th class="pb-1 font-semibold">Loại sân</th><?php foreach ($bands as $b): ?><th class="pb-1 pl-2 text-right font-semibold"><?= e($b['shortLabel']) ?></th><?php endforeach; ?></tr>
-                <tr class="text-[10px] text-foreground-400"><td></td><?php foreach ($bands as $b): ?><td class="whitespace-nowrap pb-2 pl-2 text-right"><?= e($b['start'] . ' - ' . $b['end']) ?></td><?php endforeach; ?></tr>
+                <tr class="text-left text-xs uppercase tracking-wider text-foreground-500"><th class="pb-1 font-semibold">Loại sân</th><?php foreach ($bands as $b): ?><th class="pb-1 pl-2 text-right font-semibold"><?= e($b['shortLabel']) ?></th><?php endforeach; ?></tr>
+                <tr class="text-xs text-foreground-400"><td></td><?php foreach ($bands as $b): ?><td class="whitespace-nowrap pb-2 pl-2 text-right"><?= e($b['start'] . ' - ' . $b['end']) ?></td><?php endforeach; ?></tr>
               </thead>
               <tbody>
                 <?php foreach (($court['fieldTypes'] ?: ['Sân tiêu chuẩn']) as $i => $type): ?>

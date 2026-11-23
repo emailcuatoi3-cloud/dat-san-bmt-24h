@@ -1,7 +1,7 @@
 /**
  * Script chạy trên MỌI trang: thanh menu, giao diện sáng/tối, ngôn ngữ, đăng xuất.
  */
-import { $, $$, api, toast, url } from './ui.js';
+import { $, $$, APP, api, toast, url } from './ui.js';
 import { applyLanguage, getStoredLanguage, initDomLanguage, persistLanguage, watchDomChanges } from '../i18n/domTranslator.js';
 
 // ---------------- Giao diện sáng / tối ----------------
@@ -92,29 +92,95 @@ if (header && header.dataset.transparent === '1') {
 }
 paintLanguageButtons();
 
-// Các menu thả xuống trên thanh điều hướng (Ưu đãi, Tiện ích, Giới thiệu)
+// Các menu thả xuống trên thanh điều hướng (Ưu đãi, Tiện ích, Giới thiệu) - Hỗ trợ Hover và Click
+let navCloseTimer = null;
+let activeNavBtn = null;
+
 function closeNavDropdowns() {
   $$('[data-nav-panel]').forEach((p) => p.classList.add('hidden'));
   $$('[data-nav-toggle]').forEach((b) => b.setAttribute('aria-expanded', 'false'));
+  activeNavBtn = null;
 }
+
+function openNavDropdown(btn) {
+  if (!btn) return;
+  const id = btn.dataset.navToggle;
+  const panel = document.getElementById(id);
+  if (!panel) return;
+
+  clearTimeout(navCloseTimer);
+
+  // Ẩn các panel khác trước khi mở panel hiện tại
+  $$('[data-nav-panel]').forEach((p) => {
+    if (p !== panel) p.classList.add('hidden');
+  });
+  $$('[data-nav-toggle]').forEach((b) => {
+    if (b !== btn) b.setAttribute('aria-expanded', 'false');
+  });
+
+  const rect = btn.getBoundingClientRect();
+  const panelWidth = 288;
+  const maxLeft = window.innerWidth - panelWidth - 12;
+  const left = Math.min(Math.max(12, rect.left + rect.width / 2 - panelWidth / 2), Math.max(12, maxLeft));
+  panel.style.top = `${rect.bottom + 6}px`;
+  panel.style.left = `${left}px`;
+  panel.classList.remove('hidden');
+  btn.setAttribute('aria-expanded', 'true');
+  activeNavBtn = btn;
+}
+
+function scheduleCloseNav(ms = 220) {
+  clearTimeout(navCloseTimer);
+  navCloseTimer = setTimeout(closeNavDropdowns, ms);
+}
+
+// Bắt sự kiện hover cho menu điều hướng
+document.addEventListener('mouseover', (event) => {
+  const btn = event.target.closest('[data-nav-toggle]');
+  if (btn) {
+    openNavDropdown(btn);
+    return;
+  }
+  const panel = event.target.closest('[data-nav-panel]');
+  if (panel) {
+    clearTimeout(navCloseTimer);
+    return;
+  }
+});
+
+document.addEventListener('mouseout', (event) => {
+  const btn = event.target.closest('[data-nav-toggle]');
+  const panel = event.target.closest('[data-nav-panel]');
+  const related = event.relatedTarget;
+  if (btn) {
+    const id = btn.dataset.navToggle;
+    const targetPanel = document.getElementById(id);
+    if (btn.contains(related) || (targetPanel && targetPanel.contains(related))) return;
+    scheduleCloseNav(200);
+  } else if (panel) {
+    if (panel.contains(related) || (activeNavBtn && activeNavBtn.contains(related))) return;
+    scheduleCloseNav(200);
+  }
+});
+
 document.addEventListener('click', (event) => {
   const btn = event.target.closest('[data-nav-toggle]');
   if (btn) {
+    // Nếu là thẻ liên kết (<a>) có đường dẫn cụ thể, cho phép trình duyệt chuyển trang trực tiếp
+    if (btn.tagName === 'A' && btn.getAttribute('href') && !btn.getAttribute('href').startsWith('#')) {
+      closeNavDropdowns();
+      return;
+    }
     event.stopPropagation();
     const id = btn.dataset.navToggle;
     const panel = document.getElementById(id);
     if (!panel) return;
-    const wasOpen = !panel.classList.contains('hidden');
-    closeNavDropdowns();
-    if (wasOpen) return;
-    const rect = btn.getBoundingClientRect();
-    const panelWidth = 288;
-    const maxLeft = window.innerWidth - panelWidth - 12;
-    const left = Math.min(Math.max(12, rect.left + rect.width / 2 - panelWidth / 2), Math.max(12, maxLeft));
-    panel.style.top = `${rect.bottom + 10}px`;
-    panel.style.left = `${left}px`;
-    panel.classList.remove('hidden');
-    btn.setAttribute('aria-expanded', 'true');
+    const isOpen = !panel.classList.contains('hidden');
+    if (isOpen) {
+      closeNavDropdowns();
+    } else {
+      openNavDropdown(btn);
+    }
     return;
   }
   const openBot = event.target.closest('[data-open-chatbot]');
@@ -126,11 +192,41 @@ document.addEventListener('click', (event) => {
     window.dispatchEvent(new CustomEvent('bmt24h-open-chatbot'));
     return;
   }
+  if (!event.target.closest('[data-nav-panel]') && !event.target.closest('[data-nav-toggle]')) {
+    closeNavDropdowns();
+  }
 });
 window.addEventListener('scroll', closeNavDropdowns, { passive: true });
 window.addEventListener('resize', closeNavDropdowns);
 
-// Menu tài khoản và các dropdown đơn giản khác
+// Menu tài khoản và các dropdown đơn giản khác (Hỗ trợ cả Hover lẫn Click)
+let ddCloseTimer = null;
+document.addEventListener('mouseover', (event) => {
+  const dd = event.target.closest('[data-dropdown]');
+  if (dd) {
+    clearTimeout(ddCloseTimer);
+    const menu = $('[data-dropdown-menu]', dd);
+    const toggle = $('[data-dropdown-toggle]', dd);
+    if (menu) menu.classList.remove('hidden');
+    if (toggle) toggle.setAttribute('aria-expanded', 'true');
+  }
+});
+
+document.addEventListener('mouseout', (event) => {
+  const dd = event.target.closest('[data-dropdown]');
+  if (dd) {
+    const related = event.relatedTarget;
+    if (dd.contains(related)) return;
+    clearTimeout(ddCloseTimer);
+    ddCloseTimer = setTimeout(() => {
+      const menu = $('[data-dropdown-menu]', dd);
+      const toggle = $('[data-dropdown-toggle]', dd);
+      if (menu) menu.classList.add('hidden');
+      if (toggle) toggle.setAttribute('aria-expanded', 'false');
+    }, 200);
+  }
+});
+
 document.addEventListener('click', (event) => {
   const toggle = event.target.closest('[data-dropdown-toggle]');
   $$('[data-dropdown]').forEach((dd) => {
@@ -142,7 +238,6 @@ document.addEventListener('click', (event) => {
       menu.classList.add('hidden');
     }
   });
-  if (!event.target.closest('[data-nav-panel]') && !event.target.closest('[data-nav-toggle]')) closeNavDropdowns();
 });
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
@@ -205,5 +300,38 @@ window.addEventListener('bmt24h-favorites', (event) => {
     badge.classList.toggle('flex', count > 0);
   });
 });
+
+// Ghi nhớ trang nội bộ xem dở (để sau khi đăng nhập quay lại đúng trang này)
+try {
+  const curPath = window.location.pathname;
+  const authRoutes = ['/dang-nhap', '/dang-ky', '/dang-ky-chu-san', '/quen-mat-khau', '/dat-lai-mat-khau', '/dang-xuat'];
+  if (!authRoutes.some((r) => curPath.includes(r))) {
+    const base = APP.base || '';
+    let relPath = window.location.pathname;
+    if (base && relPath.startsWith(base)) {
+      relPath = relPath.slice(base.length);
+      if (!relPath.startsWith('/')) relPath = '/' + relPath;
+    }
+    const fullPrev = (relPath || '/') + (window.location.search || '');
+    if (fullPrev && fullPrev !== '/') {
+      sessionStorage.setItem('bmt24h_auth_return_url', fullPrev);
+    }
+  }
+} catch (e) {}
+
+// Đồng bộ chiều cao thanh Ghost Login (khi quản trị viên đang giả lập tài khoản)
+const ghostBanner = document.getElementById('ghost-login-banner');
+if (ghostBanner) {
+  const syncGhostH = () => {
+    const h = ghostBanner.offsetHeight || 44;
+    document.documentElement.style.setProperty('--ghost-banner-height', `${h}px`);
+    const siteH = document.getElementById('site-header');
+    if (siteH) siteH.style.top = `${h}px`;
+    const sidebars = document.querySelectorAll('#owner-sidebar');
+    sidebars.forEach((sb) => { sb.style.top = `${h}px`; });
+  };
+  syncGhostH();
+  window.addEventListener('resize', syncGhostH);
+}
 
 export { toast };

@@ -12,9 +12,10 @@ import {
   renderSitemapServices,
   renderSitemapPromotions,
   renderSitemapCustomers,
+  renderSitemapStaff,
   renderSitemapSettings,
   renderSitemapAccount,
-} from './owner-sitemap.js';
+} from './owner-sitemap.js?v=20261122_03';
 
 const RENDER = {
   overview: renderSitemapOverview,
@@ -24,6 +25,7 @@ const RENDER = {
   services: renderSitemapServices,
   promotions: renderSitemapPromotions,
   customers: renderSitemapCustomers,
+  staff: renderSitemapStaff,
   settings: renderSitemapSettings,
   account: renderSitemapAccount,
 };
@@ -39,18 +41,22 @@ window.__ownerRender = render;
 const sidebar = document.getElementById('owner-sidebar');
 const overlay = document.getElementById('owner-overlay');
 const toggleMenu = (open) => {
-  sidebar.classList.toggle('-translate-x-full', !open);
-  overlay.classList.toggle('hidden', !open);
+  if (sidebar) sidebar.classList.toggle('-translate-x-full', !open);
+  if (overlay) overlay.classList.toggle('hidden', !open);
 };
-document.getElementById('owner-menu-btn').addEventListener('click', () => toggleMenu(true));
-overlay.addEventListener('click', () => toggleMenu(false));
+document.getElementById('owner-menu-btn')?.addEventListener('click', () => toggleMenu(true));
+overlay?.addEventListener('click', () => toggleMenu(false));
 
+<<<<<<< HEAD
 document.querySelectorAll('#counter-btn, [data-open-counter]').forEach((btn) => {
   btn.addEventListener('click', () => {
     toggleMenu(false);
     openCounterBooking();
   });
 });
+=======
+document.getElementById('counter-btn')?.addEventListener('click', () => openCounterBooking());
+>>>>>>> Dev
 
 (async () => {
   main().innerHTML = loadingBlock('Đang tải dữ liệu kênh chủ sân...');
