@@ -125,6 +125,14 @@ function slugify(string $text): string
     return trim($text, '-');
 }
 
+/** Kiểm tra định dạng email hợp lệ */
+function valid_email(string $email): bool
+{
+    $email = trim($email);
+    if ($email === '') return false;
+    return (bool) filter_var($email, FILTER_VALIDATE_EMAIL) || (bool) preg_match('/^[^\s@]+@[^\s@]+\.[^\s@]+$/', $email);
+}
+
 // ---------------- API helpers ----------------
 
 /** Đọc body JSON của request (hoặc $_POST). */

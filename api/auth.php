@@ -9,9 +9,11 @@ function home_of_role(string $role): string
     return $role === 'admin' ? '/quan-tri' : ($role === 'owner' ? '/chu-san' : '/tai-khoan');
 }
 
-function valid_email(string $email): bool
-{
-    return (bool) preg_match('/^[^\s@]+@[^\s@]+\.[^\s@]+$/', $email);
+if (!function_exists('valid_email')) {
+    function valid_email(string $email): bool
+    {
+        return (bool) filter_var($email, FILTER_VALIDATE_EMAIL) || (bool) preg_match('/^[^\s@]+@[^\s@]+\.[^\s@]+$/', $email);
+    }
 }
 
 run_api([
