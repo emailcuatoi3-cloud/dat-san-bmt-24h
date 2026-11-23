@@ -58,11 +58,24 @@ run_api([
         $services = array_map(fn($s) => ['id' => $s['id'], 'name' => $s['name'], 'category' => $s['category'], 'unit' => $s['unit'],
             'price' => (int) $s['price'], 'stock' => (int) $s['stock'], 'active' => (bool) $s['active']],
             q_all('SELECT * FROM owner_services WHERE owner_id = ? ORDER BY sort_order, name', [$OWNER['id']]));
+        $blockedList = $ids ? array_map(fn($r) => [
+            'id' => (int) $r['id'],
+            'courtId' => $r['court_id'],
+            'courtName' => $r['court_name'],
+            'date' => $r['block_date'],
+            'slot' => $r['slot'],
+            'createdAt' => iso($r['created_at']),
+        ], q_all("SELECT b.id, b.court_id, c.name AS court_name, b.block_date, b.slot, b.created_at
+                  FROM blocked_slots b
+                  JOIN courts c ON c.id = b.court_id
+                  WHERE c.owner_id = ? AND b.block_date >= CURDATE()
+                  ORDER BY b.block_date ASC, b.slot ASC, c.name ASC", [$OWNER['id']])) : [];
         return [
             'courts' => $courts,
             'trash' => $trash,
             'bookings' => my_bookings(),
             'blocked' => (object) blocked_slots_map(null, $ids),
+            'blockedList' => $blockedList,
             'unreplied' => $unreplied,
             'services' => $services,
         ];
@@ -257,14 +270,44 @@ run_api([
                 : ['https://readdy.ai/api/search-image?query=Modern%20artificial%20grass%20five%20a%20side%20football%20pitch%20under%20bright%20floodlights%20at%20night%2C%20vivid%20green%20turf%2C%20white%20line%20markings%2C%20green%20net%20fence%2C%20clean%20sports%20photography%2C%20no%20people&width=1000&height=700&seq=bmt-court-fb-01a&orientation=landscape'];
         }
         $bands = [];
-        $peakStart = in_str('peakStart') ?: '17:00';
-        if ($peak > $price && $peakStart > $open && $peakStart < $close) {
-            $bands = [
-                ['id' => 'morning', 'label' => 'Buổi sáng và chiều', 'shortLabel' => 'Sáng – chiều', 'start' => $open, 'end' => $peakStart, 'price' => $price],
-                ['id' => 'evening', 'label' => 'Buổi tối', 'shortLabel' => 'Tối', 'start' => $peakStart, 'end' => $close, 'price' => $peak, 'peak' => true],
-            ];
-        } else {
-            $bands = [['id' => 'all', 'label' => 'Cả ngày', 'shortLabel' => 'Cả ngày', 'start' => $open, 'end' => $close, 'price' => $price]];
+        $rawBands = $d['priceBands'] ?? [];
+        if (!empty($rawBands) && is_array($rawBands)) {
+            foreach ($rawBands as $idx => $b) {
+                $bStart = trim((string)($b['start'] ?? ''));
+                $bEnd = trim((string)($b['end'] ?? ''));
+                $bPrice = max(0, (int)($b['price'] ?? 0));
+                $bLabel = trim((string)($b['label'] ?? ''));
+                $bShort = trim((string)($b['shortLabel'] ?? $bLabel));
+                $bPeak = !empty($b['peak']);
+                if ($bStart && $bEnd && $bStart < $bEnd && $bPrice > 0) {
+                    $bands[] = [
+                        'id' => $b['id'] ?? ('band_' . ($idx + 1)),
+                        'label' => $bLabel ?: ($bStart . ' - ' . $bEnd),
+                        'shortLabel' => $bShort ?: ($bStart . ' - ' . $bEnd),
+                        'start' => $bStart,
+                        'end' => $bEnd,
+                        'price' => $bPrice,
+                        'peak' => $bPeak,
+                    ];
+                }
+            }
+            if ($bands) {
+                usort($bands, fn($x, $y) => strcmp($x['start'], $y['start']));
+                $prices = array_column($bands, 'price');
+                $price = min($prices);
+                $peak = max($prices);
+            }
+        }
+        if (empty($bands)) {
+            $peakStart = in_str('peakStart') ?: '17:00';
+            if ($peak > $price && $peakStart > $open && $peakStart < $close) {
+                $bands = [
+                    ['id' => 'morning', 'label' => 'Buổi sáng và chiều', 'shortLabel' => 'Sáng – chiều', 'start' => $open, 'end' => $peakStart, 'price' => $price],
+                    ['id' => 'evening', 'label' => 'Buổi tối', 'shortLabel' => 'Tối', 'start' => $peakStart, 'end' => $close, 'price' => $peak, 'peak' => true],
+                ];
+            } else {
+                $bands = [['id' => 'all', 'label' => 'Cả ngày', 'shortLabel' => 'Cả ngày', 'start' => $open, 'end' => $close, 'price' => $price]];
+            }
         }
         $fields = [
             'name' => $name, 'sport' => $sport, 'sport_label' => sport_label($sport), 'area' => in_str('area'), 'address' => in_str('address'),
@@ -324,18 +367,100 @@ run_api([
         return true;
     },
 
-    // ---------------- Khóa khung giờ ----------------
+    // ---------------- Khóa khung giờ & Bảo trì ----------------
     'block_slots' => function () {
         staff_need('courts');
-        $c = my_court(in_str('courtId'));
-        $date = in_str('date');
-        $slots = clean_list(input()['slots'] ?? []);
-        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) fail('Ngày không hợp lệ.');
-        foreach ($slots as $s) {
-            if (input()['blocked'] ?? false) q('INSERT IGNORE INTO blocked_slots (court_id, block_date, slot) VALUES (?,?,?)', [$c['id'], $date, $s]);
-            else q('DELETE FROM blocked_slots WHERE court_id = ? AND block_date = ? AND slot = ?', [$c['id'], $date, $s]);
+        $rawCourtId = in_str('courtId');
+        $targetCourts = [];
+        if ($rawCourtId === 'all') {
+            $targetCourts = q_all('SELECT * FROM courts WHERE owner_id = ? AND deleted_at IS NULL', [api_require_owner()['id']]);
+        } else {
+            $targetCourts = [my_court($rawCourtId)];
         }
-        return blocked_slots_map($date, [$c['id']])[$c['id'] . ':' . $date] ?? [];
+        if (!$targetCourts) fail('Không tìm thấy sân hợp lệ.');
+
+        $date = in_str('date');
+        $fromDate = in_str('fromDate') ?: $date;
+        $toDate = in_str('toDate') ?: $date;
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fromDate) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $toDate)) {
+            fail('Ngày không hợp lệ.');
+        }
+        if ($fromDate > $toDate) {
+            [$fromDate, $toDate] = [$toDate, $fromDate];
+        }
+
+        $rawSlots = clean_list(input()['slots'] ?? []);
+        $isLock = (bool) (input()['blocked'] ?? false);
+        $lockAllDay = empty($rawSlots) || in_array('all', $rawSlots, true);
+
+        $cur = new DateTime($fromDate);
+        $end = new DateTime($toDate);
+        $daysCount = 0;
+
+        while ($cur <= $end && $daysCount < 60) {
+            $dStr = $cur->format('Y-m-d');
+            foreach ($targetCourts as $c) {
+                $cMapped = map_court($c);
+                $slotsToApply = $rawSlots;
+                if ($lockAllDay) {
+                    $h = hoursForDate($cMapped, $dStr);
+                    $slotsToApply = [];
+                    if (!$h['closed']) {
+                        for ($t = toMinutes($h['open']); $t + 60 <= toMinutes($h['close']); $t += 60) {
+                            $slotsToApply[] = minutesToTime($t);
+                        }
+                    }
+                }
+                foreach ($slotsToApply as $s) {
+                    if ($isLock) {
+                        q('INSERT IGNORE INTO blocked_slots (court_id, block_date, slot) VALUES (?,?,?)', [$c['id'], $dStr, $s]);
+                    } else {
+                        q('DELETE FROM blocked_slots WHERE court_id = ? AND block_date = ? AND slot = ?', [$c['id'], $dStr, $s]);
+                    }
+                }
+            }
+            $cur->modify('+1 day');
+            $daysCount++;
+        }
+
+        $courtIds = my_court_ids();
+        $updatedMap = blocked_slots_map($date ?: null, $courtIds);
+        $blockedList = array_map(fn($r) => [
+            'id' => (int) $r['id'],
+            'courtId' => $r['court_id'],
+            'courtName' => $r['court_name'],
+            'date' => $r['block_date'],
+            'slot' => $r['slot'],
+            'createdAt' => iso($r['created_at']),
+        ], q_all("SELECT b.id, b.court_id, c.name AS court_name, b.block_date, b.slot, b.created_at
+                  FROM blocked_slots b
+                  JOIN courts c ON c.id = b.court_id
+                  WHERE c.owner_id = ? AND b.block_date >= CURDATE()
+                  ORDER BY b.block_date ASC, b.slot ASC, c.name ASC", [api_require_owner()['id']]));
+
+        return [
+            'blocked' => (object) $updatedMap,
+            'list' => $blockedList,
+            'courtBlocked' => $rawCourtId !== 'all' ? ($updatedMap[$rawCourtId . ':' . ($date ?: $fromDate)] ?? []) : [],
+        ];
+    },
+
+    'blocked_list' => function () {
+        staff_need('courts');
+        global $OWNER;
+        $rows = q_all("SELECT b.id, b.court_id, c.name AS court_name, b.block_date, b.slot, b.created_at
+                       FROM blocked_slots b
+                       JOIN courts c ON c.id = b.court_id
+                       WHERE c.owner_id = ? AND b.block_date >= CURDATE()
+                       ORDER BY b.block_date ASC, b.slot ASC, c.name ASC", [$OWNER['id']]);
+        return array_map(fn($r) => [
+            'id' => (int) $r['id'],
+            'courtId' => $r['court_id'],
+            'courtName' => $r['court_name'],
+            'date' => $r['block_date'],
+            'slot' => $r['slot'],
+            'createdAt' => iso($r['created_at']),
+        ], $rows);
     },
 
     // ---------------- Đánh giá ----------------

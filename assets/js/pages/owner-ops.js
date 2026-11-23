@@ -572,8 +572,13 @@ export function openQrScanner() {
 }
 
 export function renderOverview() {
-  actions().innerHTML = `<button type="button" id="ov-add" class="${BTN}"><i class="ri-add-line"></i>Tạo đơn tại quầy</button>`;
+  actions().innerHTML = `
+    <button type="button" id="ov-block" class="${BTN_OUT}"><i class="ri-tools-line text-accent-600"></i>Khóa bảo trì</button>
+    <button type="button" id="ov-add" class="${BTN}"><i class="ri-add-line"></i>Tạo đơn tại quầy</button>
+  `;
   actions().querySelector('#ov-add').onclick = () => openCounterBooking();
+  actions().querySelector('#ov-block').onclick = () => openQuickBlockModal();
+
   const live = S.bookings.filter(isActive);
   const today = live.filter((b) => b.date === TODAY);
   const pending = S.bookings.filter((b) => b.status === 'pending' && !b.approvedAt);
@@ -592,7 +597,121 @@ export function renderOverview() {
   const activeCourts = S.courts.filter((c) => c.status === 'active').length;
   const notCheckedIn = today.filter((b) => b.status === 'confirmed' && !b.checkedInAt).length;
 
+  const nowHour = `${String(new Date().getHours()).padStart(2, '0')}:00`;
+  const blockedUpcoming = (S.blockedList || []).filter((b) => b.date >= TODAY);
+
+  const liveCourts = S.courts.map((c) => {
+    const h = hoursForDate(c, TODAY);
+    const b = today.find((x) => x.courtId === c.id && (x.slots || []).includes(nowHour));
+    const isBlk = (S.blocked[`${c.id}:${TODAY}`] || []).includes(nowHour);
+    const isClosed = h.closed || nowHour < h.open || nowHour >= h.close;
+    return { c, h, booking: b, isBlocked: isBlk, isClosed };
+  });
+
   main().innerHTML = `
+  <!-- Thanh tác vụ nhanh (Quick Actions) -->
+  <div class="mb-5 flex flex-wrap items-center gap-2 rounded-lg border border-background-200 bg-white p-3 shadow-xs">
+    <span class="text-xs font-bold uppercase tracking-wider text-foreground-500 mr-1"><i class="ri-flashlight-line text-accent-500"></i> Thao tác nhanh:</span>
+    <button type="button" id="qa-counter" class="${BTN_SM_PRI}"><i class="ri-add-line"></i>Tạo đơn tại quầy</button>
+    <button type="button" id="qa-block" class="${BTN_SM}"><i class="ri-tools-line text-accent-600"></i>Khóa sân bảo trì</button>
+    <a href="?tab=bookings&sub=calendar" class="${BTN_SM}"><i class="ri-calendar-schedule-line text-primary-600"></i>Lịch sân trực quan</a>
+    <a href="?tab=courts&sub=schedule" class="${BTN_SM}"><i class="ri-time-line text-secondary-600"></i>Bảng giá & Khung giờ</a>
+    <a href="?tab=courts&sub=blocked" class="${BTN_SM}"><i class="ri-lock-2-line text-foreground-600"></i>Khung giờ bị khóa (${blockedUpcoming.length})</a>
+  </div>
+
+  ${blockedUpcoming.length ? `
+    <div class="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-900">
+      <div class="flex items-center gap-2">
+        <i class="ri-alert-line text-base text-amber-700"></i>
+        <span>Đang có <b>${blockedUpcoming.length} khung giờ</b> bị khóa bảo trì từ hôm nay trở đi.</span>
+      </div>
+      <a href="?tab=courts&sub=blocked" class="font-bold underline hover:text-amber-950">Xem & quản lý mở khóa →</a>
+    </div>
+  ` : ''}
+
+  <!-- Tình trạng sân trực tiếp lúc này (Realtime) -->
+  <section class="${CARD} mb-5 p-4">
+    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-background-200 pb-3 mb-3">
+      <div>
+        <h3 class="font-heading text-sm font-bold text-foreground-950 flex items-center gap-2">
+          <span class="relative flex h-2.5 w-2.5">
+            <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+          </span>
+          Trạng thái sân trực tiếp lúc này (${nowHour})
+        </h3>
+        <p class="text-xs text-foreground-500 mt-0.5">Theo dõi trực quan sân nào đang có khách, sân nào đang trống hoặc bảo trì</p>
+      </div>
+      <div class="flex items-center gap-2 text-xs">
+        <span class="inline-flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-emerald-500"></span> Có khách (${liveCourts.filter((x) => x.booking).length})</span>
+        <span class="inline-flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-blue-500"></span> Trống (${liveCourts.filter((x) => !x.booking && !x.isBlocked && !x.isClosed).length})</span>
+        <span class="inline-flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-rose-500"></span> Khóa (${liveCourts.filter((x) => x.isBlocked).length})</span>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      ${liveCourts.map(({ c, h, booking, isBlocked, isClosed }) => {
+        if (booking) {
+          return `
+            <div class="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-sm text-foreground-950 truncate">${esc(c.name)}</span>
+                <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">Có khách</span>
+              </div>
+              <p class="mt-2 text-xs font-semibold text-emerald-900 truncate">${esc(booking.customerName)} (${esc(booking.customerPhone || '—')})</p>
+              <p class="text-[11px] text-emerald-700">Đơn ${esc(booking.code)} · ${booking.startSlot} - ${booking.endSlot}</p>
+              <div class="mt-3 flex gap-1">
+                <button type="button" data-detail="${booking.id}" class="${BTN_SM} !py-1 !text-xs w-full">Xem chi tiết đơn</button>
+              </div>
+            </div>
+          `;
+        }
+        if (isBlocked) {
+          return `
+            <div class="rounded-lg border border-rose-200 bg-rose-50/50 p-3">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-sm text-foreground-950 truncate">${esc(c.name)}</span>
+                <span class="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-800"><i class="ri-lock-line"></i> Đang khóa</span>
+              </div>
+              <p class="mt-2 text-xs text-rose-800">Khung giờ ${nowHour} đang khóa bảo trì</p>
+              <p class="text-[11px] text-foreground-500">Khách không thể đặt trực tuyến</p>
+              <div class="mt-3 flex gap-1">
+                <button type="button" data-quick-unblock="${c.id}:${TODAY}:${nowHour}" class="${BTN_SM} !py-1 !text-xs w-full text-rose-700 hover:bg-rose-100"><i class="ri-lock-unlock-line"></i> Mở khóa ngay</button>
+              </div>
+            </div>
+          `;
+        }
+        if (isClosed) {
+          return `
+            <div class="rounded-lg border border-background-200 bg-background-100/50 p-3">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-sm text-foreground-950 truncate">${esc(c.name)}</span>
+                <span class="rounded-full bg-background-200 px-2 py-0.5 text-[10px] font-bold text-foreground-600">Đóng cửa</span>
+              </div>
+              <p class="mt-2 text-xs text-foreground-600">${h.closed ? 'Nghỉ cả ngày' : `Mở cửa: ${h.open} - ${h.close}`}</p>
+              <p class="text-[11px] text-foreground-500">Ngoài giờ hoạt động</p>
+              <div class="mt-3 flex gap-1">
+                <a href="?tab=courts&sub=schedule" class="${BTN_SM} !py-1 !text-xs w-full text-center">Chỉnh giờ</a>
+              </div>
+            </div>
+          `;
+        }
+        return `
+          <div class="rounded-lg border border-blue-200 bg-blue-50/40 p-3">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-sm text-foreground-950 truncate">${esc(c.name)}</span>
+              <span class="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-800">Đang trống</span>
+            </div>
+            <p class="mt-2 text-xs text-blue-900 font-medium">Khung ${nowHour} sẵn sàng nhận khách</p>
+            <p class="text-[11px] text-blue-700 font-semibold">${money(c.pricePerHour)}/giờ</p>
+            <div class="mt-3 flex gap-1">
+              <button type="button" data-quick-book="${c.id}:${TODAY}:${nowHour}" class="${BTN_SM_PRI} !py-1 !text-xs w-full"><i class="ri-add-line"></i> Đặt tại quầy ngay</button>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  </section>
+
   <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
     ${statCard('ri-calendar-event-line', 'Đơn hôm nay', today.length, notCheckedIn ? `${notCheckedIn} đơn chưa nhận sân` : 'Tất cả đã nhận sân')}
     ${statCard('ri-time-line', 'Chờ bạn duyệt', pending.length, pending.length ? 'Duyệt sớm để giữ chân khách' : 'Không có đơn tồn', 'accent')}
@@ -624,7 +743,30 @@ export function renderOverview() {
         </ul></section>
     </div>
   </div>`;
-  bindBookingActions(main());
+  const root = main();
+  bindBookingActions(root);
+
+  const qaCounter = root.querySelector('#qa-counter');
+  const qaBlock = root.querySelector('#qa-block');
+  if (qaCounter) qaCounter.onclick = () => openCounterBooking();
+  if (qaBlock) qaBlock.onclick = () => openQuickBlockModal();
+
+  on(root, 'click', '[data-quick-book]', (e, el) => {
+    const [courtId, date, slot] = el.dataset.quickBook.split(':');
+    openCounterBooking({ courtId, date, slots: [slot] });
+  });
+
+  on(root, 'click', '[data-quick-unblock]', async (e, el) => {
+    const [courtId, date, slot] = el.dataset.quickUnblock.split(':');
+    try {
+      const res = await api('owner', 'block_slots', { courtId, date, slots: [slot], blocked: false });
+      if (res.blocked) S.blocked = res.blocked;
+      if (res.list) S.blockedList = res.list;
+      if (res.courtBlocked) S.blocked[`${courtId}:${date}`] = res.courtBlocked;
+      toast('Đã mở khóa khung giờ thành công.');
+      renderOverview();
+    } catch (err) { toast(err.message, 'error'); }
+  });
 }
 
 // =====================================================================
@@ -809,6 +951,30 @@ export function openCourtForm(court = null) {
   const peakBand = (c.priceBands || []).find((b) => b.peak);
   const weekly = normalizeWeeklyHours(c.weeklyHours, c.openTime, c.closeTime);
   const custom = court ? isWeeklyCustomized(c) : false;
+  const hasCustomBands = (c.priceBands || []).length > 1;
+
+  const bandRowHtml = (b = {}) => `
+    <div class="band-row flex flex-wrap items-center gap-2 rounded-md border border-background-200 bg-white p-2 text-xs">
+      <input type="text" data-band-label class="${INPUT} !w-32 !py-1 text-xs" placeholder="Tên khung" value="${esc(b.label || b.shortLabel || '')}">
+      <div class="flex items-center gap-1">
+        <span class="text-foreground-500 text-[11px]">Từ</span>
+        ${timeSelect('b_start', b.start || '05:00', `${INPUT} !w-24 !py-1 text-xs`)}
+      </div>
+      <div class="flex items-center gap-1">
+        <span class="text-foreground-500 text-[11px]">Đến</span>
+        ${timeSelect('b_end', b.end || '17:00', `${INPUT} !w-24 !py-1 text-xs`)}
+      </div>
+      <div class="flex items-center gap-1">
+        <span class="text-foreground-500 text-[11px]">Giá</span>
+        <input type="number" step="10000" min="0" data-band-price class="${INPUT} !w-28 !py-1 text-xs" placeholder="đ/giờ" value="${b.price || ''}">
+      </div>
+      <label class="flex items-center gap-1 text-[11px] font-semibold cursor-pointer text-foreground-700">
+        <input type="checkbox" data-band-peak ${b.peak ? 'checked' : ''} class="accent-accent-500"> Giờ vàng/Cao điểm
+      </label>
+      <button type="button" data-remove-band class="${BTN_SM_DANGER} !p-1 ml-auto" title="Xóa khung này"><i class="ri-delete-bin-line"></i></button>
+    </div>
+  `;
+
   const m = modal(
     court ? `Sửa sân: ${esc(c.name)}` : 'Thêm sân mới',
     `<form id="court-form" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -822,6 +988,24 @@ export function openCourtForm(court = null) {
       <div><label class="${LABEL}">Trạng thái</label><select name="status" class="${INPUT}">${[['active', 'Đang hoạt động'], ['maintenance', 'Đang bảo trì'], ['paused', 'Tạm dừng']].map(([v, l]) => `<option value="${v}" ${c.status === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
       <div><label class="${LABEL}">Giờ mở cửa</label>${timeSelect('openTime', c.openTime)}</div>
       <div><label class="${LABEL}">Giờ đóng cửa</label>${timeSelect('closeTime', c.closeTime)}</div>
+
+      <div class="sm:col-span-2 rounded-md border border-background-200 bg-background-50/60 p-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <label class="flex cursor-pointer items-center gap-2 text-sm font-semibold text-foreground-900">
+            <input type="checkbox" name="customPriceBands" ${hasCustomBands ? 'checked' : ''} class="accent-primary-500">
+            Bảng giá chi tiết theo khung giờ (Sáng / Chiều / Giờ vàng / Tối)
+          </label>
+          <div data-preset-wrap class="${hasCustomBands ? '' : 'hidden'} flex flex-wrap gap-1">
+            <button type="button" data-preset="2bands" class="${BTN_SM} !py-0.5 !text-[11px]">Mẫu 2 khung (Sáng/Tối)</button>
+            <button type="button" data-preset="3bands" class="${BTN_SM} !py-0.5 !text-[11px]">Mẫu 3 khung (Giờ vàng)</button>
+            <button type="button" data-preset="4bands" class="${BTN_SM} !py-0.5 !text-[11px]">Mẫu 4 khung</button>
+          </div>
+        </div>
+        <p class="mt-1 text-xs text-foreground-500">Thiết lập giá chi tiết cho từng khoảng thời gian trong ngày. Khách đặt slot nào sẽ tự động tính giá theo khung giờ đó.</p>
+        <div data-bands-list class="${hasCustomBands ? '' : 'hidden'} mt-3 space-y-2"></div>
+        <button type="button" data-add-band class="${BTN_SM} mt-2 ${hasCustomBands ? '' : 'hidden'}"><i class="ri-add-line"></i>Thêm khung giờ giá</button>
+      </div>
+
       <div class="sm:col-span-2 rounded-md border border-background-200 p-3">
         <label class="flex cursor-pointer items-center gap-2 text-sm font-semibold"><input type="checkbox" name="customWeek" ${custom ? 'checked' : ''} class="accent-primary-500">Giờ mở cửa riêng cho từng ngày trong tuần</label>
         <div data-week class="${custom ? '' : 'hidden'} mt-3 space-y-2">${WEEKDAY_KEYS.map((k) => `<div class="grid grid-cols-[80px_auto_1fr_1fr] items-center gap-2 text-sm"><span class="font-medium">${WEEKDAY_LABELS[k]}</span><label class="flex items-center gap-1 text-xs"><input type="checkbox" data-closed="${k}" ${weekly[k].closed ? 'checked' : ''} class="accent-accent-500">Nghỉ</label>${timeSelect(`wo_${k}`, weekly[k].open, `${INPUT} !py-1.5`)}${timeSelect(`wc_${k}`, weekly[k].close, `${INPUT} !py-1.5`)}</div>`).join('')}</div>
@@ -841,6 +1025,66 @@ export function openCourtForm(court = null) {
   const form = m.el.querySelector('#court-form');
   form.customWeek.addEventListener('change', () => m.el.querySelector('[data-week]').classList.toggle('hidden', !form.customWeek.checked));
   on(form, 'click', '[data-img]', (e, el) => { form.images.value = `${form.images.value.trim()}\n${el.dataset.img}`.trim(); });
+
+  const bandsList = m.el.querySelector('[data-bands-list]');
+  const presetWrap = m.el.querySelector('[data-preset-wrap]');
+  const addBandBtn = m.el.querySelector('[data-add-band]');
+  const initialBands = (c.priceBands && c.priceBands.length) ? c.priceBands : [
+    { label: 'Sáng – chiều', start: c.openTime || '05:00', end: '17:00', price: c.pricePerHour || 150000, peak: false },
+    { label: 'Giờ vàng / Buổi tối', start: '17:00', end: c.closeTime || '23:00', price: c.peakPrice || 250000, peak: true },
+  ];
+  bandsList.innerHTML = initialBands.map(bandRowHtml).join('');
+
+  form.customPriceBands.addEventListener('change', () => {
+    const show = form.customPriceBands.checked;
+    bandsList.classList.toggle('hidden', !show);
+    presetWrap.classList.toggle('hidden', !show);
+    addBandBtn.classList.toggle('hidden', !show);
+  });
+
+  addBandBtn.addEventListener('click', () => {
+    bandsList.insertAdjacentHTML('beforeend', bandRowHtml({ label: 'Khung giờ mới', start: '17:00', end: '21:00', price: c.peakPrice || 200000, peak: false }));
+  });
+
+  on(bandsList, 'click', '[data-remove-band]', (e, el) => {
+    const row = el.closest('.band-row');
+    if (bandsList.querySelectorAll('.band-row').length > 1) {
+      row.remove();
+    } else {
+      toast('Cần ít nhất 1 khung giờ giá.', 'error');
+    }
+  });
+
+  on(m.el, 'click', '[data-preset]', (e, el) => {
+    const p = el.dataset.preset;
+    const op = form.openTime.value || '05:00';
+    const cl = form.closeTime.value || '23:00';
+    const baseP = Number(form.pricePerHour.value) || 150000;
+    const peakP = Number(form.peakPrice.value) || 250000;
+    let bds = [];
+    if (p === '2bands') {
+      bds = [
+        { label: 'Sáng – chiều', start: op, end: '17:00', price: baseP, peak: false },
+        { label: 'Buổi tối', start: '17:00', end: cl, price: peakP, peak: true },
+      ];
+    } else if (p === '3bands') {
+      bds = [
+        { label: 'Buổi sáng', start: op, end: '16:00', price: baseP, peak: false },
+        { label: 'Giờ vàng (Cao điểm)', start: '16:00', end: '20:00', price: peakP, peak: true },
+        { label: 'Buổi tối muộn', start: '20:00', end: cl, price: Math.round((baseP + peakP) / 2), peak: false },
+      ];
+    } else if (p === '4bands') {
+      bds = [
+        { label: 'Sáng sớm thể dục', start: op, end: '08:00', price: baseP, peak: false },
+        { label: 'Ban ngày vắng khách', start: '08:00', end: '16:00', price: Math.max(80000, baseP - 20000), peak: false },
+        { label: 'Giờ vàng tan ca', start: '16:00', end: '21:00', price: peakP, peak: true },
+        { label: 'Khung đêm', start: '21:00', end: cl, price: baseP, peak: false },
+      ];
+    }
+    bandsList.innerHTML = bds.map(bandRowHtml).join('');
+    toast(`Đã áp dụng mẫu ${el.textContent}`);
+  });
+
   m.el.querySelector('[data-ok]').addEventListener('click', async (e) => {
     const f = formData(form);
     const split = (v, sep) => (v || '').split(sep).map((s) => s.trim()).filter(Boolean);
@@ -849,9 +1093,32 @@ export function openCourtForm(court = null) {
       weeklyHours = {};
       WEEKDAY_KEYS.forEach((k) => (weeklyHours[k] = { closed: form.querySelector(`[data-closed="${k}"]`).checked, open: f[`wo_${k}`], close: f[`wc_${k}`] }));
     }
+
+    let priceBands = null;
+    let pricePerHour = Number(f.pricePerHour) || 0;
+    let peakPrice = Number(f.peakPrice) || 0;
+    if (form.customPriceBands.checked) {
+      priceBands = [];
+      bandsList.querySelectorAll('.band-row').forEach((row, idx) => {
+        const lbl = row.querySelector('[data-band-label]').value.trim();
+        const st = row.querySelector('select[name="b_start"]').value;
+        const en = row.querySelector('select[name="b_end"]').value;
+        const pr = Number(row.querySelector('[data-band-price]').value) || 0;
+        const pk = row.querySelector('[data-band-peak]').checked;
+        if (st && en && st < en && pr > 0) {
+          priceBands.push({ id: `band_${idx + 1}`, label: lbl || `${st} - ${en}`, shortLabel: lbl || `${st} - ${en}`, start: st, end: en, price: pr, peak: pk });
+        }
+      });
+      if (priceBands.length) {
+        const prs = priceBands.map((x) => x.price);
+        pricePerHour = Math.min(...prs);
+        peakPrice = Math.max(...prs);
+      }
+    }
+
     const body = {
-      id: court ? court.id : '', name: f.name, sport: f.sport, area: f.area, address: f.address, pricePerHour: Number(f.pricePerHour) || 0, peakPrice: Number(f.peakPrice) || 0,
-      peakStart: f.peakStart, status: f.status, openTime: f.openTime, closeTime: f.closeTime, weeklyHours, images: split(f.images, '\n'), fieldTypes: split(f.fieldTypes, ','),
+      id: court ? court.id : '', name: f.name, sport: f.sport, area: f.area, address: f.address, pricePerHour, peakPrice,
+      peakStart: f.peakStart, status: f.status, openTime: f.openTime, closeTime: f.closeTime, weeklyHours, priceBands, images: split(f.images, '\n'), fieldTypes: split(f.fieldTypes, ','),
       facilities: split(f.facilities, ','), highlights: split(f.highlights, '\n'), description: f.description, priceNote: f.priceNote, note: f.note,
     };
     setBusy(e.currentTarget, true, 'Đang lưu...');
@@ -883,6 +1150,13 @@ export function renderCourts() {
           <div class="rounded-md bg-background-100 px-2.5 py-2"><p class="text-foreground-500">Tổng đơn</p><p class="font-bold text-foreground-950">${count(c.id)}</p></div>
         </div>
         ${isWeeklyCustomized(c) ? `<p class="mt-2 text-[11px] text-foreground-500">${esc(weekdaySummary(c.weeklyHours))}</p>` : ''}
+        ${(c.priceBands && c.priceBands.length > 1) ? `
+          <div class="mt-2.5 rounded-md border border-background-200 bg-background-50/70 p-2 text-xs">
+            <p class="font-semibold text-foreground-700 mb-1 flex items-center gap-1 text-[11px]"><i class="ri-price-tag-3-line text-primary-600"></i> Bảng giá theo khung giờ:</p>
+            <div class="space-y-0.5">
+              ${c.priceBands.map((b) => `<div class="flex justify-between items-center text-[11px]"><span class="text-foreground-600">${esc(b.shortLabel || b.label)} (${b.start} - ${b.end})${b.peak ? ' <span class="rounded bg-accent-100 text-accent-800 px-1 py-0.2 font-semibold">Giờ vàng</span>' : ''}</span><b class="text-foreground-900">${money(b.price)}</b></div>`).join('')}
+            </div>
+          </div>` : ''}
         <div class="mt-4 flex flex-wrap gap-1.5">
           <button type="button" data-edit="${c.id}" class="${BTN_SM_PRI}"><i class="ri-edit-line"></i>Sửa</button>
           <select data-status="${c.id}" class="rounded-md border border-background-300 bg-white px-2 py-1.5 text-xs font-semibold">${[['active', 'Đang hoạt động'], ['maintenance', 'Bảo trì'], ['paused', 'Tạm dừng']].map(([v, l]) => `<option value="${v}" ${c.status === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
@@ -926,6 +1200,115 @@ export function renderCourts() {
 
 const sf = { court: '', date: TODAY, picked: new Set() };
 
+export function openQuickBlockModal(preset = {}) {
+  const defaultDate = preset.date || TODAY;
+  const cOptions = `<option value="all">Tất cả các sân (${S.courts.length} sân)</option>` +
+    S.courts.map((c) => `<option value="${c.id}" ${c.id === preset.courtId ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
+
+  const m = modal(
+    '<i class="ri-tools-line text-accent-600"></i> Khóa sân bảo trì',
+    `<form id="quick-block-form" class="space-y-4 text-xs">
+      <div>
+        <label class="${LABEL}">Chọn sân cần khóa *</label>
+        <select name="courtId" class="${INPUT}">${cOptions}</select>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="${LABEL}">Từ ngày *</label>
+          <input type="date" name="fromDate" min="${TODAY}" value="${defaultDate}" class="${INPUT}">
+        </div>
+        <div>
+          <label class="${LABEL}">Đến ngày *</label>
+          <input type="date" name="toDate" min="${TODAY}" value="${defaultDate}" class="${INPUT}">
+        </div>
+      </div>
+      <div>
+        <label class="${LABEL}">Hình thức khóa *</label>
+        <select name="mode" class="${INPUT}">
+          <option value="allday">Khóa cả ngày (tất cả các khung giờ hoạt động)</option>
+          <option value="range">Khóa một khoảng giờ cụ thể (VD: 07:00 - 11:00)</option>
+        </select>
+      </div>
+      <div data-hours-wrap class="hidden grid grid-cols-2 gap-3 rounded-md border border-background-200 bg-background-50 p-3">
+        <div>
+          <label class="${LABEL}">Từ giờ</label>
+          ${timeSelect('fromTime', '07:00')}
+        </div>
+        <div>
+          <label class="${LABEL}">Đến giờ</label>
+          ${timeSelect('toTime', '11:00')}
+        </div>
+      </div>
+      <div>
+        <label class="${LABEL}">Lý do bảo trì / ghi chú</label>
+        <input name="reason" class="${INPUT}" placeholder="VD: Bảo dưỡng cỏ nhân tạo, thay bóng đèn LED, mưa ngập sân...">
+        <div class="mt-2 flex flex-wrap gap-1.5" data-reason-tags>
+          <button type="button" class="${BTN_SM} !text-[11px] !py-0.5">Bảo dưỡng cỏ</button>
+          <button type="button" class="${BTN_SM} !text-[11px] !py-0.5">Sửa đèn LED</button>
+          <button type="button" class="${BTN_SM} !text-[11px] !py-0.5">Sửa lưới & khung thành</button>
+          <button type="button" class="${BTN_SM} !text-[11px] !py-0.5">Mưa ngập sân</button>
+          <button type="button" class="${BTN_SM} !text-[11px] !py-0.5">Giải đấu nội bộ</button>
+        </div>
+      </div>
+      <div class="rounded-md bg-amber-50 border border-amber-200 p-2.5 text-amber-800 text-[11px]">
+        <i class="ri-alert-line font-bold"></i> Khách hàng sẽ không thể đặt các khung giờ đã khóa trên website. Bạn có thể mở khóa lại bất kỳ lúc nào.
+      </div>
+    </form>`,
+    `<button type="button" data-close class="${BTN_OUT}">Hủy</button>
+     <button type="button" data-ok class="${BTN_DANGER}"><i class="ri-lock-line"></i> Xác nhận khóa bảo trì</button>`,
+    'max-w-lg',
+  );
+
+  const form = m.el.querySelector('#quick-block-form');
+  const modeSelect = form.querySelector('select[name="mode"]');
+  const hoursWrap = form.querySelector('[data-hours-wrap]');
+  modeSelect.addEventListener('change', () => {
+    hoursWrap.classList.toggle('hidden', modeSelect.value !== 'range');
+  });
+
+  on(form, 'click', '[data-reason-tags] button', (e, btn) => {
+    form.reason.value = btn.textContent.trim();
+  });
+
+  m.el.querySelector('[data-ok]').addEventListener('click', async (e) => {
+    const f = formData(form);
+    if (!f.fromDate || !f.toDate) return toast('Vui lòng chọn ngày bắt đầu và kết thúc.', 'error');
+    if (f.fromDate > f.toDate) return toast('Ngày bắt đầu không được lớn hơn ngày kết thúc.', 'error');
+
+    let slots = ['all'];
+    if (f.mode === 'range') {
+      const startMin = toMinutes(f.fromTime);
+      const endMin = toMinutes(f.toTime);
+      if (startMin >= endMin) return toast('Giờ bắt đầu phải trước giờ kết thúc.', 'error');
+      slots = [];
+      for (let t = startMin; t + 60 <= endMin; t += 60) {
+        slots.push(minutesToTime(t));
+      }
+      if (!slots.length) return toast('Khoảng giờ phải tối thiểu 1 tiếng.', 'error');
+    }
+
+    setBusy(e.currentTarget, true, 'Đang khóa...');
+    try {
+      const res = await api('owner', 'block_slots', {
+        courtId: f.courtId,
+        fromDate: f.fromDate,
+        toDate: f.toDate,
+        slots,
+        blocked: true,
+        reason: f.reason || 'Bảo trì',
+      });
+      if (res.blocked) S.blocked = res.blocked;
+      if (res.list) S.blockedList = res.list;
+      m.close();
+      toast('Đã khóa bảo trì thành công.');
+      rerender();
+    } catch (err) {
+      setBusy(e.currentTarget, false);
+      toast(err.message, 'error');
+    }
+  });
+}
+
 export function renderSchedule() {
   if (!S.courts.length) { main().innerHTML = emptyState('ri-time-line', 'Chưa có sân', 'Thêm sân để thiết lập lịch.'); return; }
   if (!courtById(sf.court) || !S.courts.find((c) => c.id === sf.court)) sf.court = S.courts[0].id;
@@ -941,7 +1324,11 @@ export function renderSchedule() {
   const wd = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
   const free = slots.filter((s) => !bookedBy[s] && !blocked.has(s)).length;
 
-  actions().innerHTML = `<button type="button" id="sc-counter" class="${BTN}"><i class="ri-add-line"></i>Tạo đơn tại quầy</button>`;
+  actions().innerHTML = `
+    <button type="button" id="sc-quick-block" class="${BTN_OUT}"><i class="ri-tools-line text-accent-600"></i>Khóa bảo trì</button>
+    <button type="button" id="sc-counter" class="${BTN}"><i class="ri-add-line"></i>Tạo đơn tại quầy</button>
+  `;
+  actions().querySelector('#sc-quick-block').onclick = () => openQuickBlockModal({ courtId: c.id, date: sf.date });
   actions().querySelector('#sc-counter').onclick = () => openCounterBooking({ courtId: c.id, date: sf.date });
 
   main().innerHTML = `
@@ -949,31 +1336,52 @@ export function renderSchedule() {
     <div class="${CARD} min-w-0 p-4">
       <div class="flex flex-wrap items-center gap-2"><select id="sc-court" class="${INPUT} sm:max-w-xs">${courtOptions(sf.court, '')}</select><input id="sc-date" type="date" value="${sf.date}" class="${INPUT} sm:max-w-[170px]"></div>
       <div class="mt-3 flex gap-1.5 overflow-x-auto pb-1">${days.map((d) => { const x = new Date(`${d}T00:00:00`); return `<button type="button" data-day="${d}" class="flex w-14 shrink-0 flex-col items-center rounded-md border py-1.5 text-xs ${d === sf.date ? 'border-primary-500 bg-primary-500 text-white' : 'border-background-300 bg-white text-foreground-700 hover:border-primary-400'}"><span>${wd[x.getDay()]}</span><span class="font-bold">${x.getDate()}/${x.getMonth() + 1}</span></button>`; }).join('')}</div>
-      <div class="mt-4 flex flex-wrap gap-3 text-[11px] text-foreground-600"><span class="flex items-center gap-1"><span class="h-3 w-3 rounded border border-background-300 bg-white"></span>Trống</span><span class="flex items-center gap-1"><span class="h-3 w-3 rounded bg-primary-100"></span>Đã đặt</span><span class="flex items-center gap-1"><span class="h-3 w-3 rounded bg-foreground-300"></span>Đang khóa</span><span class="flex items-center gap-1"><span class="h-3 w-3 rounded bg-accent-400"></span>Đang chọn</span></div>
+      <div class="mt-4 flex flex-wrap gap-3 text-[11px] text-foreground-600"><span class="flex items-center gap-1"><span class="h-3 w-3 rounded border border-background-300 bg-white"></span>Trống</span><span class="flex items-center gap-1"><span class="h-3 w-3 rounded bg-primary-100"></span>Đã đặt</span><span class="flex items-center gap-1"><span class="h-3 w-3 rounded bg-rose-200"></span>Đang khóa</span><span class="flex items-center gap-1"><span class="h-3 w-3 rounded bg-accent-400"></span>Đang chọn</span></div>
       ${h.closed ? `<div class="mt-4">${emptyState('ri-moon-line', 'Sân nghỉ ngày này', 'Đổi giờ mở cửa trong phần sửa sân nếu cần.')}</div>` : `<div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">${slots.map((s) => {
         const b = bookedBy[s];
         const isB = blocked.has(s);
         const sel = sf.picked.has(s);
-        const cls = b ? 'border-primary-200 bg-primary-50 cursor-pointer' : sel ? 'border-accent-500 bg-accent-50 ring-2 ring-accent-300 cursor-pointer' : isB ? 'border-foreground-300 bg-foreground-100 cursor-pointer' : 'border-background-300 bg-white hover:border-primary-400 cursor-pointer';
-        return `<button type="button" ${b ? `data-detail="${b.id}"` : `data-slot="${s}"`} class="rounded-md border p-2.5 text-left ${cls}"><p class="text-sm font-bold text-foreground-950">${s}</p><p class="truncate text-[11px] ${b ? 'text-primary-700' : 'text-foreground-500'}">${b ? esc(b.customerName) : isB ? '<i class="ri-lock-line"></i> Đang khóa' : money(priceAt(s))}</p></button>`;
+        const cls = b ? 'border-primary-200 bg-primary-50 cursor-pointer' : sel ? 'border-accent-500 bg-accent-50 ring-2 ring-accent-300 cursor-pointer' : isB ? 'border-rose-300 bg-rose-50 text-rose-800 cursor-pointer' : 'border-background-300 bg-white hover:border-primary-400 cursor-pointer';
+        return `<button type="button" ${b ? `data-detail="${b.id}"` : `data-slot="${s}"`} class="rounded-md border p-2.5 text-left ${cls}"><p class="text-sm font-bold text-foreground-950">${s}</p><p class="truncate text-[11px] ${b ? 'text-primary-700' : isB ? 'text-rose-700 font-semibold' : 'text-foreground-500'}">${b ? esc(b.customerName) : isB ? '<i class="ri-lock-line"></i> Đang khóa' : money(priceAt(s))}</p></button>`;
       }).join('')}</div>`}
       <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-background-200 pt-4">
         <span class="text-xs text-foreground-500">Đã chọn ${sf.picked.size} khung giờ</span>
         <button type="button" data-pick-all class="${BTN_SM}"><i class="ri-checkbox-multiple-line"></i>Chọn tất cả giờ trống</button>
         ${sf.picked.size ? `<button type="button" data-clear-pick class="${BTN_SM}"><i class="ri-close-circle-line"></i>Bỏ chọn</button>` : ''}
-        <button type="button" data-block="1" class="${BTN_SM}" ${sf.picked.size ? '' : 'disabled'}><i class="ri-lock-line"></i>Khóa giờ đã chọn</button>
+        <button type="button" data-block="1" class="${BTN_SM_DANGER}" ${sf.picked.size ? '' : 'disabled'}><i class="ri-lock-line"></i>Khóa giờ đã chọn</button>
         <button type="button" data-block="0" class="${BTN_SM}" ${sf.picked.size ? '' : 'disabled'}><i class="ri-lock-unlock-line"></i>Mở khóa</button>
         <button type="button" data-counter class="${BTN_SM_PRI}" ${sf.picked.size ? '' : 'disabled'}><i class="ri-add-line"></i>Tạo đơn cho giờ đã chọn</button>
+        <span class="mx-1 text-background-300">|</span>
+        <button type="button" data-block-allday="1" class="${BTN_SM}"><i class="ri-shut-down-line text-rose-600"></i>Khóa cả ngày</button>
+        <button type="button" data-block-allday="0" class="${BTN_SM}"><i class="ri-restart-line text-emerald-600"></i>Mở khóa cả ngày</button>
       </div>
+
+      <!-- Khung giờ đang khóa trong ngày -->
+      ${blocked.size ? `
+        <div class="mt-4 rounded-md border border-rose-200 bg-rose-50/60 p-3 text-xs">
+          <div class="flex items-center justify-between mb-2">
+            <span class="font-bold text-rose-900 flex items-center gap-1.5"><i class="ri-lock-line"></i> ${blocked.size} khung giờ đang khóa bảo trì ngày ${dateText(sf.date)}:</span>
+            <button type="button" data-block-allday="0" class="text-xs font-bold text-rose-700 underline hover:text-rose-900">Mở khóa tất cả</button>
+          </div>
+          <div class="flex flex-wrap gap-1.5">
+            ${[...blocked].sort().map((s) => `
+              <span class="inline-flex items-center gap-1 rounded bg-white border border-rose-300 px-2 py-0.5 font-bold text-rose-800">
+                ${s}
+                <button type="button" data-unblock-single="${s}" class="text-rose-600 hover:text-rose-900 font-bold ml-0.5" title="Mở khóa khung này">×</button>
+              </span>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
     </div>
     <aside class="space-y-4">
       <div class="${CARD} p-4"><p class="text-xs font-bold uppercase tracking-wide text-foreground-500">Tình trạng ngày ${dateText(sf.date)}</p>
-        <div class="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div class="rounded-md bg-background-100 py-2"><p class="text-lg font-bold">${free}</p>Trống</div><div class="rounded-md bg-primary-50 py-2 text-primary-800"><p class="text-lg font-bold">${Object.keys(bookedBy).length}</p>Đã đặt</div><div class="rounded-md bg-foreground-100 py-2"><p class="text-lg font-bold">${blocked.size}</p>Khóa</div></div></div>
+        <div class="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div class="rounded-md bg-background-100 py-2"><p class="text-lg font-bold">${free}</p>Trống</div><div class="rounded-md bg-primary-50 py-2 text-primary-800"><p class="text-lg font-bold">${Object.keys(bookedBy).length}</p>Đã đặt</div><div class="rounded-md bg-rose-100 text-rose-800 py-2"><p class="text-lg font-bold">${blocked.size}</p>Khóa</div></div></div>
       <div class="${CARD} p-4"><p class="text-xs font-bold uppercase tracking-wide text-foreground-500">Giờ mở cửa</p>
         <p class="mt-2 text-sm font-semibold">${h.closed ? 'Nghỉ cả ngày' : `${h.open} - ${h.close}`}</p>
         <p class="mt-1 text-xs text-foreground-500">${esc(isWeeklyCustomized(c) ? weekdaySummary(c.weeklyHours) : `Mỗi ngày ${c.openTime} - ${c.closeTime}`)}</p>
         <p class="mt-3 text-xs font-bold uppercase tracking-wide text-foreground-500">Bảng giá theo khung giờ</p>
-        <ul class="mt-2 space-y-1 text-sm">${(c.priceBands || []).map((b) => `<li class="flex justify-between"><span>${esc(b.shortLabel || b.label)} <span class="text-xs text-foreground-500">${b.start}-${b.end}</span></span><b>${money(b.price)}</b></li>`).join('') || `<li class="flex justify-between"><span>Cả ngày</span><b>${money(c.pricePerHour)}</b></li>`}</ul>
+        <ul class="mt-2 space-y-1 text-sm">${(c.priceBands || []).map((b) => `<li class="flex justify-between items-center text-xs"><span>${esc(b.shortLabel || b.label)} <span class="text-foreground-500 font-normal">(${b.start}-${b.end})</span>${b.peak ? ' <span class="rounded bg-accent-100 text-accent-800 px-1 py-0.2 font-semibold text-[10px]">Vàng</span>' : ''}</span><b>${money(b.price)}</b></li>`).join('') || `<li class="flex justify-between"><span>Cả ngày</span><b>${money(c.pricePerHour)}</b></li>`}</ul>
         <button type="button" data-edit-court class="${BTN_SM} mt-3 w-full"><i class="ri-settings-3-line"></i>Chỉnh giờ & giá</button></div>
     </aside>
   </div>`;
@@ -1001,11 +1409,224 @@ export function renderSchedule() {
   on(root, 'click', '[data-block]', async (e, el) => {
     const block = el.dataset.block === '1';
     try {
-      const list = await api('owner', 'block_slots', { courtId: c.id, date: sf.date, slots: [...sf.picked], blocked: block });
-      S.blocked[`${c.id}:${sf.date}`] = list;
+      const res = await api('owner', 'block_slots', { courtId: c.id, date: sf.date, slots: [...sf.picked], blocked: block });
+      if (res.blocked) S.blocked = res.blocked;
+      if (res.list) S.blockedList = res.list;
+      if (res.courtBlocked) S.blocked[`${c.id}:${sf.date}`] = res.courtBlocked;
       sf.picked.clear();
       toast(block ? 'Đã khóa khung giờ — khách sẽ không đặt được.' : 'Đã mở khóa khung giờ.');
       renderSchedule();
+    } catch (err) { toast(err.message, 'error'); }
+  });
+  on(root, 'click', '[data-unblock-single]', async (e, el) => {
+    const s = el.dataset.unblockSingle;
+    try {
+      const res = await api('owner', 'block_slots', { courtId: c.id, date: sf.date, slots: [s], blocked: false });
+      if (res.blocked) S.blocked = res.blocked;
+      if (res.list) S.blockedList = res.list;
+      if (res.courtBlocked) S.blocked[`${c.id}:${sf.date}`] = res.courtBlocked;
+      toast(`Đã mở khóa khung ${s}.`);
+      renderSchedule();
+    } catch (err) { toast(err.message, 'error'); }
+  });
+  on(root, 'click', '[data-block-allday]', async (e, el) => {
+    const isLock = el.dataset.blockAllday === '1';
+    const actionText = isLock ? 'Khóa toàn bộ khung giờ' : 'Mở khóa toàn bộ khung giờ';
+    if (!await confirmBox({
+      title: `${actionText} ngày ${dateText(sf.date)}?`,
+      message: `${actionText} của sân "${esc(c.name)}" vào ngày ${dateText(sf.date)}.${isLock ? ' Khách sẽ không thể đặt sân vào ngày này.' : ' Khách sẽ có thể đặt sân bình thường.'}`,
+      confirmText: actionText,
+      danger: isLock,
+    })) return;
+
+    try {
+      const res = await api('owner', 'block_slots', { courtId: c.id, date: sf.date, slots: ['all'], blocked: isLock });
+      if (res.blocked) S.blocked = res.blocked;
+      if (res.list) S.blockedList = res.list;
+      if (res.courtBlocked) S.blocked[`${c.id}:${sf.date}`] = res.courtBlocked;
+      sf.picked.clear();
+      toast(isLock ? 'Đã khóa toàn bộ khung giờ ngày này.' : 'Đã mở khóa toàn bộ khung giờ ngày này.');
+      renderSchedule();
+    } catch (err) { toast(err.message, 'error'); }
+  });
+}
+
+export function renderBlockedSlotsManager() {
+  const list = S.blockedList || [];
+  const futureList = list.filter((b) => b.date >= TODAY);
+  const courtsAffected = new Set(futureList.map((b) => b.courtId)).size;
+  const todayBlocked = futureList.filter((b) => b.date === TODAY).length;
+
+  actions().innerHTML = `
+    <button type="button" id="bm-quick-block" class="${BTN_DANGER}"><i class="ri-tools-line"></i>Khóa sân bảo trì mới</button>
+  `;
+  actions().querySelector('#bm-quick-block').onclick = () => openQuickBlockModal();
+
+  let filterCourt = '';
+  let filterDate = '';
+  const selectedKeys = new Set();
+
+  const draw = () => {
+    const filtered = futureList
+      .filter((b) => !filterCourt || b.courtId === filterCourt)
+      .filter((b) => !filterDate || b.date === filterDate);
+
+    const host = document.getElementById('bm-table-container');
+    if (!host) return;
+
+    if (!filtered.length) {
+      host.innerHTML = `<div class="p-8">${emptyState('ri-lock-unlock-line', 'Không có khung giờ nào bị khóa', 'Tất cả các sân đang mở cửa đón khách bình thường.', `<button type="button" id="bm-empty-block" class="${BTN_DANGER}"><i class="ri-tools-line"></i>Khóa bảo trì mới</button>`)}</div>`;
+      const btn = host.querySelector('#bm-empty-block');
+      if (btn) btn.onclick = () => openQuickBlockModal();
+      return;
+    }
+
+    host.innerHTML = `
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="border-b border-background-200 bg-background-100 text-foreground-600 font-semibold">
+            <tr>
+              <th class="p-3 w-10 text-center"><input type="checkbox" id="bm-check-all" class="accent-primary-500"></th>
+              <th class="p-3">Sân</th>
+              <th class="p-3">Ngày khóa</th>
+              <th class="p-3">Khung giờ</th>
+              <th class="p-3">Thời gian tạo</th>
+              <th class="p-3 text-right">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-background-200">
+            ${filtered.map((item) => {
+              const key = `${item.courtId}:${item.date}:${item.slot}`;
+              const isChecked = selectedKeys.has(key);
+              const isToday = item.date === TODAY;
+              return `
+                <tr class="hover:bg-background-50 transition-colors">
+                  <td class="p-3 text-center"><input type="checkbox" data-bm-check="${key}" ${isChecked ? 'checked' : ''} class="accent-primary-500"></td>
+                  <td class="p-3 font-bold text-foreground-900">${esc(item.courtName)}</td>
+                  <td class="p-3"><span class="font-semibold ${isToday ? 'text-primary-700' : 'text-foreground-800'}">${dateText(item.date)}</span>${isToday ? ' <span class="rounded bg-primary-100 text-primary-800 px-1.5 py-0.5 text-[10px] font-bold">Hôm nay</span>' : ''}</td>
+                  <td class="p-3"><span class="inline-flex items-center gap-1 rounded bg-rose-50 border border-rose-200 px-2 py-0.5 text-xs font-bold text-rose-800"><i class="ri-lock-line"></i> ${esc(item.slot)} - ${minutesToTime(toMinutes(item.slot) + 60)}</span></td>
+                  <td class="p-3 text-foreground-500">${formatDateTime(item.createdAt)}</td>
+                  <td class="p-3 text-right">
+                    <button type="button" data-bm-unblock="${key}" class="${BTN_SM}"><i class="ri-lock-unlock-line text-emerald-600"></i> Mở khóa</button>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    const unblockSelBtn = document.getElementById('bm-unblock-selected');
+    const selCountSpan = document.getElementById('bm-sel-count');
+    if (unblockSelBtn && selCountSpan) {
+      selCountSpan.textContent = selectedKeys.size;
+      unblockSelBtn.disabled = selectedKeys.size === 0;
+    }
+  };
+
+  main().innerHTML = `
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-3 mb-5">
+      ${statCard('ri-lock-2-line', 'Khung giờ đang khóa', futureList.length, 'Tính từ hôm nay trở đi', 'accent')}
+      ${statCard('ri-calendar-event-line', 'Khóa hôm nay', todayBlocked, 'Khung giờ tạm dừng đón khách', 'secondary')}
+      ${statCard('ri-football-line', 'Sân bị ảnh hưởng', `${courtsAffected}/${S.courts.length}`, 'Sân có lịch bảo trì', 'neutral')}
+    </div>
+
+    <section class="${CARD} overflow-hidden">
+      ${sectionTitle(`Khung giờ bị khóa bảo trì (${futureList.length})`, `
+        <div class="flex flex-wrap items-center gap-2">
+          <select id="bm-filter-court" class="${INPUT} !py-1 !text-xs !w-auto">
+            <option value="">Tất cả sân</option>
+            ${S.courts.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}
+          </select>
+          <input type="date" id="bm-filter-date" class="${INPUT} !py-1 !text-xs !w-auto" placeholder="Lọc theo ngày">
+          <button type="button" id="bm-unblock-selected" class="${BTN_SM}" disabled><i class="ri-lock-unlock-line"></i>Mở khóa đã chọn (<span id="bm-sel-count">0</span>)</button>
+        </div>
+      `)}
+      <div id="bm-table-container"></div>
+    </section>
+  `;
+
+  draw();
+
+  const root = main();
+  const cSel = root.querySelector('#bm-filter-court');
+  const dInp = root.querySelector('#bm-filter-date');
+  if (cSel) cSel.onchange = (e) => { filterCourt = e.target.value; selectedKeys.clear(); draw(); };
+  if (dInp) dInp.onchange = (e) => { filterDate = e.target.value; selectedKeys.clear(); draw(); };
+
+  on(root, 'change', '#bm-check-all', (e) => {
+    const checked = e.target.checked;
+    const filtered = futureList
+      .filter((b) => !filterCourt || b.courtId === filterCourt)
+      .filter((b) => !filterDate || b.date === filterDate);
+    if (checked) {
+      filtered.forEach((item) => selectedKeys.add(`${item.courtId}:${item.date}:${item.slot}`));
+    } else {
+      selectedKeys.clear();
+    }
+    draw();
+  });
+
+  on(root, 'change', '[data-bm-check]', (e, el) => {
+    const key = el.dataset.bmCheck;
+    if (el.checked) selectedKeys.add(key);
+    else selectedKeys.delete(key);
+    const unblockSelBtn = document.getElementById('bm-unblock-selected');
+    const selCountSpan = document.getElementById('bm-sel-count');
+    if (unblockSelBtn && selCountSpan) {
+      selCountSpan.textContent = selectedKeys.size;
+      unblockSelBtn.disabled = selectedKeys.size === 0;
+    }
+  });
+
+  on(root, 'click', '[data-bm-unblock]', async (e, el) => {
+    const [courtId, date, slot] = el.dataset.bmUnblock.split(':');
+    const c = courtById(courtId);
+    if (!await confirmBox({
+      title: 'Mở khóa khung giờ?',
+      message: `Mở khóa sân "${c ? esc(c.name) : courtId}" lúc ${slot} ngày ${dateText(date)}? Khách hàng sẽ có thể đặt sân lại.`,
+      confirmText: 'Mở khóa',
+    })) return;
+
+    try {
+      const res = await api('owner', 'block_slots', { courtId, date, slots: [slot], blocked: false });
+      if (res.blocked) S.blocked = res.blocked;
+      if (res.list) S.blockedList = res.list;
+      selectedKeys.delete(`${courtId}:${date}:${slot}`);
+      toast(`Đã mở khóa khung ${slot} ngày ${dateText(date)}.`);
+      renderBlockedSlotsManager();
+    } catch (err) { toast(err.message, 'error'); }
+  });
+
+  on(root, 'click', '#bm-unblock-selected', async () => {
+    if (!selectedKeys.size) return;
+    if (!await confirmBox({
+      title: `Mở khóa ${selectedKeys.size} khung giờ?`,
+      message: `Bạn có chắc chắn muốn mở khóa cho ${selectedKeys.size} khung giờ đã chọn?`,
+      confirmText: 'Mở khóa tất cả',
+    })) return;
+
+    try {
+      const items = [...selectedKeys].map((k) => {
+        const [courtId, date, slot] = k.split(':');
+        return { courtId, date, slot };
+      });
+      const grouped = {};
+      items.forEach((it) => {
+        const gKey = `${it.courtId}:${it.date}`;
+        if (!grouped[gKey]) grouped[gKey] = [];
+        grouped[gKey].push(it.slot);
+      });
+      for (const [gKey, slots] of Object.entries(grouped)) {
+        const [courtId, date] = gKey.split(':');
+        const res = await api('owner', 'block_slots', { courtId, date, slots, blocked: false });
+        if (res.blocked) S.blocked = res.blocked;
+        if (res.list) S.blockedList = res.list;
+      }
+      selectedKeys.clear();
+      toast('Đã mở khóa các khung giờ đã chọn thành công.');
+      renderBlockedSlotsManager();
     } catch (err) { toast(err.message, 'error'); }
   });
 }

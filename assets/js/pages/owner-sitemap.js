@@ -14,9 +14,9 @@ import { APP, api, esc, toast, confirmBox, setBusy, formData, on, emptyState, lo
 import { WEEKDAY_SHORT } from '../lib/promotions.js';
 import {
   S, PAGE, TODAY, main, actions, BTN, BTN_OUT, BTN_SM, BTN_SM_PRI, BTN_SM_DANGER, INPUT, LABEL, CARD,
-  chip, statCard, sectionTitle, modal, slotText, dateText, money, isActive,
+  chip, statCard, sectionTitle, modal, slotText, dateText, money, isActive, courtById,
 } from './owner-shared.js';
-import { renderOverview, renderBookings, renderInvoices, renderCourts, renderSchedule, renderReviews, openCounterBooking, openBookingDetail } from './owner-ops.js';
+import { renderOverview, renderBookings, renderInvoices, renderCourts, renderSchedule, renderBlockedSlotsManager, openQuickBlockModal, renderReviews, openCounterBooking, openBookingDetail } from './owner-ops.js';
 import { renderReports, renderCustomers, renderServices, renderPromotions, renderDeposits } from './owner-biz.js?v=20261122_03';
 
 const subState = {};
@@ -119,14 +119,17 @@ export function renderSitemapCourts() {
   actions().innerHTML = '';
   if (sub === 'list') {
     renderCourts();
-  } else {
+  } else if (sub === 'schedule') {
     renderSchedule();
+  } else {
+    renderBlockedSlotsManager();
   }
   mountSubBar(
     'courts',
     [
-      ['list', 'Danh sách sân & Thêm sân mới', 'ri-football-line'],
-      ['schedule', 'Bảng giá, khung giờ & Khóa bảo trì', 'ri-time-line'],
+      ['list', 'Danh sách sân & Giờ mở cửa', 'ri-football-line'],
+      ['schedule', 'Lịch theo ngày & Bảng giá', 'ri-time-line'],
+      ['blocked', 'Khung giờ bị khóa & Bảo trì', 'ri-lock-2-line'],
     ],
     sub,
     renderSitemapCourts,
@@ -160,14 +163,19 @@ export async function renderSitemapBookings() {
 
 let calDate = TODAY;
 function renderBookingCalendar() {
-  actions().innerHTML = `<input type="date" id="ow-cal-date" value="${calDate}" class="${INPUT} !w-auto"><button type="button" id="ow-cal-counter" class="${BTN}"><i class="ri-add-line"></i>Đặt tại quầy</button>`;
+  actions().innerHTML = `
+    <input type="date" id="ow-cal-date" value="${calDate}" class="${INPUT} !w-auto">
+    <button type="button" id="ow-cal-block" class="${BTN_OUT}"><i class="ri-tools-line text-accent-600"></i>Khóa bảo trì</button>
+    <button type="button" id="ow-cal-counter" class="${BTN}"><i class="ri-add-line"></i>Đặt tại quầy</button>
+  `;
   actions().querySelector('#ow-cal-date').onchange = (e) => { calDate = e.target.value; renderSitemapBookings(); };
-  actions().querySelector('#ow-cal-counter').onclick = () => openCounterBooking();
+  actions().querySelector('#ow-cal-block').onclick = () => openQuickBlockModal({ date: calDate });
+  actions().querySelector('#ow-cal-counter').onclick = () => openCounterBooking({ date: calDate });
 
   const hours = Array.from({ length: 17 }, (_, i) => `${String(i + 6).padStart(2, '0')}:00`);
   const dayBookings = S.bookings.filter((b) => b.date === calDate && ['pending', 'confirmed', 'completed'].includes(b.status));
   main().innerHTML = `<section class="${CARD} overflow-hidden">
-    ${sectionTitle(`Lịch sân ngày ${dateText(calDate)}`, `<span class="text-xs text-foreground-500">Bấm ô đã đặt để xem chi tiết đơn · Ô xám là khung đang khóa</span>`)}
+    ${sectionTitle(`Lịch sân ngày ${dateText(calDate)}`, `<span class="text-xs text-foreground-500">Bấm ô đã đặt để xem chi tiết · Bấm ô trống để đặt nhanh · Bấm ô khóa để mở khóa</span>`)}
     <div class="overflow-x-auto"><table class="w-full min-w-[900px] border-collapse text-xs">
       <thead class="bg-background-100 text-foreground-600"><tr><th class="border border-background-200 px-3 py-2.5 text-left w-48">Sân</th>${hours.map((h) => `<th class="border border-background-200 px-1.5 py-2 text-center">${h.slice(0, 2)}h</th>`).join('')}</tr></thead>
       <tbody>${S.courts.map((c) => {
@@ -178,8 +186,8 @@ function renderBookingCalendar() {
             const cls = b.status === 'pending' ? 'bg-accent-100 text-accent-900 border-accent-300' : 'bg-primary-100 text-primary-900 border-primary-300';
             return `<td class="border border-background-200 p-1"><button type="button" data-cal-b="${b.id}" title="${esc(b.customerName)} · ${esc(b.code)}" class="w-full cursor-pointer truncate rounded border px-1 py-1.5 text-[10px] font-bold ${cls}">${esc((b.customerName || '').split(' ').pop())}</button></td>`;
           }
-          if (blk.has(h)) return `<td class="border border-background-200 bg-background-200 p-1 text-center text-[10px] text-foreground-500" title="Đã khóa bảo trì"><i class="ri-lock-line"></i></td>`;
-          return `<td class="border border-background-200 p-1 text-center text-foreground-300">·</td>`;
+          if (blk.has(h)) return `<td class="border border-background-200 bg-rose-50 p-1 text-center text-[10px] text-rose-700 font-semibold" title="Đang khóa bảo trì — Bấm để mở khóa"><button type="button" data-cal-unblock="${c.id}:${calDate}:${h}" class="w-full h-full rounded py-1 hover:bg-rose-100 transition-colors cursor-pointer"><i class="ri-lock-line"></i></button></td>`;
+          return `<td class="border border-background-200 p-1 text-center"><button type="button" data-cal-empty="${c.id}:${calDate}:${h}" title="Ô trống · Bấm để đặt tại quầy khung ${h}" class="w-full h-full rounded py-1 text-foreground-400 hover:bg-primary-50 hover:text-primary-700 hover:font-bold transition-colors cursor-pointer">·</button></td>`;
         }).join('')}</tr>`;
       }).join('')}</tbody>
     </table></div>
@@ -187,6 +195,27 @@ function renderBookingCalendar() {
   on(main(), 'click', '[data-cal-b]', (e, el) => {
     const b = S.bookings.find((x) => x.id === el.dataset.calB);
     if (b) openBookingDetail(b);
+  });
+  on(main(), 'click', '[data-cal-empty]', (e, el) => {
+    const [cId, d, h] = el.dataset.calEmpty.split(':');
+    openCounterBooking({ courtId: cId, date: d, slots: [h] });
+  });
+  on(main(), 'click', '[data-cal-unblock]', async (e, el) => {
+    const [cId, d, h] = el.dataset.calUnblock.split(':');
+    const c = courtById(cId);
+    if (!await confirmBox({
+      title: 'Mở khóa khung giờ này?',
+      message: `Mở khóa sân "${c ? esc(c.name) : cId}" khung giờ ${h} ngày ${dateText(d)}? Sau khi mở, khách hàng có thể đặt sân bình thường.`,
+      confirmText: 'Mở khóa',
+    })) return;
+    try {
+      const res = await api('owner', 'block_slots', { courtId: cId, date: d, slots: [h], blocked: false });
+      if (res.blocked) S.blocked = res.blocked;
+      if (res.list) S.blockedList = res.list;
+      if (res.courtBlocked) S.blocked[`${cId}:${d}`] = res.courtBlocked;
+      toast(`Đã mở khóa khung ${h} ngày ${dateText(d)}.`);
+      renderBookingCalendar();
+    } catch (err) { toast(err.message, 'error'); }
   });
 }
 
