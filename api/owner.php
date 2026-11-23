@@ -6,10 +6,16 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 
 $OWNER = api_require_owner();
 
-/** Danh sách id sân của chủ sân (kể cả sân trong thùng rác). */
+/** Danh sách id sân của chủ sân (kể cả sân trong thùng rác) hoặc sân được phân công cho nhân viên. */
 function my_court_ids(): array
 {
     global $OWNER;
+    $st = current_staff();
+    if ($st && !empty($st['courtId']) && $st['courtId'] !== 'all') {
+        // Nhân viên phụ trách sân cụ thể: CHỈ trả về đúng sân đó nếu sân thuộc cơ sở của chủ sân
+        return array_column(q_all('SELECT id FROM courts WHERE id = ? AND owner_id = ?', [$st['courtId'], $OWNER['id']]), 'id');
+    }
+    // Chủ sân hoặc Quản lý chung: toàn bộ các sân thuộc sở hữu của chủ sân
     return array_column(q_all('SELECT id FROM courts WHERE owner_id = ?', [$OWNER['id']]), 'id');
 }
 
@@ -17,6 +23,8 @@ function my_court_ids(): array
 function my_court(string $id): array
 {
     global $OWNER;
+    $ids = my_court_ids();
+    if (!in_array($id, $ids, true)) fail('Bạn không có quyền thao tác trên sân này.');
     $row = q_one('SELECT * FROM courts WHERE id = ? AND owner_id = ?', [$id, $OWNER['id']]);
     if (!$row) fail('Không tìm thấy sân trong danh sách bạn quản lý.');
     return $row; 
@@ -50,10 +58,19 @@ run_api([
     // Toàn bộ dữ liệu cho bảng điều khiển
     'data' => function () {
         global $OWNER;
-        $courts = array_map('map_court', q_all('SELECT * FROM courts WHERE owner_id = ? AND deleted_at IS NULL ORDER BY sort_order, created_at', [$OWNER['id']]));
-        $trash = array_map('map_court', q_all('SELECT * FROM courts WHERE owner_id = ? AND deleted_at IS NOT NULL ORDER BY deleted_at DESC', [$OWNER['id']]));
-        $ids = array_column($courts, 'id');
-        $unreplied = $ids ? (int) q_val("SELECT COUNT(*) FROM reviews WHERE moderation_status <> 'hidden' AND (owner_reply IS NULL OR owner_reply = '') AND court_id IN (" . in_list($ids) . ')', $ids) : 0;
+        $ids = my_court_ids();
+        if (!$ids) {
+            return [
+                'courts' => [],
+                'trash' => [],
+                'bookings' => [],
+                'blocked' => (object) [],
+                'unreplied' => 0,
+            ];
+        }
+        $courts = array_map('map_court', q_all('SELECT * FROM courts WHERE owner_id = ? AND deleted_at IS NULL AND id IN (' . in_list($ids) . ') ORDER BY sort_order, created_at', array_merge([$OWNER['id']], $ids)));
+        $trash = array_map('map_court', q_all('SELECT * FROM courts WHERE owner_id = ? AND deleted_at IS NOT NULL AND id IN (' . in_list($ids) . ') ORDER BY deleted_at DESC', array_merge([$OWNER['id']], $ids)));
+        $unreplied = (int) q_val("SELECT COUNT(*) FROM reviews WHERE moderation_status <> 'hidden' AND (owner_reply IS NULL OR owner_reply = '') AND court_id IN (" . in_list($ids) . ')', $ids);
         return [
             'courts' => $courts,
             'trash' => $trash,
@@ -732,9 +749,19 @@ run_api([
     'staff_list' => function () {
         global $OWNER;
         if (is_staff()) fail('Chỉ chủ sân mới có quyền xem danh sách nhân viên.');
+        $courts = q_all('SELECT id, name FROM courts WHERE owner_id = ? AND deleted_at IS NULL', [$OWNER['id']]);
+        $courtMap = array_column($courts, 'name', 'id');
         return array_map(fn($r) => [
-            'id' => $r['id'], 'fullName' => $r['full_name'], 'phone' => $r['phone'], 'email' => $r['email'],
-            'roleName' => $r['role_name'], 'permissions' => jd($r['permissions']), 'status' => $r['status'], 'createdAt' => iso($r['created_at']),
+            'id' => $r['id'],
+            'courtId' => $r['court_id'] ?: '',
+            'courtName' => $r['court_id'] ? ($courtMap[$r['court_id']] ?? 'Sân đã xóa') : 'Tất cả các sân của cơ sở',
+            'fullName' => $r['full_name'],
+            'phone' => $r['phone'],
+            'email' => $r['email'],
+            'roleName' => $r['role_name'],
+            'permissions' => jd($r['permissions']),
+            'status' => $r['status'],
+            'createdAt' => iso($r['created_at']),
             'hasPassword' => !empty($r['password_hash']),
         ], q_all('SELECT * FROM owner_staff WHERE owner_id = ? ORDER BY created_at DESC', [$OWNER['id']]));
     },
@@ -748,6 +775,11 @@ run_api([
         if ($email && !valid_email($email)) fail('Email nhân viên chưa đúng định dạng.');
         $phone = trim(in_str('phone'));
         $roleName = in_str('roleName') ?: 'Nhân viên lễ tân';
+        $courtId = in_str('courtId') ?: null;
+        if ($courtId) {
+            $courtValid = q_val('SELECT id FROM courts WHERE id = ? AND owner_id = ?', [$courtId, $OWNER['id']]);
+            if (!$courtValid) fail('Sân phụ trách không hợp lệ hoặc không thuộc cơ sở của bạn.');
+        }
         $perms = array_values(array_intersect(in_arr('permissions'), ['overview', 'bookings', 'courts', 'services', 'payments', 'customers', 'promotions']));
         if (!$perms) $perms = ['bookings'];
         $status = in_str('status') === 'inactive' ? 'inactive' : 'active';
@@ -765,11 +797,11 @@ run_api([
             if ($password !== '') {
                 if (strlen($password) < 6) fail('Mật khẩu nhân viên cần ít nhất 6 ký tự.');
                 $pwdHash = password_hash($password, PASSWORD_DEFAULT);
-                q('UPDATE owner_staff SET full_name=?, phone=?, email=?, password_hash=?, role_name=?, permissions=?, status=? WHERE id=? AND owner_id=?',
-                    [$name, $phone, $email, $pwdHash, $roleName, j($perms), $status, $id, $OWNER['id']]);
+                q('UPDATE owner_staff SET court_id=?, full_name=?, phone=?, email=?, password_hash=?, role_name=?, permissions=?, status=? WHERE id=? AND owner_id=?',
+                    [$courtId, $name, $phone, $email, $pwdHash, $roleName, j($perms), $status, $id, $OWNER['id']]);
             } else {
-                q('UPDATE owner_staff SET full_name=?, phone=?, email=?, role_name=?, permissions=?, status=? WHERE id=? AND owner_id=?',
-                    [$name, $phone, $email, $roleName, j($perms), $status, $id, $OWNER['id']]);
+                q('UPDATE owner_staff SET court_id=?, full_name=?, phone=?, email=?, role_name=?, permissions=?, status=? WHERE id=? AND owner_id=?',
+                    [$courtId, $name, $phone, $email, $roleName, j($perms), $status, $id, $OWNER['id']]);
             }
         } else {
             if (!$email) fail('Vui lòng nhập email đăng nhập cho nhân viên.');
@@ -779,8 +811,8 @@ run_api([
             }
             $pwdHash = password_hash($password, PASSWORD_DEFAULT);
             $newId = uid('st-');
-            q('INSERT INTO owner_staff (id, owner_id, full_name, phone, email, password_hash, role_name, permissions, status) VALUES (?,?,?,?,?,?,?,?,?)',
-                [$newId, $OWNER['id'], $name, $phone, $email, $pwdHash, $roleName, j($perms), $status]);
+            q('INSERT INTO owner_staff (id, owner_id, court_id, full_name, phone, email, password_hash, role_name, permissions, status) VALUES (?,?,?,?,?,?,?,?,?,?)',
+                [$newId, $OWNER['id'], $courtId, $name, $phone, $email, $pwdHash, $roleName, j($perms), $status]);
         }
         return true;
     },

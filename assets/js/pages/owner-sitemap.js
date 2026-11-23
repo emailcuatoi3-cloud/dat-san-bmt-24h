@@ -10,14 +10,14 @@
  *  8. Cài đặt (Chính sách đặt/cọc/hủy, Nhân viên & phân quyền, Thông báo)
  *  9. Tài khoản (Hồ sơ chủ sân, Tài khoản nhận tiền, Đổi mật khẩu, Đăng xuất)
  */
-import { APP, api, esc, toast, confirmBox, setBusy, formData, on, emptyState, loadingBlock, formatDateTime, url } from '../core/ui.js';
-import { WEEKDAY_SHORT } from '../lib/promotions.js';
+import { APP, api, esc, toast, confirmBox, setBusy, formData, on, emptyState, loadingBlock, formatDateTime, url } from '../core/ui.js?v=20261123_04';
+import { WEEKDAY_SHORT } from '../lib/promotions.js?v=20261123_04';
 import {
   S, PAGE, TODAY, main, actions, BTN, BTN_OUT, BTN_SM, BTN_SM_PRI, BTN_SM_DANGER, INPUT, LABEL, CARD,
   chip, statCard, sectionTitle, modal, slotText, dateText, money, isActive,
-} from './owner-shared.js';
-import { renderOverview, renderBookings, renderInvoices, renderCourts, renderSchedule, renderReviews, openCounterBooking, openBookingDetail } from './owner-ops.js';
-import { renderReports, renderCustomers, renderServices, renderPromotions, renderDeposits } from './owner-biz.js?v=20261122_03';
+} from './owner-shared.js?v=20261123_04';
+import { renderOverview, renderBookings, renderInvoices, renderCourts, renderSchedule, renderReviews, openCounterBooking, openBookingDetail } from './owner-ops.js?v=20261123_04';
+import { renderReports, renderCustomers, renderServices, renderPromotions, renderDeposits } from './owner-biz.js?v=20261123_04';
 
 const subState = {};
 const getSub = (tab, def) => {
@@ -586,6 +586,7 @@ export async function renderSitemapStaff() {
 
   const list = await api('owner', 'staff_list').catch(() => []);
   const PERMS = [
+    ['overview', 'Tổng quan & hiệu suất ca', 'ri-dashboard-3-line'],
     ['bookings', 'Đơn đặt & Check-in', 'ri-calendar-check-line'],
     ['courts', 'Quản lý & khóa sân', 'ri-football-line'],
     ['services', 'Dịch vụ & kho nước', 'ri-cup-line'],
@@ -652,6 +653,9 @@ export async function renderSitemapStaff() {
                   <div class="flex flex-wrap items-center gap-2">
                     <p class="font-heading text-sm font-bold text-foreground-950">${esc(s.fullName)}</p>
                     <span class="rounded bg-background-100 px-2 py-0.5 text-[11px] font-semibold text-foreground-700">${esc(s.roleName)}</span>
+                    <span class="inline-flex items-center gap-1 rounded bg-secondary-50 border border-secondary-200/60 px-2 py-0.5 text-[10px] font-bold text-secondary-800" title="Sân phụ trách">
+                      <i class="ri-map-pin-2-line text-[11px] text-secondary-600"></i>${esc(s.courtName || 'Tất cả các sân')}
+                    </span>
                     ${s.status === 'active' 
                       ? '<span class="inline-flex items-center gap-1 rounded-full bg-primary-50 px-2 py-0.5 text-[10px] font-bold text-primary-700"><span class="h-1.5 w-1.5 rounded-full bg-primary-500 animate-pulse"></span>Đang làm việc</span>' 
                       : '<span class="rounded-full bg-accent-100 px-2 py-0.5 text-[10px] font-bold text-accent-800">Tạm khóa</span>'}
@@ -693,9 +697,33 @@ export async function renderSitemapStaff() {
 
   const openStaffModal = (s = null) => {
     const m = modal(s ? 'Sửa thông tin nhân viên' : 'Thêm tài khoản nhân viên cơ sở', `<form id="st-form" class="space-y-3.5">
+      <div class="rounded-lg border border-primary-200/80 bg-primary-50/40 p-2.5">
+        <label class="${LABEL} mb-1.5 flex items-center justify-between">
+          <span><i class="ri-shield-star-line text-primary-600 mr-1"></i>Chọn nhanh vai trò mẫu</span>
+          <span class="text-[11px] text-foreground-500 font-normal">Bấm để tự động điền chức vụ & phân quyền</span>
+        </label>
+        <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <button type="button" data-preset="manager" class="flex flex-col items-center justify-center rounded-md border border-primary-200 bg-white p-2 text-center text-xs font-semibold text-primary-800 hover:bg-primary-50 hover:border-primary-400 transition-colors shadow-2xs">
+            <i class="ri-shield-star-fill text-base text-primary-600 mb-0.5"></i>
+            <span>Quản lý</span>
+          </button>
+          <button type="button" data-preset="cashier" class="flex flex-col items-center justify-center rounded-md border border-background-200 bg-white p-2 text-center text-xs font-semibold text-foreground-700 hover:bg-background-50 hover:border-primary-400 transition-colors shadow-2xs">
+            <i class="ri-user-star-line text-base text-secondary-600 mb-0.5"></i>
+            <span>Lễ tân / Thu ngân</span>
+          </button>
+          <button type="button" data-preset="maintenance" class="flex flex-col items-center justify-center rounded-md border border-background-200 bg-white p-2 text-center text-xs font-semibold text-foreground-700 hover:bg-background-50 hover:border-primary-400 transition-colors shadow-2xs">
+            <i class="ri-tools-line text-base text-accent-600 mb-0.5"></i>
+            <span>Kỹ thuật sân</span>
+          </button>
+          <button type="button" data-preset="customers" class="flex flex-col items-center justify-center rounded-md border border-background-200 bg-white p-2 text-center text-xs font-semibold text-foreground-700 hover:bg-background-50 hover:border-primary-400 transition-colors shadow-2xs">
+            <i class="ri-gift-line text-base text-emerald-600 mb-0.5"></i>
+            <span>CSKH & Ưu đãi</span>
+          </button>
+        </div>
+      </div>
       <div class="grid grid-cols-2 gap-3">
         <div><label class="${LABEL}">Họ và tên *</label><input name="fullName" value="${esc(s?.fullName || '')}" required class="${INPUT}" placeholder="Nguyễn Văn A"></div>
-        <div><label class="${LABEL}">Chức vụ / Vị trí</label><input name="roleName" value="${esc(s?.roleName || 'Nhân viên lễ tân')}" class="${INPUT}" placeholder="Lễ tân ca tối"></div>
+        <div><label class="${LABEL}">Chức vụ / Vị trí *</label><input name="roleName" value="${esc(s?.roleName || 'Quản lý')}" required class="${INPUT}" placeholder="Quản lý hoặc Nhân viên lễ tân"></div>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div><label class="${LABEL}">Số điện thoại</label><input name="phone" value="${esc(s?.phone || '')}" class="${INPUT}" placeholder="09xx xxx xxx"></div>
@@ -709,14 +737,29 @@ export async function renderSitemapStaff() {
         <p class="mt-1.5 text-[11px] text-foreground-500">Nhân viên sẽ sử dụng Email và Mật khẩu này để đăng nhập trực tiếp tại trang <b>/dang-nhap</b>.</p>
       </div>
       <div>
-        <label class="${LABEL}">Phân quyền thao tác</label>
+        <div class="flex items-center justify-between mb-1">
+          <label class="${LABEL}">Phân quyền thao tác</label>
+          <div class="flex gap-2">
+            <button type="button" data-check-all-perms class="text-[11px] text-primary-700 hover:underline font-semibold">Chọn tất cả</button>
+            <span class="text-foreground-300">·</span>
+            <button type="button" data-uncheck-all-perms class="text-[11px] text-accent-700 hover:underline">Bỏ chọn</button>
+          </div>
+        </div>
         <div class="grid grid-cols-2 gap-2 mt-1">
           ${PERMS.map(([k, l, icon]) => `<label class="inline-flex items-center gap-2 rounded border border-background-300 bg-white p-2 text-xs font-medium hover:border-primary-400 cursor-pointer transition-colors">
-            <input type="checkbox" name="perm" value="${k}" ${(s?.permissions || ['bookings', 'services']).includes(k) ? 'checked' : ''} class="h-4 w-4 rounded accent-primary-600">
+            <input type="checkbox" name="perm" value="${k}" ${(s?.permissions || ['overview', 'bookings', 'courts', 'services', 'payments', 'promotions', 'customers']).includes(k) ? 'checked' : ''} class="h-4 w-4 rounded accent-primary-600">
             <span class="flex items-center gap-1.5"><i class="${icon} text-primary-600"></i>${l}</span>
           </label>`).join('')}
         </div>
-        <p class="mt-1 text-[11px] text-foreground-400 italic">Lưu ý: Nhân viên tuyệt đối không thể xem số tài khoản nhận tiền cọc VietQR và cài đặt tài chính của chủ sân.</p>
+        <p class="mt-1 text-[11px] text-foreground-400 italic">Lưu ý: Quản lý & Nhân viên tuyệt đối không thể xem số tài khoản nhận tiền cọc VietQR và cài đặt tài chính của chủ sân.</p>
+      </div>
+      <div>
+        <label class="${LABEL}"><i class="ri-map-pin-line text-primary-600 mr-1"></i>Sân phụ trách / Cơ sở làm việc *</label>
+        <select name="courtId" class="${INPUT}">
+          <option value="">-- Tất cả các sân của cơ sở (Quản lý chung) --</option>
+          ${S.courts.map((c) => `<option value="${c.id}" ${s && s.courtId === c.id ? 'selected' : ''}>${esc(c.name)} (${esc(c.sportLabel || c.sport)})</option>`).join('')}
+        </select>
+        <p class="mt-1 text-[11px] text-foreground-500">Nhân viên sẽ chỉ hiển thị và thao tác trên đúng sân này (Đơn đặt, lịch sân, thu ngân, check-in).</p>
       </div>
       <div>
         <label class="${LABEL}">Trạng thái làm việc</label>
@@ -726,6 +769,49 @@ export async function renderSitemapStaff() {
         </select>
       </div>
     </form>`, `<button type="button" data-close class="${BTN_OUT}">Hủy</button><button type="button" data-ok class="${BTN}">Lưu tài khoản nhân viên</button>`, 'max-w-lg');
+
+    // Tự động phân quyền theo vai trò mẫu
+    const roleInput = m.el.querySelector('[name=roleName]');
+    const permBoxes = () => m.el.querySelectorAll('[name=perm]');
+
+    m.el.querySelectorAll('[data-preset]').forEach((btn) => {
+      btn.onclick = () => {
+        const type = btn.dataset.preset;
+        const presets = {
+          manager: {
+            title: 'Quản lý',
+            perms: ['overview', 'bookings', 'courts', 'services', 'payments', 'promotions', 'customers'],
+          },
+          cashier: {
+            title: 'Lễ tân & thu ngân',
+            perms: ['bookings', 'services', 'payments'],
+          },
+          maintenance: {
+            title: 'Kỹ thuật & bảo trì sân',
+            perms: ['courts', 'bookings'],
+          },
+          customers: {
+            title: 'Chăm sóc khách hàng & ưu đãi',
+            perms: ['customers', 'promotions'],
+          },
+        };
+        const p = presets[type];
+        if (!p) return;
+        if (roleInput) roleInput.value = p.title;
+        permBoxes().forEach((cb) => {
+          cb.checked = p.perms.includes(cb.value);
+        });
+      };
+    });
+
+    const checkAllBtn = m.el.querySelector('[data-check-all-perms]');
+    if (checkAllBtn) {
+      checkAllBtn.onclick = () => permBoxes().forEach((cb) => { cb.checked = true; });
+    }
+    const uncheckAllBtn = m.el.querySelector('[data-uncheck-all-perms]');
+    if (uncheckAllBtn) {
+      uncheckAllBtn.onclick = () => permBoxes().forEach((cb) => { cb.checked = false; });
+    }
 
     m.el.querySelector('[data-ok]').onclick = async () => {
       const f = m.el.querySelector('#st-form');
@@ -759,7 +845,7 @@ export async function renderSitemapStaff() {
       if (!f.reportValidity()) return;
       const pwd = f.password.value;
       try {
-        await api('owner', 'staff_save', { id: s.id, fullName: s.fullName, roleName: s.roleName, phone: s.phone, email: s.email, status: s.status, permissions: s.permissions, password: pwd });
+        await api('owner', 'staff_save', { id: s.id, courtId: s.courtId || '', fullName: s.fullName, roleName: s.roleName, phone: s.phone, email: s.email, status: s.status, permissions: s.permissions, password: pwd });
         m.close();
         toast(`Đã cập nhật mật khẩu cho ${s.fullName}.`);
         renderSitemapStaff();

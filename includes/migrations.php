@@ -69,6 +69,15 @@ function ensure_sitemap_schema(): void
 
     $pdo = db();
 
+    // Bổ sung cột court_id cho owner_staff (phân quyền nhân viên theo đúng sân cơ sở)
+    try {
+        $hasStaffCourt = $pdo->query("SHOW COLUMNS FROM owner_staff LIKE 'court_id'")->fetchColumn();
+        if (!$hasStaffCourt) {
+            $pdo->exec("ALTER TABLE owner_staff ADD COLUMN court_id VARCHAR(40) NULL DEFAULT NULL AFTER owner_id");
+            $pdo->exec("ALTER TABLE owner_staff ADD KEY idx_staff_court (court_id)");
+        }
+    } catch (Throwable $e) {}
+
     // Bổ sung password_hash cho owner_staff (tài khoản nhân viên cơ sở)
     try {
         $hasStaffPwd = $pdo->query("SHOW COLUMNS FROM owner_staff LIKE 'password_hash'")->fetchColumn();
@@ -173,6 +182,7 @@ function ensure_sitemap_schema(): void
         "CREATE TABLE IF NOT EXISTS owner_staff (
             id VARCHAR(40) PRIMARY KEY,
             owner_id INT NOT NULL,
+            court_id VARCHAR(40) NULL DEFAULT NULL,
             full_name VARCHAR(120) NOT NULL,
             phone VARCHAR(30) NOT NULL DEFAULT '',
             email VARCHAR(190) NOT NULL DEFAULT '',
@@ -181,7 +191,8 @@ function ensure_sitemap_schema(): void
             permissions TEXT NULL COMMENT 'JSON',
             status ENUM('active','inactive') NOT NULL DEFAULT 'active',
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            KEY idx_staff_owner (owner_id)
+            KEY idx_staff_owner (owner_id),
+            KEY idx_staff_court (court_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 
         "CREATE TABLE IF NOT EXISTS owner_settings (
@@ -279,6 +290,15 @@ function ensure_sitemap_schema(): void
         $pdo->exec("DELETE FROM owner_services WHERE id = 'sv-noodle'");
     } catch (Throwable $e) {}
 
+    // Bổ sung cột court_id cho owner_staff (phân quyền nhân viên theo đúng sân cơ sở)
+    try {
+        $hasStaffCourt = $pdo->query("SHOW COLUMNS FROM owner_staff LIKE 'court_id'")->fetchColumn();
+        if (!$hasStaffCourt) {
+            $pdo->exec("ALTER TABLE owner_staff ADD COLUMN court_id VARCHAR(40) NULL DEFAULT NULL AFTER owner_id");
+            $pdo->exec("ALTER TABLE owner_staff ADD KEY idx_staff_court (court_id)");
+        }
+    } catch (Throwable $e) {}
+
     // Bổ sung password_hash cho owner_staff (tài khoản nhân viên cơ sở)
     try {
         $hasStaffPwd = $pdo->query("SHOW COLUMNS FROM owner_staff LIKE 'password_hash'")->fetchColumn();
@@ -344,9 +364,9 @@ function seed_sitemap_defaults(): void
     }
     if ((int) q_val('SELECT COUNT(*) FROM owner_staff') === 0) {
         $stPwd = password_hash('123456', PASSWORD_DEFAULT);
-        q("INSERT INTO owner_staff (id, owner_id, full_name, phone, email, password_hash, role_name, permissions, status) VALUES
-            ('st-01', 2, 'Nguyễn Văn Tài', '0935 111 222', 'tai.nv@hungsport.vn', ?, 'Quản lý ca tối', '[\"bookings\",\"services\",\"payments\"]', 'active'),
-            ('st-02', 2, 'Lê Thị Ngọc', '0935 333 444', 'ngoc.lt@hungsport.vn', ?, 'Lễ tân & thu ngân', '[\"bookings\",\"services\"]', 'active')", [$stPwd, $stPwd]);
+        q("INSERT INTO owner_staff (id, owner_id, court_id, full_name, phone, email, password_hash, role_name, permissions, status) VALUES
+            ('st-01', 2, 'c01', 'Nguyễn Văn Tài', '0935 111 222', 'tai.nv@hungsport.vn', ?, 'Quản lý', '[\"overview\",\"bookings\",\"courts\",\"services\",\"payments\",\"promotions\",\"customers\"]', 'active'),
+            ('st-02', 2, 'c01', 'Lê Thị Ngọc', '0935 333 444', 'ngoc.lt@hungsport.vn', ?, 'Lễ tân & thu ngân', '[\"bookings\",\"services\"]', 'active')", [$stPwd, $stPwd]);
     }
 
     // 6. Nhật ký nhập kho mẫu

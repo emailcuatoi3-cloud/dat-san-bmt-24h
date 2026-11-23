@@ -273,7 +273,7 @@ function map_invoice(array $b): array
     ];
 }
 
-/** Hóa đơn từ các lượt chơi đã hoàn thành. $where/$params lọc thêm trên bảng b. */
+/** Hóa đơn từ các lượt chơi đã xác nhận hoặc đã hoàn thành. $where/$params lọc thêm trên bảng b. */
 function invoices_where(string $where = '1=1', array $params = []): array
 {
     auto_complete_bookings();
@@ -281,7 +281,9 @@ function invoices_where(string $where = '1=1', array $params = []): array
     $list = [];
     foreach ($rows as $r) {
         $b = map_booking($r);
-        if ($b['status'] === 'completed') $list[] = map_invoice($b);
+        if (in_array($b['status'], ['completed', 'confirmed'], true)) {
+            $list[] = map_invoice($b);
+        }
     }
     return $list;
 }

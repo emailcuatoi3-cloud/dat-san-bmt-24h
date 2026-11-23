@@ -1,9 +1,9 @@
 /**
  * KÊNH CHỦ SÂN — điểm vào theo 9 nhóm của Sitemap Chủ sân.
  */
-import { errorBlock, loadingBlock } from '../core/ui.js';
-import { PAGE, main, loadData } from './owner-shared.js';
-import { openCounterBooking, resetInvoices } from './owner-ops.js';
+import { errorBlock, loadingBlock } from '../core/ui.js?v=20261123_04';
+import { PAGE, main, loadData } from './owner-shared.js?v=20261123_04';
+import { openCounterBooking, resetInvoices } from './owner-ops.js?v=20261123_04';
 import {
   renderSitemapOverview,
   renderSitemapCourts,
@@ -15,7 +15,7 @@ import {
   renderSitemapStaff,
   renderSitemapSettings,
   renderSitemapAccount,
-} from './owner-sitemap.js?v=20261122_03';
+} from './owner-sitemap.js?v=20261123_04';
 
 const RENDER = {
   overview: renderSitemapOverview,

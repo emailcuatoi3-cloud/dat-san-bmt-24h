@@ -137,8 +137,19 @@ render_page([
       <div class="flex min-w-0 items-center gap-3">
         <button type="button" id="owner-menu-btn" class="flex h-9 w-9 items-center justify-center rounded-md border border-background-300 bg-background-100 text-foreground-700 hover:bg-background-200 lg:hidden" aria-label="Mở menu"><i class="ri-menu-line text-lg" aria-hidden="true"></i></button>
         <div class="min-w-0">
-          <p class="truncate text-xs font-medium text-foreground-500">Xin chào, <?= e($staff ? $staff['name'] : ($u['full_name'] ?: $business)) ?><?= $staff ? ' <span class="rounded bg-primary-100 px-1.5 py-0.5 text-xs font-bold text-primary-700">Nhân viên</span>' : '' ?></p>
-          <p class="truncate font-heading text-sm font-bold text-foreground-950"><?= e($staff ? ($staff['roleName'] . ' · ' . $business) : $business) ?></p>
+          <?php
+          $isManager = $staff && mb_stripos($staff['roleName'], 'quản lý') !== false;
+          $roleBadge = $staff
+              ? ($isManager
+                  ? '<span class="rounded bg-primary-100 px-1.5 py-0.5 text-xs font-bold text-primary-800 border border-primary-300">Quản lý</span>'
+                  : '<span class="rounded bg-background-200 px-1.5 py-0.5 text-xs font-bold text-foreground-700">Nhân viên</span>')
+              : '<span class="rounded bg-accent-100 px-1.5 py-0.5 text-xs font-bold text-accent-800">Chủ sân</span>';
+          $courtSub = $staff
+              ? (!empty($staff['courtName']) ? (' · ' . $staff['courtName']) : (!empty($staff['courtId']) ? (' · Sân #' . $staff['courtId']) : ' · Toàn cơ sở'))
+              : '';
+          ?>
+          <p class="truncate text-xs font-medium text-foreground-500">Xin chào, <?= e($staff ? $staff['name'] : ($u['full_name'] ?: $business)) ?> <?= $roleBadge ?></p>
+          <p class="truncate font-heading text-sm font-bold text-foreground-950"><?= e($staff ? ($staff['roleName'] . $courtSub . ' · ' . $business) : $business) ?></p>
         </div>
       </div>
       <div class="flex items-center gap-2">

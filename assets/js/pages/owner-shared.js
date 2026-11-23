@@ -1,8 +1,8 @@
 /**
  * Dùng chung cho kênh chủ sân: trạng thái dữ liệu, nút, ô nhập, khung hộp thoại, thẻ thống kê.
  */
-import { APP, PAGE, api, esc, openModal, formatVnd } from '../core/ui.js?v=20261122_03';
-import { slotEndTime, formatLongDate } from '../lib/format.js';
+import { APP, PAGE, api, esc, openModal, formatVnd } from '../core/ui.js?v=20261123_04';
+import { slotEndTime, formatLongDate } from '../lib/format.js?v=20261123_04';
 
 export const TODAY = APP.today;
 export const S = { courts: [], trash: [], bookings: [], blocked: {}, unreplied: 0 };
