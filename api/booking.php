@@ -432,18 +432,12 @@ run_api([
              payment_method, payment_status, status, approved_at, hold_expires_at, note)
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [
             $id, $bookingCode, 'online', $court['id'], $court['name'], $court['sport'], $court['area'], $court['image'], $u['id'] ?? null,
-<<<<<<< HEAD
             $name, $cleanPhone, $email ?: null, $date, $start, $duration, j($slots), $court['pricePerHour'], $subtotal, $discount, $promoCode,
-            $total, $deposit, j(array_map(fn($x) => ['id' => $x, 'label' => EXTRA_SERVICES[$x][0], 'price' => EXTRA_SERVICES[$x][1]], $extraIds)),
+            $total, $deposit, j($parsedExtras['items']),
             $mode === 'full' ? 'vietqr-full' : 'vietqr-deposit', 'unpaid', 'pending', null, null, $note ?: null,
         ]);
 
         $_SESSION['last_booking_create_time'] = time();
-=======
-            $name, $phone, $email ?: null, $date, $start, $duration, j($slots), $court['pricePerHour'], $subtotal, $discount, $promoCode,
-            $total, $deposit, j($parsedExtras['items']),
-            $mode === 'full' ? 'vietqr-full' : 'vietqr-deposit', 'unpaid', 'pending', null, null, $note ?: null,
-        ]);
 
         // Cập nhật tồn kho dịch vụ / biến thể đã chọn
         foreach ($parsedExtras['items'] as $it) {
@@ -455,7 +449,6 @@ run_api([
                 q('UPDATE owner_services SET stock = GREATEST(0, stock - ?) WHERE id = ?', [$qty, $it['id']]);
             }
         }
->>>>>>> Dev
         return booking_by_code($bookingCode);
     },
 

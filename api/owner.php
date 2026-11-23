@@ -112,8 +112,6 @@ run_api([
         return map_booking(q_one(BOOKING_SELECT . ' WHERE b.id = ?', [$b['id']]));
     },
 
-<<<<<<< HEAD
-=======
     'booking_reschedule' => function () {
         staff_need('bookings');
         auto_cancel_expired_holds();
@@ -150,7 +148,6 @@ run_api([
         return map_booking(q_one(BOOKING_SELECT . ' WHERE b.id = ?', [$b['id']]));
     },
 
->>>>>>> Dev
     // Tạo đơn tại quầy (khách gọi điện / đến trực tiếp)
     'counter_create' => function () {
         staff_need('bookings');
@@ -210,22 +207,14 @@ run_api([
              unit_price, base_total, total_price, deposit_amount, extras, payment_method, payment_status, payment_label, status, note)
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [
             $id, $code, 'owner', $court['id'], $court['name'], $court['sport'], $court['area'], $court['image'], $name, $phone, $date, $slots[0], count($slots) * 60, j($slots),
-<<<<<<< HEAD
-            $court['pricePerHour'], $total, $total, $deposit, $extras ? j($extras) : null, $method, $status, $label, 'confirmed', mb_substr(in_str('note'), 0, 500),
-=======
-            $court['pricePerHour'], $total, $total, $deposit, $method, $status, $label, 'confirmed', $note,
->>>>>>> Dev
+            $court['pricePerHour'], $total, $total, $deposit, $extras ? j($extras) : null, $method, $status, $label, 'confirmed', $note,
         ]);
         return map_booking(q_one(BOOKING_SELECT . ' WHERE b.id = ?', [$id]));
     },
 
     'checkin' => function () {
-<<<<<<< HEAD
-        $code = trim(strtoupper(in_str('code')));
-=======
         staff_need('bookings');
-        $code = strtoupper(in_str('code'));
->>>>>>> Dev
+        $code = trim(strtoupper(in_str('code')));
         $id = in_str('id');
         if (!$id && $code) {
             $codePart = trim(explode('|', $code)[0]);

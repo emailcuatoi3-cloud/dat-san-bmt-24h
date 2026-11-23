@@ -98,18 +98,14 @@ export async function checkIn(b, code = '') {
 
 export function openBookingDetail(b) {
   const row = (l, v) => `<div class="flex items-start justify-between gap-3 py-1.5 text-sm"><span class="text-foreground-500">${l}</span><span class="text-right font-medium text-foreground-900">${v}</span></div>`;
-<<<<<<< HEAD
-  const extras = (b.extras || []).map((x) => `${esc(x.label || x.name)} ${x.qty > 1 ? `x${x.qty}` : ''} (${money(x.price * (x.qty || 1))})`).join(', ');
-  const remaining = Math.max(0, b.totalPrice - (b.paymentStatus === 'paid' ? b.totalPrice : (b.depositAmount || 0)));
-=======
   const extras = (b.extras || []).map((x) => {
     const name = esc(x.label || x.name || 'Dịch vụ');
     const vname = x.variantName ? ` - ${esc(x.variantName)}` : '';
-    const qty = (x.quantity && x.quantity > 1) ? ` x${x.quantity}` : '';
-    const prc = money(x.total || x.price || 0);
+    const qty = (x.quantity && x.quantity > 1) ? ` x${x.quantity}` : (x.qty && x.qty > 1 ? ` x${x.qty}` : '');
+    const prc = money(x.total || (x.price * (x.qty || x.quantity || 1)) || 0);
     return `${name}${vname}${qty} (${prc})`;
   }).join(', ');
->>>>>>> Dev
+  const remaining = Math.max(0, b.totalPrice - (b.paymentStatus === 'paid' ? b.totalPrice : (b.depositAmount || 0)));
   const btns = [];
   if (b.status === 'pending') {
     if (!b.approvedAt) {

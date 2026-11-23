@@ -2,11 +2,7 @@
  * Module: Controller luồng Đặt sân 3 bước (Mã Minh Hoan - PK04409)
  * - Quản lý state đặt sân, tải slot bận theo ngày và vẽ lưới giờ kèm giá động
  * - Validate form thông tin, kiểm tra điều kiện voucher và tính tổng tiền real-time
-<<<<<<< HEAD
- * - Điều khiển luồng duyệt đơn & đồng hồ giữ chỗ, đối soát thanh toán VietQR và render vé QR
-=======
  * - Điều khiển luồng duyệt đơn & đồng hồ giữ chỗ 5 phút, đối soát thanh toán VietQR và render vé QR
->>>>>>> Dev
  */
 
 import { $, $$, PAGE, APP, api, esc, url, cx, formatVnd, copyText, openModal } from '../core/ui.js';
@@ -704,18 +700,9 @@ function renderStep2() {
       <div class="min-w-0"><label for="b-phone" class="mb-1.5 block text-sm font-medium text-foreground-800">Số điện thoại <span class="text-accent-600">*</span></label><input id="b-phone" data-form="phone" type="tel" inputmode="numeric" maxlength="12" value="${esc(f.phone)}" placeholder="0912345678" class="${inputCls('phone')}">${fieldError('phone') || '<p class="mt-1 text-xs text-foreground-400">10 số, bắt đầu bằng 0. Chủ sân gọi xác nhận theo số này.</p>'}</div>
       <div class="min-w-0 sm:col-span-2"><label for="b-email" class="mb-1.5 block text-sm font-medium text-foreground-800">Email <span class="font-normal text-foreground-400">(không bắt buộc)</span></label><input id="b-email" data-form="email" type="email" value="${esc(f.email)}" placeholder="minhquan@gmail.com" class="${inputCls('email')}">${fieldError('email')}</div>
     </div>
-<<<<<<< HEAD
     <!-- Bẫy honeypot chống bot tự động điền form -->
     <div class="hidden" style="display:none;" aria-hidden="true"><label for="b-website-check">Kiểm tra website</label><input id="b-website-check" data-form="website_check" type="text" tabindex="-1" autocomplete="off" value=""></div>
-    <div class="mt-5"><p class="text-sm font-medium text-foreground-800">Dịch vụ thêm</p><p class="mt-0.5 text-xs text-foreground-500">Trả cùng lúc tại sân, không bắt buộc.</p>
-      <div class="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2">${extraServices
-        .map((s) => {
-          const on = S.extras.includes(s.id);
-          return `<label class="flex cursor-pointer items-center justify-between gap-3 rounded-md border px-3.5 py-2.5 transition-colors ${on ? 'border-primary-400 bg-primary-50' : 'border-background-300 bg-white hover:border-primary-300'}"><span class="flex items-center gap-2 text-sm text-foreground-900"><input type="checkbox" data-extra="${s.id}" ${on ? 'checked' : ''} class="h-4 w-4 cursor-pointer accent-primary-500">${esc(s.label)}</span><span class="whitespace-nowrap text-xs font-semibold text-foreground-600">${formatVnd(s.price)}</span></label>`;
-        })
-        .join('')}</div></div>
-=======
-    <div class="mt-5">
+<div class="mt-5">
       <div class="flex items-center justify-between gap-2">
         <div>
           <p class="text-sm font-bold text-foreground-900 flex items-center gap-1.5"><i class="ri-shopping-basket-line text-primary-600"></i>Dịch vụ &amp; Đồ thuê tại sân</p>
@@ -797,7 +784,6 @@ function renderStep2() {
   }).join('')}
       </div>
     </div>
->>>>>>> Dev
     <div class="mt-5" id="promo-box"></div>
     <div class="mt-5"><label for="b-note" class="mb-1.5 block text-sm font-medium text-foreground-800">Ghi chú cho chủ sân</label><textarea id="b-note" data-form="note" rows="3" maxlength="500" placeholder="Ví dụ: đội mình 7 người, cần thêm 10 áo bib..." class="w-full rounded-md border border-background-300 bg-white px-3 py-2.5 text-sm text-foreground-950 placeholder:text-foreground-400 focus:border-primary-400 focus:outline-none">${esc(f.note)}</textarea><p class="mt-1 text-right text-xs text-foreground-400" data-note-count>${f.note.length}/500</p></div>
     <label class="mt-2 flex cursor-pointer items-start gap-2.5 rounded-md border border-background-200 bg-background-50 px-3.5 py-3"><input type="checkbox" data-agree ${S.agree ? 'checked' : ''} class="mt-0.5 h-4 w-4 cursor-pointer accent-primary-500"><span class="text-xs leading-relaxed text-foreground-600">Tôi đồng ý với chính sách hủy sân: chỉ hủy và hoàn 100% tiền cọc khi còn cách giờ chơi từ ${CANCEL_CUTOFF_HOURS} giờ trở lên. Trong ${CANCEL_CUTOFF_HOURS} giờ cuối, nút hủy sẽ khóa và tôi liên hệ hotline để chủ sân hỗ trợ. Lỗi từ phía sân hoàn 100%.</span></label>`;

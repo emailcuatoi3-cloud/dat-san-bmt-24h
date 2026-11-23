@@ -47,16 +47,12 @@ const toggleMenu = (open) => {
 document.getElementById('owner-menu-btn')?.addEventListener('click', () => toggleMenu(true));
 overlay?.addEventListener('click', () => toggleMenu(false));
 
-<<<<<<< HEAD
 document.querySelectorAll('#counter-btn, [data-open-counter]').forEach((btn) => {
   btn.addEventListener('click', () => {
     toggleMenu(false);
     openCounterBooking();
   });
 });
-=======
-document.getElementById('counter-btn')?.addEventListener('click', () => openCounterBooking());
->>>>>>> Dev
 
 (async () => {
   main().innerHTML = loadingBlock('Đang tải dữ liệu kênh chủ sân...');

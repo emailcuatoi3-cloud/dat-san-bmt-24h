@@ -259,16 +259,6 @@ function render_site_header(bool $tr): void
     $aboutActive = strpos($path, '/gioi-thieu') === 0;
     $contactActive = strpos($path, '/lien-he') === 0;
     ?>
-<<<<<<< HEAD
-<header id="site-header" <?= tcls($tr, 'bg-transparent border-b border-white/10', 'bg-background-50/80 backdrop-blur-md border-b border-background-200', 'fixed top-0 left-0 right-0 z-50 transition-all duration-300') ?> <?= $tr ? 'data-transparent="1"' : '' ?>>
-  <div class="w-full px-4 md:px-6 xl:px-8 h-[72px] flex items-center justify-between gap-3 xl:gap-6">
-    <a href="<?= url('/') ?>" class="flex items-center gap-2.5 shrink-0 group" aria-label="Đặt Sân BMT 24H - Trang chủ">
-      <img src="<?= site_logo() ?>" alt="Logo Đặt Sân BMT 24H" class="w-10 h-10 rounded-lg object-contain transition-transform group-hover:scale-105">
-      <span class="leading-tight">
-        <span <?= tcls($tr, 'text-white', 'text-foreground-950', 'block font-heading text-sm font-extrabold tracking-tight') ?>>ĐẶT SÂN BMT</span>
-        <span class="block text-[10px] font-semibold tracking-[0.18em] text-primary-500">24H</span>
-      </span>
-=======
 <header id="site-header" <?= tcls($tr, 'bg-transparent border-b border-white/10', 'bg-background-50/80 backdrop-blur-md border-b border-background-200', 'fixed left-0 right-0 z-50 transition-all duration-300') ?> style="<?= $imp ? 'top: var(--ghost-banner-height, 44px);' : 'top: 0;' ?>" <?= $tr ? 'data-transparent="1"' : '' ?>>
   <div class="w-full px-3 xl:px-4 h-[72px] flex items-center justify-between gap-2">
     <a href="<?= url('/') ?>" class="flex items-center gap-2.5 sm:gap-3 shrink-0 group py-1" aria-label="Đặt Sân BMT 24H - Trang chủ">
@@ -282,7 +272,6 @@ function render_site_header(bool $tr): void
         </div>
         <span class="mt-0.5 text-[10px] md:text-[11px] font-semibold text-primary-400 tracking-wider hidden sm:block">ĐẶT SÂN THỂ THAO BUÔN MA THUỘT</span>
       </div>
->>>>>>> Dev
     </a>
 
     <nav class="hidden min-w-0 flex-1 items-center justify-start gap-0.5 overflow-x-auto lg:flex" style="scrollbar-width:none" aria-label="Điều hướng chính">
@@ -546,11 +535,6 @@ function render_site_footer(): void
   <div class="w-full px-4 md:px-8 py-12 md:py-16">
     <div class="grid grid-cols-2 gap-x-6 gap-y-8 sm:gap-10 lg:grid-cols-4">
       <div class="col-span-2 sm:col-span-1">
-<<<<<<< HEAD
-        <a href="<?= url('/') ?>" class="flex items-center gap-2.5 mb-4 group">
-          <img src="<?= site_logo() ?>" alt="Logo Đặt Sân BMT 24H" class="w-10 h-10 rounded-lg object-contain transition-transform group-hover:scale-105">
-          <span class="leading-tight"><span class="block font-heading text-[15px] font-extrabold tracking-tight text-foreground-950">ĐẶT SÂN BMT</span><span class="block text-[11px] font-semibold tracking-[0.18em] text-primary-600">24H</span></span>
-=======
         <a href="<?= url('/') ?>" class="flex items-center gap-3 mb-4 group">
           <img src="<?= site_logo() ?>" alt="Logo Đặt Sân BMT 24H" class="w-12 h-12 rounded-xl object-contain drop-shadow-md transition-transform group-hover:scale-105">
           <div class="flex flex-col justify-center leading-tight">
@@ -560,7 +544,6 @@ function render_site_footer(): void
             </div>
             <span class="mt-0.5 text-xs font-semibold text-primary-600 tracking-wider">ĐẶT SÂN THỂ THAO BUÔN MA THUỘT</span>
           </div>
->>>>>>> Dev
         </a>
         <p class="text-sm leading-relaxed text-foreground-600">Nền tảng đặt sân bóng đá và sân cầu lông trực tuyến tại Buôn Ma Thuột, Đắk Lắk. Kết nối người chơi với hơn 30 sân thể thao chất lượng trong vài thao tác.</p>
         <div class="flex items-center gap-2 mt-5">

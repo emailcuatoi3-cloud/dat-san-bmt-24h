@@ -646,8 +646,6 @@ run_api([
             q('UPDATE bookings SET status = ?, reject_reason = ? WHERE id = ?', [$status, $reason, $b['id']]);
             approve_deposit($b, $status);
         }
-<<<<<<< HEAD
-=======
 
         $targetUserId = (int) ($b['customer_id'] ?? 0);
         if (!$targetUserId && !empty($b['customer_phone'])) {
@@ -660,7 +658,6 @@ run_api([
                 push_notification($targetUserId, 'Đơn đặt sân #' . $b['code'] . ' đã bị hủy / từ chối', 'Lý do: ' . ($reason ?: 'Đơn đã bị hủy.') . '.', 'booking', '/tai-khoan?tab=history');
             }
         }
->>>>>>> Dev
         audit('bookings', $status === 'confirmed' ? 'Duyệt đơn đặt sân' : 'Từ chối đơn đặt sân', $b['code'] . ' · ' . $b['court_name'], (string) $reason, $status === 'confirmed' ? 'success' : 'warning');
         return map_booking(q_one(BOOKING_SELECT . ' WHERE b.id = ?', [$b['id']]));
     },

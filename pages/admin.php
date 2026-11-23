@@ -47,12 +47,6 @@ render_page([
     ?>
 <div class="min-h-screen bg-background-100" <?= $imp ? 'style="padding-top: var(--ghost-banner-height, 44px);"' : '' ?>>
   <div id="owner-overlay" class="fixed inset-0 z-40 hidden bg-black/40 lg:hidden"></div>
-<<<<<<< HEAD
-  <aside id="owner-sidebar" class="fixed inset-y-0 left-0 z-50 flex w-[264px] -translate-x-full flex-col border-r border-background-200 bg-white transition-transform lg:translate-x-0">
-    <a href="<?= url('/') ?>" class="flex h-16 shrink-0 items-center gap-2.5 border-b border-background-200 px-5">
-      <img src="<?= site_logo() ?>" alt="Logo Đặt Sân BMT 24H" class="h-9 w-9 rounded-md object-contain">
-      <span class="leading-tight"><span class="block font-heading text-sm font-extrabold text-foreground-950">Đặt Sân BMT 24H</span><span class="block text-[11px] font-medium text-foreground-500">Trang quản trị</span></span>
-=======
   <aside id="owner-sidebar" class="fixed inset-y-0 left-0 z-50 flex w-[264px] -translate-x-full flex-col border-r border-background-200 bg-white transition-transform lg:translate-x-0" <?= $imp ? 'style="top: var(--ghost-banner-height, 44px);"' : '' ?>>
     <a href="<?= url('/') ?>" class="flex h-16 shrink-0 items-center gap-3 border-b border-background-200 px-5 group">
       <img src="<?= site_logo() ?>" alt="Logo Đặt Sân BMT 24H" class="h-10 w-10 rounded-xl object-contain drop-shadow-sm transition-transform group-hover:scale-105">
@@ -63,7 +57,6 @@ render_page([
         </div>
         <span class="block text-xs font-medium text-foreground-500">Trang quản trị</span>
       </div>
->>>>>>> Dev
     </a>
     <nav class="flex-1 overflow-y-auto px-3 py-4" aria-label="Điều hướng quản trị">
       <p class="mb-1.5 px-3 text-xs font-bold uppercase tracking-wider text-foreground-400">Quản trị hệ thống</p>
