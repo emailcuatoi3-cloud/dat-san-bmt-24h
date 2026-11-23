@@ -36,8 +36,12 @@ export async function api(file, action, body = undefined, method = undefined) {
   if (opts.method === 'GET' && body) {
     target += '&' + new URLSearchParams(body).toString();
   } else if (body !== undefined) {
-    opts.headers['Content-Type'] = 'application/json';
-    opts.body = JSON.stringify(body);
+    if (body instanceof FormData) {
+      opts.body = body;
+    } else {
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(body);
+    }
   }
   let res;
   try {
@@ -85,28 +89,54 @@ export function toast(message, tone = 'success', ms = 3200) {
   }, ms);
 }
 
+const activeModals = [];
+
 /**
  * Hộp thoại (modal). Trả về { el, close }.
  * openModal({ html, size: 'max-w-lg', onClose, dismissible })
  */
 export function openModal({ html, size = 'max-w-lg', onClose, dismissible = true, panelClass = '' }) {
   const root = document.getElementById('modal-root') || document.body;
+
+  // Xóa sạch toàn bộ modal cũ trong modal-root nếu có, triệt để ngăn chặn chồng popup
+  while (root.firstChild) {
+    const oldWrap = root.firstChild;
+    if (oldWrap && typeof oldWrap._closeModal === 'function') {
+      oldWrap._closeModal();
+    } else if (oldWrap && oldWrap.remove) {
+      oldWrap.remove();
+    }
+  }
+  activeModals.length = 0;
+
   const wrap = document.createElement('div');
-  wrap.className = 'fixed inset-0 z-[100] flex items-end justify-center bg-black/60 p-0 backdrop-blur-[2px] sm:items-center sm:p-4 animate-fade-in';
+  wrap.className = `modal-wrapper fixed inset-0 z-[100] flex items-end justify-center bg-black/60 p-0 backdrop-blur-[2px] sm:items-center sm:p-4 animate-fade-in`;
+  wrap.style.zIndex = 100;
   wrap.innerHTML = `<div class="relative max-h-[92vh] w-full ${size} overflow-y-auto rounded-t-2xl border border-background-200 bg-background-50 shadow-2xl sm:rounded-2xl ${panelClass}" role="dialog" aria-modal="true">${html}</div>`;
-  const prevOverflow = document.body.style.overflow;
+
   document.body.style.overflow = 'hidden';
+  activeModals.push(wrap);
+
   let closed = false;
   const close = () => {
     if (closed) return;
     closed = true;
     wrap.remove();
-    document.body.style.overflow = prevOverflow;
+    const idx = activeModals.indexOf(wrap);
+    if (idx !== -1) activeModals.splice(idx, 1);
+    if (activeModals.length === 0) {
+      document.body.style.overflow = '';
+    }
     document.removeEventListener('keydown', onKey);
     if (onClose) onClose();
   };
+  wrap._closeModal = close;
+
   const onKey = (event) => {
-    if (event.key === 'Escape' && dismissible) close();
+    if (event.key === 'Escape' && dismissible) {
+      event.stopPropagation();
+      close();
+    }
   };
   document.addEventListener('keydown', onKey);
   wrap.addEventListener('mousedown', (event) => {
@@ -177,10 +207,22 @@ export function formData(form) {
 
 /** Gắn sự kiện theo kiểu ủy quyền: on(root, 'click', '[data-x]', (e, el) => ...) */
 export function on(root, type, selector, handler) {
-  root.addEventListener(type, (event) => {
-    const el = event.target.closest(selector);
-    if (el && root.contains(el)) handler(event, el);
-  });
+  if (!root) return;
+  root._delegates = root._delegates || {};
+  const key = `${type}:${selector}`;
+  if (!root._delegates[key]) {
+    root._delegates[key] = [];
+    root.addEventListener(type, (event) => {
+      const el = event.target.closest(selector);
+      if (el && root.contains(el)) {
+        const handlers = root._delegates[key];
+        const lastHandler = handlers[handlers.length - 1];
+        if (lastHandler) lastHandler(event, el);
+      }
+    });
+  }
+  // Gán handler mới nhất, thay thế handler cũ khi trang re-render để tránh kích hoạt nhiều lần (chồng popup)
+  root._delegates[key] = [handler];
 }
 
 // ---------------- Thành phần hiển thị ----------------

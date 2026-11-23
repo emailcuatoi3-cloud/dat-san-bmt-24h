@@ -68,6 +68,26 @@ function ensure_sitemap_schema(): void
     $done = true;
 
     $pdo = db();
+
+    // Bổ sung password_hash cho owner_staff (tài khoản nhân viên cơ sở)
+    try {
+        $hasStaffPwd = $pdo->query("SHOW COLUMNS FROM owner_staff LIKE 'password_hash'")->fetchColumn();
+        if (!$hasStaffPwd) {
+            $pdo->exec("ALTER TABLE owner_staff ADD COLUMN password_hash VARCHAR(255) NULL AFTER email");
+            $defPwd = password_hash('123456', PASSWORD_DEFAULT);
+            $stmt = $pdo->prepare("UPDATE owner_staff SET password_hash = ? WHERE password_hash IS NULL OR password_hash = ''");
+            $stmt->execute([$defPwd]);
+        }
+    } catch (Throwable $e) {}
+
+    // Bổ sung cột images cho owner_requests (lưu danh sách ảnh bao quát sân tải lên)
+    try {
+        $hasReqImages = $pdo->query("SHOW COLUMNS FROM owner_requests LIKE 'images'")->fetchColumn();
+        if (!$hasReqImages) {
+            $pdo->exec("ALTER TABLE owner_requests ADD COLUMN images TEXT NULL AFTER note");
+        }
+    } catch (Throwable $e) {}
+
     // Kiểm tra nhanh nếu cột sport trong owner_services đã tồn tại thì bỏ qua DDL nặng
     try {
         $hasSport = $pdo->query("SHOW COLUMNS FROM owner_services LIKE 'sport'")->fetchColumn();
@@ -156,6 +176,7 @@ function ensure_sitemap_schema(): void
             full_name VARCHAR(120) NOT NULL,
             phone VARCHAR(30) NOT NULL DEFAULT '',
             email VARCHAR(190) NOT NULL DEFAULT '',
+            password_hash VARCHAR(255) NULL,
             role_name VARCHAR(80) NOT NULL DEFAULT 'Nhân viên lễ tân',
             permissions TEXT NULL COMMENT 'JSON',
             status ENUM('active','inactive') NOT NULL DEFAULT 'active',
@@ -258,6 +279,17 @@ function ensure_sitemap_schema(): void
         $pdo->exec("DELETE FROM owner_services WHERE id = 'sv-noodle'");
     } catch (Throwable $e) {}
 
+    // Bổ sung password_hash cho owner_staff (tài khoản nhân viên cơ sở)
+    try {
+        $hasStaffPwd = $pdo->query("SHOW COLUMNS FROM owner_staff LIKE 'password_hash'")->fetchColumn();
+        if (!$hasStaffPwd) {
+            $pdo->exec("ALTER TABLE owner_staff ADD COLUMN password_hash VARCHAR(255) NULL AFTER email");
+            $defPwd = password_hash('123456', PASSWORD_DEFAULT);
+            $stmt = $pdo->prepare("UPDATE owner_staff SET password_hash = ? WHERE password_hash IS NULL OR password_hash = ''");
+            $stmt->execute([$defPwd]);
+        }
+    } catch (Throwable $e) {}
+
     // Dữ liệu mẫu ban đầu (chỉ chèn nếu chưa có)
     seed_sitemap_defaults();
 }
@@ -311,9 +343,10 @@ function seed_sitemap_defaults(): void
             (2, 30, 4, 5, 0, 'Khách đến trước 10 phút để nhận sân. Hủy trước 4 giờ hoàn 100% cọc.', 'Vietcombank', '0231000688999', 'TRAN QUOC HUNG')");
     }
     if ((int) q_val('SELECT COUNT(*) FROM owner_staff') === 0) {
-        q("INSERT INTO owner_staff (id, owner_id, full_name, phone, email, role_name, permissions, status) VALUES
-            ('st-01', 2, 'Nguyễn Văn Tài', '0935 111 222', 'tai.nv@hungsport.vn', 'Quản lý ca tối', '[\"bookings\",\"services\",\"payments\"]', 'active'),
-            ('st-02', 2, 'Lê Thị Ngọc', '0935 333 444', 'ngoc.lt@hungsport.vn', 'Lễ tân & thu ngân', '[\"bookings\",\"services\"]', 'active')");
+        $stPwd = password_hash('123456', PASSWORD_DEFAULT);
+        q("INSERT INTO owner_staff (id, owner_id, full_name, phone, email, password_hash, role_name, permissions, status) VALUES
+            ('st-01', 2, 'Nguyễn Văn Tài', '0935 111 222', 'tai.nv@hungsport.vn', ?, 'Quản lý ca tối', '[\"bookings\",\"services\",\"payments\"]', 'active'),
+            ('st-02', 2, 'Lê Thị Ngọc', '0935 333 444', 'ngoc.lt@hungsport.vn', ?, 'Lễ tân & thu ngân', '[\"bookings\",\"services\"]', 'active')", [$stPwd, $stPwd]);
     }
 
     // 6. Nhật ký nhập kho mẫu

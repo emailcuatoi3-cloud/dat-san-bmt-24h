@@ -1,13 +1,13 @@
 /**
  * Kênh chủ sân — nhóm KINH DOANH: báo cáo, khách hàng, dịch vụ bán kèm, khuyến mãi, tiền cọc.
  */
-import { api, esc, toast, confirmBox, setBusy, formData, on, statusBadge, emptyState, loadingBlock, errorBlock, formatDateTime, downloadCsv } from '../core/ui.js';
+import { api, esc, toast, confirmBox, setBusy, formData, on, statusBadge, emptyState, loadingBlock, errorBlock, formatDateTime, downloadCsv } from '../core/ui.js?v=20261122_03';
 import { describeDiscount, describeConditions, promotionState, WEEKDAY_SHORT } from '../lib/promotions.js';
 import { hoursForDate, toMinutes } from '../lib/openingHours.js';
 import {
   S, TODAY, main, actions, BTN, BTN_OUT, BTN_SM, BTN_SM_PRI, BTN_SM_DANGER, INPUT, LABEL, CARD,
   chip, statCard, sectionTitle, modal, slotText, dateText, money, isActive, addDays, phoneKey, sourceBadge,
-} from './owner-shared.js';
+} from './owner-shared.js?v=20261122_03';
 import { openBookingDetail } from './owner-ops.js';
 
 const table = (head, rows, min = 640) =>
@@ -448,9 +448,21 @@ function promoForm(p = null) {
       <div><label class="${LABEL}">Mã giảm giá *</label><input name="code" value="${esc(x.code || '')}" class="${INPUT} font-mono uppercase" placeholder="SANGSOM20" maxlength="16"></div>
       <div><label class="${LABEL}">Tên chương trình *</label><input name="title" value="${esc(x.title || '')}" class="${INPUT}" placeholder="Giảm giá giờ sáng"></div>
       <div class="sm:col-span-2"><label class="${LABEL}">Mô tả</label><input name="description" value="${esc(x.description || '')}" class="${INPUT}"></div>
-      <div><label class="${LABEL}">Kiểu giảm</label><select name="discountType" class="${INPUT}"><option value="percent" ${x.discountType === 'percent' ? 'selected' : ''}>Theo %</option><option value="amount" ${x.discountType === 'amount' ? 'selected' : ''}>Số tiền cố định</option></select></div>
-      <div><label class="${LABEL}">Mức giảm</label><input type="number" name="discountValue" min="1" value="${x.discountValue}" class="${INPUT}"></div>
-      <div><label class="${LABEL}">Giảm tối đa (đ, cho kiểu %)</label><input type="number" name="maxDiscount" min="0" step="1000" value="${x.maxDiscount || ''}" class="${INPUT}"></div>
+      <div><label class="${LABEL}">Kiểu giảm</label><select name="discountType" id="pm-discount-type" class="${INPUT}"><option value="percent" ${x.discountType === 'percent' ? 'selected' : ''}>Giảm theo % (Phần trăm)</option><option value="amount" ${x.discountType === 'amount' ? 'selected' : ''}>Giảm theo số tiền (VNĐ)</option></select></div>
+      <div>
+        <label id="pm-discount-val-label" class="${LABEL}">Mức giảm (${x.discountType === 'amount' ? 'VNĐ' : '%'}) *</label>
+        <div class="relative">
+          <input type="number" name="discountValue" id="pm-discount-val-input" min="1" ${x.discountType === 'percent' ? 'max="100"' : 'step="1000"'} value="${x.discountValue}" class="${INPUT} pr-14" placeholder="${x.discountType === 'amount' ? 'VD: 30000' : 'VD: 10, 20'}">
+          <span id="pm-discount-val-suffix" class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 font-bold text-xs ${x.discountType === 'amount' ? 'text-accent-600' : 'text-primary-600'}">${x.discountType === 'amount' ? 'VNĐ' : '%'}</span>
+        </div>
+      </div>
+      <div id="pm-max-discount-box" class="${x.discountType === 'amount' ? 'hidden' : ''}">
+        <label class="${LABEL}">Giảm tối đa (đ, cho kiểu %)</label>
+        <div class="relative">
+          <input type="number" name="maxDiscount" min="0" step="1000" value="${x.maxDiscount || ''}" class="${INPUT} pr-12" placeholder="VD: 50000">
+          <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 font-bold text-xs text-foreground-400">VNĐ</span>
+        </div>
+      </div>
       <div><label class="${LABEL}">Đơn tối thiểu (đ)</label><input type="number" name="minOrder" min="0" step="1000" value="${x.minOrder || 0}" class="${INPUT}"></div>
       <div><label class="${LABEL}">Từ ngày</label><input type="date" name="startDate" value="${x.startDate}" class="${INPUT}"></div>
       <div><label class="${LABEL}">Đến ngày</label><input type="date" name="endDate" value="${x.endDate}" class="${INPUT}"></div>
@@ -463,13 +475,63 @@ function promoForm(p = null) {
     `<button type="button" data-close class="${BTN_OUT}">Hủy</button><button type="button" data-ok class="${BTN}">${p ? 'Lưu thay đổi' : 'Tạo mã'}</button>`,
     'max-w-2xl',
   );
+
+  const typeSel = m.el.querySelector('#pm-discount-type');
+  const valLabel = m.el.querySelector('#pm-discount-val-label');
+  const valInput = m.el.querySelector('#pm-discount-val-input');
+  const valSuffix = m.el.querySelector('#pm-discount-val-suffix');
+  const maxBox = m.el.querySelector('#pm-max-discount-box');
+
+  const syncDiscountType = () => {
+    const isAmount = typeSel.value === 'amount';
+    if (valLabel) valLabel.textContent = `Mức giảm (${isAmount ? 'VNĐ' : '%'}) *`;
+    if (valSuffix) {
+      valSuffix.textContent = isAmount ? 'VNĐ' : '%';
+      valSuffix.className = `pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 font-bold text-xs ${isAmount ? 'text-accent-600' : 'text-primary-600'}`;
+    }
+    if (valInput) {
+      if (isAmount) {
+        valInput.removeAttribute('max');
+        valInput.step = '1000';
+        valInput.placeholder = 'VD: 30000';
+        if (Number(valInput.value) <= 100 && Number(valInput.value) > 0) {
+          valInput.value = valInput.value * 1000;
+        }
+      } else {
+        valInput.max = '100';
+        valInput.step = '1';
+        valInput.placeholder = 'VD: 10, 20';
+        if (Number(valInput.value) > 100) {
+          valInput.value = 10;
+        }
+      }
+    }
+    if (maxBox) {
+      maxBox.classList.toggle('hidden', isAmount);
+    }
+  };
+
+  typeSel.addEventListener('change', syncDiscountType);
+  syncDiscountType();
+
   m.el.querySelector('[data-ok]').addEventListener('click', async (e) => {
     const form = m.el.querySelector('form');
     const f = formData(form);
+    const isAmount = f.discountType === 'amount';
+    const discountVal = Number(f.discountValue) || 0;
+    if (discountVal <= 0) {
+      toast('Vui lòng nhập mức giảm lớn hơn 0.', 'error');
+      return;
+    }
+    if (!isAmount && discountVal > 100) {
+      toast('Mức giảm theo % không được vượt quá 100%.', 'error');
+      return;
+    }
+    const maxDiscount = isAmount ? 0 : (Number(f.maxDiscount) || 0);
     const weekdays = [...form.querySelectorAll('[name=wd]:checked')].map((i) => Number(i.value));
     setBusy(e.currentTarget, true, 'Đang lưu...');
     try {
-      await api('owner', 'promotion_save', { ...f, id: p ? p.id : '', weekdays, discountValue: Number(f.discountValue), maxDiscount: Number(f.maxDiscount) || 0, minOrder: Number(f.minOrder) || 0, usageLimit: Number(f.usageLimit) || 0 });
+      await api('owner', 'promotion_save', { ...f, id: p ? p.id : '', weekdays, discountValue: discountVal, maxDiscount, minOrder: Number(f.minOrder) || 0, usageLimit: Number(f.usageLimit) || 0 });
       pm.data = null;
       m.close();
       toast(p ? 'Đã cập nhật mã.' : 'Đã tạo mã khuyến mãi.');

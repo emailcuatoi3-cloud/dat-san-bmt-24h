@@ -2,10 +2,12 @@
 require __DIR__ . '/_auth_layout.php';
 
 $redirectTarget = get_auth_redirect_target();
-$_SESSION['auth_redirect'] = $redirectTarget;
+if ($redirectTarget !== '/') {
+    $_SESSION['auth_redirect'] = $redirectTarget;
+}
 
 $u = current_user();
-if ($u) redirect($redirectTarget);
+if ($u) redirect(get_auth_redirect_target($redirectTarget !== '/' ? $redirectTarget : null, $u['role'] ?? null));
 
 render_page(['title' => 'Đăng nhập - ' . SITE_NAME, 'layout' => 'bare', 'script' => 'pages/auth.js', 'data' => ['redirect' => $redirectTarget]], function () use ($redirectTarget) {
     auth_layout(

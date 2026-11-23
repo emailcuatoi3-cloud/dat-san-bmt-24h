@@ -10,7 +10,7 @@ import { ticketData, ticketQrUrl, downloadTicket, openShareSheet } from '../core
 import { buildDaySlots, calcCourtPriceForRange, getPriceBands, lowestPrice, priceBandAt } from '../lib/courtPricing.js';
 import { DURATION_OPTIONS, calcDeposit, endTimeOf, extraServices, formatCountdown, formatTimeRange, remainingHoldSeconds, slotsInRange } from '../lib/booking.js';
 import { formatLongDate, getUpcomingDates, isPastSlot, isTodayIso, toIsoDate } from '../lib/format.js';
-import { describeDiscount, normalizePromoCode } from '../lib/promotions.js';
+import { describeDiscount, describeConditions, computeDiscount, checkPromotion, normalizePromoCode } from '../lib/promotions.js';
 import { rememberBookingCode } from '../lib/myBookings.js';
 import { bankAccount, buildVietQrUrl, AUTO_CONFIRM_SECONDS, HOTLINE, HOLD_MINUTES } from '../lib/payment.js';
 import { formatCancelDeadline, isBeforeCancelCutoff, CANCEL_CUTOFF_HOURS } from '../lib/cancelPolicy.js';
@@ -797,13 +797,325 @@ function renderStep2() {
 function renderPromo() {
   const box = $('#promo-box');
   if (!box) return;
-  box.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-1.5"><p class="text-sm font-medium text-foreground-800">Mã giảm giá</p><a href="${url('/uu-dai')}" class="inline-flex items-center gap-1 whitespace-nowrap text-[11px] font-semibold text-primary-700 transition-colors hover:text-primary-800"><i class="ri-coupon-3-line" aria-hidden="true"></i>Xem tất cả mã đang chạy</a></div>
-    <p class="mt-0.5 text-xs text-foreground-500">Nhập mã ưu đãi của chủ sân nếu bạn có.</p>
+  box.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-1.5"><p class="text-sm font-medium text-foreground-800">Mã giảm giá</p><button type="button" data-open-voucher-modal class="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs font-semibold text-primary-700 transition-colors hover:text-primary-800 hover:underline"><i class="ri-coupon-3-line text-sm" aria-hidden="true"></i>Xem tất cả mã đang chạy</button></div>
+    <p class="mt-0.5 text-xs text-foreground-500">Nhập mã ưu đãi của chủ sân nếu bạn có hoặc chọn từ danh sách voucher.</p>
     ${S.applied
-      ? `<div class="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary-300 bg-primary-50 px-3.5 py-3"><div class="min-w-0"><p class="flex items-center gap-1.5 text-sm font-bold text-primary-900"><i class="ri-coupon-3-fill" aria-hidden="true"></i>${esc(S.applied.promotion.code)}</p><p class="mt-0.5 text-[11px] text-primary-800">${esc(describeDiscount(S.applied.promotion))}</p></div><div class="flex items-center gap-3"><span class="whitespace-nowrap text-sm font-extrabold text-accent-700">-${formatVnd(S.applied.discount)}</span><button type="button" data-remove-promo class="cursor-pointer whitespace-nowrap text-[11px] font-semibold text-foreground-600 underline transition-colors hover:text-accent-700">Bỏ mã</button></div></div>`
-      : `<div class="mt-2.5 flex flex-col gap-2 sm:flex-row"><input type="text" id="promo-input" value="${esc(S.promoCode)}" maxlength="16" placeholder="Nhập mã, ví dụ BMT20" aria-label="Mã giảm giá" class="w-full min-w-0 rounded-md border border-background-300 bg-white px-3 py-2.5 font-mono text-sm font-semibold uppercase tracking-wider text-foreground-950 placeholder:font-sans placeholder:font-normal placeholder:normal-case placeholder:tracking-normal placeholder:text-foreground-400 focus:border-primary-400 focus:outline-none"><button type="button" data-apply-promo class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-600 disabled:cursor-not-allowed disabled:bg-background-300 disabled:text-foreground-500"><i class="ri-price-tag-3-line" aria-hidden="true"></i>Áp dụng</button></div>`
+      ? `<div class="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary-300 bg-primary-50 px-3.5 py-3"><div class="min-w-0"><p class="flex items-center gap-1.5 text-sm font-bold text-primary-900"><i class="ri-coupon-3-fill" aria-hidden="true"></i>${esc(S.applied.promotion.code)}<span class="rounded bg-primary-200 px-1.5 py-0.2 text-[10px] font-bold text-primary-800">Đang áp dụng</span></p><p class="mt-0.5 text-[11px] text-primary-800">${esc(describeDiscount(S.applied.promotion))}</p></div><div class="flex items-center gap-2.5"><span class="whitespace-nowrap text-sm font-extrabold text-accent-700">-${formatVnd(S.applied.discount)}</span><button type="button" data-open-voucher-modal class="cursor-pointer whitespace-nowrap text-[11px] font-semibold text-primary-700 underline transition-colors hover:text-primary-900">Đổi mã</button><button type="button" data-remove-promo class="cursor-pointer whitespace-nowrap text-[11px] font-semibold text-foreground-600 underline transition-colors hover:text-accent-700">Bỏ mã</button></div></div>`
+      : `<div class="mt-2.5 flex flex-col gap-2 sm:flex-row"><div class="relative flex-1"><input type="text" id="promo-input" value="${esc(S.promoCode)}" maxlength="16" placeholder="Nhập mã, ví dụ BMT20" aria-label="Mã giảm giá" class="w-full min-w-0 rounded-md border border-background-300 bg-white px-3 py-2.5 font-mono text-sm font-semibold uppercase tracking-wider text-foreground-950 placeholder:font-sans placeholder:font-normal placeholder:normal-case placeholder:tracking-normal placeholder:text-foreground-400 focus:border-primary-400 focus:outline-none"></div><div class="flex items-center gap-2 shrink-0"><button type="button" data-apply-promo class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-600 disabled:cursor-not-allowed disabled:bg-background-300 disabled:text-foreground-500"><i class="ri-price-tag-3-line" aria-hidden="true"></i>Áp dụng</button><button type="button" data-open-voucher-modal class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-primary-300 bg-primary-50 px-3.5 py-2.5 text-sm font-semibold text-primary-700 transition-colors hover:bg-primary-100 hover:border-primary-400"><i class="ri-coupon-3-line" aria-hidden="true"></i>Chọn voucher</button></div></div>`
     }
     ${S.promoError ? `<p class="mt-1.5 flex items-start gap-1 text-xs text-accent-700"><i class="ri-error-warning-line mt-0.5" aria-hidden="true"></i>${esc(S.promoError)}</p>` : ''}`;
+}
+
+let voucherModalTab = 'all';
+
+async function openVoucherModal() {
+  let promos = PAGE.promotions;
+  if (!promos || !promos.length) {
+    try {
+      promos = await api('booking', 'promotions');
+      PAGE.promotions = promos;
+    } catch (e) {
+      promos = [];
+    }
+  }
+
+  const orderTotal = subtotal();
+  const c = court();
+  const currentSlot = S.startSlot;
+  const currentDate = S.date;
+
+  // Đánh giá từng voucher theo điều kiện của đơn hiện tại
+  const evaluated = (promos || []).map((p) => {
+    let eligible = true;
+    let reason = '';
+    let discountAmount = 0;
+
+    // 1. Kiểm tra giới hạn chủ sân
+    if (p.ownerId && c?.ownerId && Number(p.ownerId) !== Number(c.ownerId)) {
+      eligible = false;
+      reason = `Chỉ áp dụng cho các sân thuộc cơ sở "${p.ownerName || 'Chủ sân khác'}"`;
+    } else if (!currentSlot) {
+      if (p.minOrder > 0) {
+        eligible = false;
+        reason = `Đơn tối thiểu ${formatVnd(p.minOrder)} (Vui lòng chọn khung giờ để tính tiền đơn)`;
+      } else {
+        eligible = true;
+        reason = '';
+      }
+    } else {
+      const ctx = {
+        date: currentDate,
+        startSlot: currentSlot,
+        orderTotal,
+        usedCount: 0,
+      };
+      const check = checkPromotion(p, ctx);
+      if (!check.ok) {
+        eligible = false;
+        if (p.minOrder > 0 && orderTotal < p.minOrder) {
+          const needed = p.minOrder - orderTotal;
+          reason = `Đơn tối thiểu ${formatVnd(p.minOrder)} (Đơn hiện tại: ${formatVnd(orderTotal)} — cần thêm ${formatVnd(needed)} để dùng)`;
+        } else {
+          reason = check.message;
+        }
+      } else {
+        eligible = true;
+        discountAmount = computeDiscount(p, orderTotal);
+      }
+    }
+
+    return {
+      ...p,
+      eligible,
+      reason,
+      discountAmount,
+    };
+  });
+
+  const eligibleList = evaluated.filter((x) => x.eligible);
+  const ineligibleList = evaluated.filter((x) => !x.eligible);
+
+  function renderModalContent(activeTab = voucherModalTab) {
+    voucherModalTab = activeTab;
+    const isAll = activeTab === 'all';
+    const isEligible = activeTab === 'eligible';
+    const isIneligible = activeTab === 'ineligible';
+
+    const displayList = isEligible ? eligibleList : isIneligible ? ineligibleList : evaluated;
+
+    const renderVoucherCard = (item) => {
+      const isSelected = S.applied && S.applied.promotion.code === item.code;
+      const isPercent = item.discountType === 'percent';
+      const badgeVal = isPercent ? `${item.discountValue}%` : (item.discountValue >= 1000 ? `${Math.round(item.discountValue / 1000)}K` : formatVnd(item.discountValue));
+      const endFormatted = item.endDate ? item.endDate.split('-').reverse().join('/') : '';
+
+      if (item.eligible) {
+        return `
+          <div class="relative flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3.5 rounded-xl border-2 ${isSelected ? 'border-primary-500 bg-primary-50/60 shadow-md' : 'border-background-200 bg-white hover:border-primary-400 hover:shadow-xs'} p-3.5 transition-all">
+            <div class="flex items-start gap-3 min-w-0 flex-1">
+              <div class="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-xs">
+                <span class="text-base font-extrabold leading-none">${badgeVal}</span>
+                <span class="mt-0.5 text-[10px] font-bold uppercase tracking-wider opacity-90">GIẢM</span>
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <span class="rounded bg-primary-100 px-2 py-0.5 font-mono text-xs font-bold text-primary-900">${esc(item.code)}</span>
+                  ${item.ownerName ? `<span class="rounded bg-background-100 px-1.5 py-0.5 text-[10px] font-medium text-foreground-600">${esc(item.ownerName)}</span>` : '<span class="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">Toàn hệ thống</span>'}
+                  ${item.isUserVoucher ? '<span class="rounded bg-accent-100 px-1.5 py-0.5 text-[10px] font-bold text-accent-800">Ví cá nhân</span>' : ''}
+                </div>
+                <h4 class="mt-1 font-heading text-sm font-bold text-foreground-950 truncate">${esc(item.title)}</h4>
+                <p class="text-xs text-foreground-600 line-clamp-1">${esc(describeDiscount(item))} &bull; ${esc(describeConditions(item))}</p>
+                <div class="mt-1 flex flex-wrap items-center gap-3 text-[11px]">
+                  <span class="text-foreground-400 flex items-center gap-1"><i class="ri-time-line"></i>HSD: ${esc(endFormatted)}</span>
+                  ${item.discountAmount > 0 ? `<span class="font-bold text-emerald-700 flex items-center gap-0.5"><i class="ri-checkbox-circle-fill"></i>Tiết kiệm: -${formatVnd(item.discountAmount)}</span>` : ''}
+                </div>
+              </div>
+            </div>
+            <div class="shrink-0 flex sm:flex-col justify-end items-center gap-2">
+              ${isSelected
+                ? `<button type="button" data-modal-select="${esc(item.code)}" class="w-full sm:w-auto inline-flex items-center justify-center gap-1 rounded-lg border border-primary-500 bg-primary-500 px-3.5 py-2 text-xs font-bold text-white shadow-xs transition-colors cursor-pointer"><i class="ri-check-line"></i>Đang dùng</button>`
+                : `<button type="button" data-modal-select="${esc(item.code)}" class="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary-500 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-primary-600 transition-all cursor-pointer"><i class="ri-coupon-3-line"></i>Áp dụng</button>`
+              }
+            </div>
+          </div>
+        `;
+      } else {
+        return `
+          <div class="relative flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3.5 rounded-xl border border-background-200 bg-background-50/70 p-3.5 opacity-85 transition-all">
+            <div class="flex items-start gap-3 min-w-0 flex-1">
+              <div class="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl bg-background-200 text-foreground-400">
+                <span class="text-base font-extrabold leading-none">${badgeVal}</span>
+                <span class="mt-0.5 text-[10px] font-bold uppercase tracking-wider opacity-80">GIẢM</span>
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <span class="rounded bg-background-200 px-2 py-0.5 font-mono text-xs font-semibold text-foreground-600">${esc(item.code)}</span>
+                  ${item.ownerName ? `<span class="text-[10px] text-foreground-500">${esc(item.ownerName)}</span>` : ''}
+                </div>
+                <h4 class="mt-1 font-heading text-sm font-semibold text-foreground-800 truncate">${esc(item.title)}</h4>
+                <p class="text-xs text-foreground-500 line-clamp-1">${esc(describeDiscount(item))} &bull; ${esc(describeConditions(item))}</p>
+                <div class="mt-2 flex items-start gap-1.5 rounded-md border border-amber-200/80 bg-amber-50/90 px-2.5 py-1.5 text-xs font-medium text-amber-800">
+                  <i class="ri-error-warning-line shrink-0 text-amber-600 mt-0.5"></i>
+                  <span>${esc(item.reason)}</span>
+                </div>
+              </div>
+            </div>
+            <div class="shrink-0 flex justify-end">
+              <button type="button" disabled class="w-full sm:w-auto inline-flex items-center justify-center rounded-lg border border-background-300 bg-background-200 px-3.5 py-2 text-xs font-medium text-foreground-400 cursor-not-allowed">
+                Chưa đủ ĐK
+              </button>
+            </div>
+          </div>
+        `;
+      }
+    };
+
+    let listHtml = '';
+    if (!displayList.length) {
+      listHtml = `
+        <div class="py-10 text-center">
+          <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-background-100 text-2xl text-foreground-400">
+            <i class="ri-coupon-3-line"></i>
+          </div>
+          <p class="mt-3 text-sm font-semibold text-foreground-800">Không có mã nào ở mục này</p>
+          <p class="mt-1 text-xs text-foreground-500">Hãy chuyển sang tab "Tất cả" để khám phá thêm ưu đãi nhé!</p>
+        </div>
+      `;
+    } else if (isAll) {
+      listHtml = `
+        ${eligibleList.length ? `
+          <div class="mb-4">
+            <div class="mb-2.5 flex items-center justify-between">
+              <h4 class="text-xs font-bold uppercase tracking-wide text-primary-800 flex items-center gap-1.5">
+                <i class="ri-checkbox-circle-fill text-emerald-600"></i> Mã khả dụng cho đơn này (${eligibleList.length})
+              </h4>
+            </div>
+            <div class="space-y-2.5">
+              ${eligibleList.map(renderVoucherCard).join('')}
+            </div>
+          </div>
+        ` : ''}
+        ${ineligibleList.length ? `
+          <div class="mt-5">
+            <div class="mb-2.5 flex items-center justify-between">
+              <h4 class="text-xs font-bold uppercase tracking-wide text-foreground-500 flex items-center gap-1.5">
+                <i class="ri-error-warning-line text-amber-600"></i> Mã chưa đủ điều kiện (${ineligibleList.length})
+              </h4>
+              <span class="text-[11px] text-foreground-400">Xem lý do chi tiết dưới mỗi mã</span>
+            </div>
+            <div class="space-y-2.5">
+              ${ineligibleList.map(renderVoucherCard).join('')}
+            </div>
+          </div>
+        ` : ''}
+      `;
+    } else {
+      listHtml = `<div class="space-y-2.5">${displayList.map(renderVoucherCard).join('')}</div>`;
+    }
+
+    return `
+      <div class="flex items-center justify-between border-b border-background-200 bg-background-50 px-5 py-4">
+        <div class="flex items-center gap-2.5">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-100 text-primary-700 text-xl">
+            <i class="ri-coupon-3-fill"></i>
+          </div>
+          <div>
+            <h3 class="font-heading text-base font-bold text-foreground-950">Mã giảm giá & Voucher</h3>
+            <p class="text-xs text-foreground-500">Đơn hiện tại: <b class="text-foreground-900">${formatVnd(orderTotal)}</b> &bull; ${c ? esc(c.name) : 'Chưa chọn sân'}</p>
+          </div>
+        </div>
+        <button type="button" data-close class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-foreground-400 transition-colors hover:bg-background-200 hover:text-foreground-700" aria-label="Đóng popup">
+          <i class="ri-close-line text-xl"></i>
+        </button>
+      </div>
+
+      <div class="border-b border-background-200 bg-white p-4">
+        <form id="modal-promo-form" class="flex gap-2">
+          <div class="relative flex-1">
+            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-foreground-400">
+              <i class="ri-price-tag-3-line text-sm"></i>
+            </span>
+            <input type="text" name="code" placeholder="Nhập mã ưu đãi khác (vd: BMT20)..." maxlength="16" value="${esc(S.promoCode)}" class="w-full rounded-lg border border-background-300 bg-background-50 pl-9 pr-3 py-2 text-sm font-mono font-semibold uppercase text-foreground-950 placeholder:font-sans placeholder:font-normal placeholder:normal-case placeholder:text-foreground-400 focus:border-primary-500 focus:bg-white focus:outline-none">
+          </div>
+          <button type="submit" class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-primary-500 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-primary-600">
+            Áp dụng
+          </button>
+        </form>
+        <p id="modal-promo-msg" class="mt-2 hidden text-xs flex items-center gap-1"></p>
+      </div>
+
+      <div class="border-b border-background-200 bg-background-100/60 px-4 py-2">
+        <div class="flex flex-wrap items-center gap-1.5">
+          <button type="button" data-vtab="all" class="cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition-colors ${isAll ? 'bg-primary-500 text-white shadow-xs' : 'bg-background-200 text-foreground-700 hover:bg-background-300'}">
+            Tất cả (${evaluated.length})
+          </button>
+          <button type="button" data-vtab="eligible" class="cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition-colors ${isEligible ? 'bg-primary-500 text-white shadow-xs' : 'bg-background-200 text-foreground-700 hover:bg-background-300'}">
+            Khả dụng (${eligibleList.length})
+          </button>
+          <button type="button" data-vtab="ineligible" class="cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition-colors ${isIneligible ? 'bg-primary-500 text-white shadow-xs' : 'bg-background-200 text-foreground-700 hover:bg-background-300'}">
+            Chưa đủ điều kiện (${ineligibleList.length})
+          </button>
+        </div>
+      </div>
+
+      <div id="voucher-list-body" class="max-h-[50vh] overflow-y-auto p-4 md:p-5 space-y-3">
+        ${listHtml}
+      </div>
+
+      <div class="flex items-center justify-between border-t border-background-200 bg-background-50 px-5 py-3">
+        <a href="${url('/uu-dai')}" target="_blank" class="inline-flex items-center gap-1 text-xs font-semibold text-primary-700 hover:underline">
+          <i class="ri-gift-line"></i> Vòng quay & ưu đãi khác <i class="ri-external-link-line text-[10px]"></i>
+        </a>
+        <button type="button" data-close class="cursor-pointer rounded-lg border border-background-300 bg-white px-4 py-1.5 text-xs font-semibold text-foreground-700 hover:bg-background-100">
+          Đóng
+        </button>
+      </div>
+    `;
+  }
+
+  const modalInstance = openModal({
+    size: 'max-w-xl',
+    html: renderModalContent('all'),
+  });
+
+  const modalEl = modalInstance.el;
+
+  modalEl.addEventListener('click', async (e) => {
+    const tabBtn = e.target.closest('[data-vtab]');
+    if (tabBtn) {
+      modalEl.innerHTML = renderModalContent(tabBtn.dataset.vtab);
+      return;
+    }
+
+    const selectBtn = e.target.closest('[data-modal-select]');
+    if (selectBtn) {
+      const code = selectBtn.dataset.modalSelect;
+      if (S.applied && S.applied.promotion.code === code) {
+        S.applied = null;
+        S.promoCode = '';
+        S.promoError = '';
+        renderPromo();
+        renderSummary();
+        modalEl.innerHTML = renderModalContent(voucherModalTab);
+        return;
+      }
+      S.promoCode = code;
+      selectBtn.disabled = true;
+      selectBtn.innerHTML = '<i class="ri-loader-4-line animate-spin"></i>';
+      await applyPromo();
+      modalInstance.close();
+      return;
+    }
+  });
+
+  modalEl.addEventListener('submit', async (e) => {
+    const form = e.target.closest('#modal-promo-form');
+    if (!form) return;
+    e.preventDefault();
+    const val = form.code.value.trim();
+    if (!val) return;
+    S.promoCode = val;
+    const submitBtn = form.querySelector('button[type=submit]');
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<i class="ri-loader-4-line animate-spin"></i>';
+    }
+    await applyPromo();
+    if (S.applied) {
+      modalInstance.close();
+    } else {
+      const msgEl = modalEl.querySelector('#modal-promo-msg');
+      if (msgEl) {
+        msgEl.className = 'mt-2 text-xs flex items-center gap-1 text-accent-700';
+        msgEl.innerHTML = `<i class="ri-error-warning-line"></i> ${esc(S.promoError || 'Mã không hợp lệ.')}`;
+        msgEl.classList.remove('hidden');
+      }
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = 'Áp dụng';
+      }
+    }
+  });
 }
 
 async function applyPromo(silent = false) {
@@ -1404,6 +1716,7 @@ app.addEventListener('click', async (event) => {
     renderSlots();
     return renderSummary();
   }
+  if (el('[data-open-voucher-modal]')) return openVoucherModal();
   if (el('[data-apply-promo]')) return applyPromo();
   if (el('[data-remove-promo]')) {
     S.applied = null;

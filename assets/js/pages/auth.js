@@ -85,7 +85,34 @@ if (loginForm) {
     const btn = $('button[type=submit]', loginForm);
     setBusy(btn, true, 'Đang đăng nhập...');
     try {
-      const data = await api('auth', 'login', { email, password, redirect: PAGE.redirect || '' });
+      const urlParams = new URLSearchParams(window.location.search);
+      let targetRedirect = urlParams.get('redirect') || (PAGE.redirect && PAGE.redirect !== '/' ? PAGE.redirect : '');
+      if (!targetRedirect) {
+        try {
+          const stored = sessionStorage.getItem('bmt24h_auth_return_url');
+          if (stored && stored !== '/') targetRedirect = stored;
+        } catch (e) {}
+      }
+      if (!targetRedirect && document.referrer) {
+        try {
+          const ref = new URL(document.referrer);
+          if (ref.origin === window.location.origin) {
+            let refPath = ref.pathname;
+            const base = (window.APP && window.APP.base) || '';
+            if (base && refPath.startsWith(base)) {
+              refPath = refPath.slice(base.length);
+              if (!refPath.startsWith('/')) refPath = '/' + refPath;
+            }
+            refPath = (refPath || '/') + (ref.search || '');
+            const authRoutes = ['/dang-nhap', '/dang-ky', '/dang-ky-chu-san', '/quen-mat-khau', '/dat-lai-mat-khau', '/dang-xuat'];
+            if (!authRoutes.some((r) => refPath.includes(r)) && refPath !== '/') {
+              targetRedirect = refPath;
+            }
+          }
+        } catch (e) {}
+      }
+      const data = await api('auth', 'login', { email, password, redirect: targetRedirect || '' });
+      try { sessionStorage.removeItem('bmt24h_auth_return_url'); } catch (e) {}
       window.location.href = data.redirect;
     } catch (error) {
       showAlert(loginForm, '[data-server-error]', error.message);
@@ -132,6 +159,60 @@ if (registerForm) {
   );
   paintRole();
 
+  // Quản lý ảnh sân đối tác khi đăng ký
+  let regOwnerFiles = [];
+  const regDropzone = registerForm.querySelector('[data-dropzone]');
+  const regImgInput = registerForm.querySelector('[data-images-input]');
+  const regPreviewWrapper = registerForm.querySelector('[data-preview-wrapper]');
+  const regPreviewGrid = registerForm.querySelector('[data-images-preview]');
+  const regCounter = registerForm.querySelector('[data-img-counter]');
+  const regClearBtn = registerForm.querySelector('[data-clear-all-images]');
+
+  const renderRegPreviews = () => {
+    if (!regPreviewWrapper || !regPreviewGrid) return;
+    if (!regOwnerFiles.length) {
+      regPreviewWrapper.classList.add('hidden');
+      regPreviewGrid.innerHTML = '';
+      return;
+    }
+    regPreviewWrapper.classList.remove('hidden');
+    if (regCounter) regCounter.textContent = `Đã chọn ${regOwnerFiles.length} / 10 ảnh sân`;
+    regPreviewGrid.innerHTML = regOwnerFiles.map((file, idx) => `
+      <div class="group relative flex flex-col overflow-hidden rounded-lg border border-background-200 bg-white shadow-sm">
+        <div class="relative aspect-video w-full overflow-hidden bg-background-100">
+          <img src="${URL.createObjectURL(file)}" alt="${file.name}" class="h-full w-full object-cover">
+          ${idx === 0 ? '<span class="absolute left-1.5 top-1.5 rounded bg-primary-600/90 px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm">Ảnh chính</span>' : ''}
+          <button type="button" data-remove-reg-img="${idx}" class="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white hover:bg-accent-600" title="Xóa ảnh"><i class="ri-close-line text-sm"></i></button>
+        </div>
+        <div class="p-1.5 text-left"><p class="truncate text-xs font-semibold text-foreground-900">${file.name}</p></div>
+      </div>
+    `).join('');
+  };
+
+  if (regDropzone && regImgInput) {
+    regDropzone.addEventListener('click', () => regImgInput.click());
+    regImgInput.addEventListener('change', () => {
+      Array.from(regImgInput.files || []).forEach((f) => {
+        if (f.type.startsWith('image/') && f.size <= 8 * 1024 * 1024 && regOwnerFiles.length < 10) {
+          if (!regOwnerFiles.some((x) => x.name === f.name && x.size === f.size)) regOwnerFiles.push(f);
+        }
+      });
+      regImgInput.value = '';
+      renderRegPreviews();
+    });
+    if (regPreviewGrid) {
+      regPreviewGrid.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-remove-reg-img]');
+        if (!btn) return;
+        const idx = parseInt(btn.dataset.removeRegImg, 10);
+        if (!isNaN(idx)) { regOwnerFiles.splice(idx, 1); renderRegPreviews(); }
+      });
+    }
+    if (regClearBtn) {
+      regClearBtn.addEventListener('click', () => { regOwnerFiles = []; renderRegPreviews(); });
+    }
+  }
+
   registerForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const f = registerForm;
@@ -153,18 +234,41 @@ if (registerForm) {
     const btn = $('button[type=submit]', f);
     setBusy(btn, true, 'Đang tạo tài khoản...');
     try {
-      const data = await api('auth', 'register', {
-        role: f.role.value,
-        businessName: f.businessName.value.trim(),
-        address: f.address.value.trim(),
-        sports: f.sports.value,
-        courtCount: Number(f.courtCount.value) || 1,
-        note: f.note.value.trim(),
-        name: f.name.value.trim(),
-        phone,
-        email,
-        password: f.password.value,
-      });
+      const urlParams = new URLSearchParams(window.location.search);
+      let targetRedirect = urlParams.get('redirect') || (PAGE.redirect && PAGE.redirect !== '/' ? PAGE.redirect : '');
+      let payload;
+      if (owner && regOwnerFiles.length > 0) {
+        const formData = new FormData();
+        formData.append('role', f.role.value);
+        formData.append('businessName', f.businessName.value.trim());
+        formData.append('address', f.address.value.trim());
+        formData.append('sports', f.sports.value);
+        formData.append('courtCount', Number(f.courtCount.value) || 1);
+        formData.append('note', f.note.value.trim());
+        formData.append('name', f.name.value.trim());
+        formData.append('phone', phone);
+        formData.append('email', email);
+        formData.append('password', f.password.value);
+        formData.append('redirect', targetRedirect || '');
+        regOwnerFiles.forEach((file) => formData.append('court_images[]', file));
+        payload = formData;
+      } else {
+        payload = {
+          role: f.role.value,
+          businessName: f.businessName.value.trim(),
+          address: f.address.value.trim(),
+          sports: f.sports.value,
+          courtCount: Number(f.courtCount.value) || 1,
+          note: f.note.value.trim(),
+          name: f.name.value.trim(),
+          phone,
+          email,
+          password: f.password.value,
+          redirect: targetRedirect || '',
+        };
+      }
+      const data = await api('auth', 'register', payload);
+      try { sessionStorage.removeItem('bmt24h_auth_return_url'); } catch (e) {}
       window.location.href = data.redirect;
     } catch (error) {
       showAlert(f, '[data-server-error]', error.message);

@@ -14,9 +14,15 @@ function auth_layout(string $title, string $subtitle, callable $children, string
     <img src="https://readdy.ai/api/search-image?query=Floodlit%20artificial%20turf%20football%20pitch%20at%20night%20seen%20from%20a%20low%20angle%2C%20green%20grass%20glowing%20under%20stadium%20lights%2C%20dark%20moody%20sky%2C%20white%20line%20markings%2C%20cinematic%20sports%20photography%2C%20no%20people&width=1200&height=1600&seq=bmt-auth-pitch-01&orientation=portrait" alt="Sân bóng đá ban đêm tại Buôn Ma Thuột" title="Đặt Sân BMT 24H" class="absolute inset-0 h-full w-full object-cover object-top">
     <div class="auth-photo-veil absolute inset-0"></div>
     <div class="relative flex h-full flex-col justify-between p-10 xl:p-14">
-      <a href="<?= url('/') ?>" class="flex items-center gap-2.5">
-        <img src="<?= site_logo() ?>" alt="Logo Đặt Sân BMT 24H" class="w-10 h-10 rounded-lg object-contain">
-        <span class="leading-tight"><span class="block font-heading text-[15px] font-extrabold tracking-tight text-white">ĐẶT SÂN BMT</span><span class="block text-[11px] font-semibold tracking-[0.18em] text-accent-500">24H</span></span>
+      <a href="<?= url('/') ?>" class="flex items-center gap-3">
+        <img src="<?= site_logo() ?>" alt="Logo Đặt Sân BMT 24H" class="w-12 h-12 rounded-xl object-contain drop-shadow-md">
+        <div class="flex flex-col justify-center leading-tight">
+          <div class="flex items-center gap-1.5">
+            <span class="font-heading text-lg font-black tracking-tight text-white">ĐẶT SÂN BMT</span>
+            <span class="inline-flex items-center justify-center rounded-md bg-gradient-to-r from-primary-500 to-emerald-500 px-1.5 py-0.5 text-xs font-black tracking-wider text-white shadow-sm ring-1 ring-white/20">24H</span>
+          </div>
+          <span class="mt-0.5 text-xs font-semibold text-primary-400 tracking-wider">ĐẶT SÂN THỂ THAO BUÔN MA THUỘT</span>
+        </div>
       </a>
       <div class="max-w-md">
         <h2 class="auth-photo-heading font-heading text-3xl font-extrabold leading-tight xl:text-4xl"><?= e($side[0]) ?></h2>
@@ -96,6 +102,44 @@ function owner_request_extra_fields(string $prefix): void
   <div><label for="<?= $prefix ?>-count" class="mb-1.5 block text-sm font-medium text-foreground-800">Số sân hiện có</label>
     <input id="<?= $prefix ?>-count" name="courtCount" type="number" min="1" max="50" value="1" class="<?= $cls ?>"></div>
 </div>
+
+<!-- Tải nhiều hình ảnh bao quát sân -->
+<div class="mt-4" data-court-images-group>
+  <div class="flex flex-wrap items-center justify-between gap-1 mb-1.5">
+    <label for="<?= $prefix ?>-images-input" class="block text-sm font-semibold text-foreground-800">
+      <span class="flex items-center gap-1.5">
+        <i class="ri-image-add-line text-primary-600 text-base" aria-hidden="true"></i>
+        <span>Hình ảnh sân (Tải nhiều ảnh bao quát sân)</span>
+      </span>
+    </label>
+    <span class="text-xs text-foreground-500 font-normal">Tối đa 10 ảnh · JPG, PNG, WEBP (&le; 8MB/ảnh)</span>
+  </div>
+
+  <div class="relative rounded-xl border-2 border-dashed border-background-300 bg-background-50/70 p-5 text-center transition-all hover:border-primary-400 hover:bg-primary-50/30 cursor-pointer group" data-dropzone>
+    <input id="<?= $prefix ?>-images-input" type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif" class="hidden" data-images-input>
+    <div class="flex flex-col items-center justify-center pointer-events-none">
+      <div class="flex h-12 w-12 items-center justify-center rounded-full bg-primary-100 text-primary-600 transition-transform group-hover:scale-110 mb-2">
+        <i class="ri-upload-cloud-2-line text-2xl" aria-hidden="true"></i>
+      </div>
+      <p class="text-sm font-semibold text-foreground-900">
+        <span class="text-primary-600 group-hover:underline">Bấm để chọn nhiều ảnh</span> hoặc kéo thả vào khung này
+      </p>
+      <p class="mt-1 text-xs text-foreground-500 max-w-lg leading-relaxed">
+        Khuyên dùng tải từ 2 - 5 ảnh: Ảnh toàn cảnh sân, mặt cỏ/mặt thảm, khán đài, đèn chiếu sáng hoặc quầy dịch vụ để duyệt nhanh hơn.
+      </p>
+    </div>
+  </div>
+
+  <!-- Danh sách ảnh đã chọn (Preview Grid) -->
+  <div class="mt-3 hidden" data-preview-wrapper>
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-xs font-semibold text-foreground-700" data-img-counter>Đã chọn 0 ảnh</span>
+      <button type="button" data-clear-all-images class="text-xs text-accent-600 hover:underline hover:text-accent-700">Xóa tất cả</button>
+    </div>
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4" data-images-preview></div>
+  </div>
+</div>
+
 <div class="mt-4"><label for="<?= $prefix ?>-note" class="mb-1.5 block text-sm font-medium text-foreground-800">Giới thiệu ngắn <span class="font-normal text-foreground-500">(không bắt buộc)</span></label>
   <textarea id="<?= $prefix ?>-note" name="note" rows="3" maxlength="1000" placeholder="Loại sân, giờ mở cửa, tiện ích... giúp quản trị viên duyệt nhanh hơn" class="<?= $cls ?>"></textarea></div>
 <?php

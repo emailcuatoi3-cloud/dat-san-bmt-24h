@@ -419,9 +419,12 @@ run_api([
         if (!$approve && mb_strlen($note) < 5) fail('Vui lòng ghi lý do từ chối (ít nhất 5 ký tự) để gửi cho người đăng ký.');
         q('UPDATE owner_requests SET status = ?, admin_note = ?, reviewed_by = ?, reviewed_at = NOW() WHERE id = ?',
             [$approve ? 'approved' : 'rejected', $note, admin_access()['actorName'], $r['id']]);
-        if ($approve && $r['user_role'] === 'customer') {
+        if ($approve) {
             q("UPDATE users SET role = 'owner', business_name = ?, phone = IF(phone = '', ?, phone), address = IF(address = '', ?, address) WHERE id = ?",
                 [$r['business_name'], $r['phone'], $r['address'], $r['user_id']]);
+            push_notification((int) $r['user_id'], 'Đăng ký chủ sân đã được duyệt!', 'Chúc mừng bạn! Yêu cầu đăng ký cơ sở "' . $r['business_name'] . '" đã được phê duyệt. Kênh chủ sân đã sẵn sàng hoạt động.', 'system', '/chu-san');
+        } else {
+            push_notification((int) $r['user_id'], 'Yêu cầu đăng ký chủ sân chưa được duyệt', 'Lý do: ' . $note, 'system', '/dang-ky-chu-san');
         }
         // Khi duyệt đăng ký chủ sân: tự động khởi tạo sân mà chủ sân đã đăng ký (gắn đúng owner_id)
         if ($approve && !q_val('SELECT id FROM courts WHERE owner_id = ? AND name = ? AND deleted_at IS NULL', [$r['user_id'], $r['business_name']])) {
@@ -435,9 +438,11 @@ run_api([
                 ['id' => 'morning', 'label' => 'Buổi sáng và chiều', 'shortLabel' => 'Sáng – chiều', 'start' => '05:00', 'end' => '17:00', 'price' => $price],
                 ['id' => 'evening', 'label' => 'Buổi tối', 'shortLabel' => 'Tối', 'start' => '17:00', 'end' => '23:00', 'price' => $peak, 'peak' => true],
             ];
-            $img = $sport === 'badminton' ? CATEGORY_IMAGE_BADMINTON : CATEGORY_IMAGE_FOOTBALL;
+            $defaultImg = $sport === 'badminton' ? CATEGORY_IMAGE_BADMINTON : CATEGORY_IMAGE_FOOTBALL;
+            $reqImgs = !empty($r['images']) ? jd($r['images']) : [];
+            $courtImages = !empty($reqImgs) && is_array($reqImgs) ? $reqImgs : [$defaultImg];
             q('INSERT INTO courts (id, slug, owner_id, name, sport, sport_label, area, address, price_per_hour, peak_price, price_bands, images, description, status, open_time, close_time, highlights, facilities, map_query) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-                [$cid, $slug, $r['user_id'], $r['business_name'], $sport, sport_label($sport), 'Tân Lợi', $r['address'] ?: 'TP. Buôn Ma Thuột', $price, $peak, j($bands), j([$img]), $r['note'] ?: ('Cơ sở ' . $r['business_name'] . ' tại Buôn Ma Thuột.'), 'active', '05:00', '23:00', j(['Sân mới đăng ký', 'Đặt lịch online 24/7']), j(['Bãi giữ xe', 'Nước uống']), $r['address'] ?: 'TP. Buôn Ma Thuột']);
+                [$cid, $slug, $r['user_id'], $r['business_name'], $sport, sport_label($sport), 'Tân Lợi', $r['address'] ?: 'TP. Buôn Ma Thuột', $price, $peak, j($bands), j($courtImages), $r['note'] ?: ('Cơ sở ' . $r['business_name'] . ' tại Buôn Ma Thuột.'), 'active', '05:00', '23:00', j(['Sân mới đăng ký', 'Đặt lịch online 24/7']), j(['Bãi giữ xe', 'Nước uống']), $r['address'] ?: 'TP. Buôn Ma Thuột']);
         }
         audit('accounts', $approve ? 'Duyệt đăng ký chủ sân' : 'Từ chối đăng ký chủ sân', $r['business_name'] . ' · ' . $r['user_email'], $note, $approve ? 'success' : 'warning');
         return true;
@@ -642,6 +647,18 @@ run_api([
         } else {
             q('UPDATE bookings SET status = ?, reject_reason = ? WHERE id = ?', [$status, $reason, $b['id']]);
             approve_deposit($b, $status);
+        }
+
+        $targetUserId = (int) ($b['customer_id'] ?? 0);
+        if (!$targetUserId && !empty($b['customer_phone'])) {
+            $targetUserId = (int) q_val('SELECT id FROM users WHERE phone = ?', [$b['customer_phone']]);
+        }
+        if ($targetUserId > 0) {
+            if ($status === 'confirmed') {
+                push_notification($targetUserId, 'Đơn đặt sân #' . $b['code'] . ' đã được duyệt!', 'Đơn đặt sân tại ' . ($b['court_name'] ?: 'sân thể thao') . ' ngày ' . date('d/m/Y', strtotime($b['booking_date'])) . ' đã được duyệt thành công.', 'booking', '/tai-khoan?tab=history');
+            } else {
+                push_notification($targetUserId, 'Đơn đặt sân #' . $b['code'] . ' đã bị hủy / từ chối', 'Lý do: ' . ($reason ?: 'Đơn đã bị hủy.') . '.', 'booking', '/tai-khoan?tab=history');
+            }
         }
         audit('bookings', $status === 'confirmed' ? 'Duyệt đơn đặt sân' : 'Từ chối đơn đặt sân', $b['code'] . ' · ' . $b['court_name'], (string) $reason, $status === 'confirmed' ? 'success' : 'warning');
         return map_booking(q_one(BOOKING_SELECT . ' WHERE b.id = ?', [$b['id']]));
@@ -914,6 +931,16 @@ run_api([
         $cfg = system_settings_all();
         $cfg['ai_quick_replies_list'] = jd($cfg['ai_quick_replies'] ?? '[]');
         $cfg['ai_custom_qa_list'] = jd($cfg['ai_custom_qa'] ?? '[]');
+
+        // Bổ sung siêu dữ liệu nhà cung cấp Chatbot AI
+        $st = chatbot_status();
+        $cfg['chatbot_provider'] = $st['provider'];
+        $cfg['chatbot_key_configured'] = $st['configured'];
+        $cfg['chatbot_model'] = $st['model'];
+        $cfg['chatbot_enabled'] = $st['enabled'];
+        $cfg['ai_provider'] = $st['provider'];
+        $cfg['ai_model'] = $st['model'];
+        $cfg['ai_key_configured'] = $st['configured'];
         return $cfg;
     },
 
@@ -922,18 +949,31 @@ run_api([
         $in = input();
         $allowed = ['site_name', 'hotline', 'support_email', 'site_address', 'bank_id', 'bank_name', 'bank_account', 'bank_holder',
             'deposit_rate', 'hold_minutes', 'cancel_cutoff_hours', 'general_policy', 'ai_enabled', 'ai_bot_name', 'ai_greeting',
-            'ai_quick_replies', 'ai_fallback_reply', 'ai_custom_qa'];
+            'ai_quick_replies', 'ai_fallback_reply', 'ai_custom_qa', 'ai_provider', 'ai_model', 'ai_api_key'];
         $pairs = [];
         foreach ($allowed as $k) {
             if (array_key_exists($k, $in)) {
-                $pairs[$k] = is_array($in[$k]) ? j($in[$k]) : (string) $in[$k];
+                $val = is_array($in[$k]) ? j($in[$k]) : (string) $in[$k];
+                if ($k === 'ai_api_key' && (trim($val) === '' || str_contains($val, '***'))) {
+                    continue;
+                }
+                $pairs[$k] = $val;
             }
         }
         if ($pairs) {
             system_settings_save($pairs);
-            $isAi = isset($pairs['ai_bot_name']) || isset($pairs['ai_enabled']) || isset($pairs['ai_custom_qa']);
+            $isAi = isset($pairs['ai_bot_name']) || isset($pairs['ai_enabled']) || isset($pairs['ai_custom_qa']) || isset($pairs['ai_provider']) || isset($pairs['ai_model']) || isset($pairs['ai_api_key']);
             audit($isAi ? 'ai' : 'settings', $isAi ? 'Cập nhật cấu hình Chatbot AI' : 'Cập nhật cấu hình hệ thống', implode(', ', array_keys($pairs)), '', 'success');
         }
         return true;
+    },
+
+    'ai_test' => function () {
+        need('ai');
+        $raw = input();
+        $provider = !empty($raw['provider']) ? trim((string)$raw['provider']) : (!empty($raw['ai_provider']) ? trim((string)$raw['ai_provider']) : null);
+        $apiKey = !empty($raw['api_key']) ? trim((string)$raw['api_key']) : (!empty($raw['ai_api_key']) ? trim((string)$raw['ai_api_key']) : null);
+        $model = !empty($raw['model']) ? trim((string)$raw['model']) : (!empty($raw['ai_model']) ? trim((string)$raw['ai_model']) : null);
+        return chatbot_test_connection($provider, $apiKey, $model);
     },
 ]);

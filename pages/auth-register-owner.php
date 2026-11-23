@@ -19,10 +19,10 @@ $req = latest_owner_request((int) $u['id']);
 $canSubmit = !$req || $req['status'] === 'rejected';
 
 render_page([
-    'title' => 'Đăng ký chủ sân - ' . SITE_NAME,
+    'title' => 'Đăng ký sân đối tác - ' . SITE_NAME,
     'script' => 'pages/owner-request.js',
 ], function () use ($u, $req, $canSubmit) {
-    page_hero([['Trang chủ', '/'], ['Dành cho chủ sân']], 'Dành cho chủ sân đối tác',
+    page_hero([['Trang chủ', '/'], ['Đăng ký sân']], 'Đăng ký sân đối tác',
         'Giới thiệu lợi ích hợp tác cùng Đặt Sân BMT 24H và gửi biểu mẫu đăng ký mở kênh quản lý sân chuyên nghiệp.');
     $input = 'w-full rounded-md border border-background-300 bg-white px-3 py-2.5 text-sm text-foreground-950 placeholder:text-foreground-400 focus:border-primary-400 focus:outline-none';
     $partnerBenefits = [
@@ -72,6 +72,19 @@ render_page([
                 <div><dt class="inline text-foreground-500">Môn: </dt><dd class="inline font-semibold text-foreground-950"><?= e($req['sportsLabel']) ?> · <?= $req['courtCount'] ?> sân</dd></div>
                 <div class="sm:col-span-2"><dt class="inline text-foreground-500">Địa chỉ: </dt><dd class="inline text-foreground-900"><?= e($req['address']) ?></dd></div>
                 <div><dt class="inline text-foreground-500">Gửi lúc: </dt><dd class="inline text-foreground-900"><?= date('H:i d/m/Y', strtotime($req['createdAt'])) ?></dd></div>
+                <?php if (!empty($req['images'])): ?>
+                  <div class="sm:col-span-2 mt-2 pt-2 border-t border-background-200">
+                    <dt class="block text-foreground-600 mb-2 text-xs font-semibold uppercase tracking-wider">Hình ảnh bao quát sân đã gửi (<?= count($req['images']) ?> ảnh):</dt>
+                    <dd class="flex flex-wrap gap-2.5">
+                      <?php foreach ($req['images'] as $img): ?>
+                        <a href="<?= e(str_starts_with($img, 'http') ? $img : url($img)) ?>" target="_blank" rel="noopener" class="group relative block h-16 w-24 overflow-hidden rounded-lg border border-background-200 bg-white shadow-sm hover:scale-105 transition-transform" title="Bấm để xem ảnh gốc">
+                          <img src="<?= e(str_starts_with($img, 'http') ? $img : url($img)) ?>" alt="Ảnh sân" class="h-full w-full object-cover">
+                          <span class="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity"><i class="ri-zoom-in-line text-base"></i></span>
+                        </a>
+                      <?php endforeach; ?>
+                    </dd>
+                  </div>
+                <?php endif; ?>
               </dl>
             </div>
           </div>

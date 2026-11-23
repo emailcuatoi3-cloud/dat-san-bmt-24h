@@ -26,7 +26,7 @@ render_page([
   <div class="relative z-10 w-full px-4 md:px-8 pt-28 pb-10 md:pt-32 md:pb-12">
     <div class="mx-auto w-full max-w-5xl text-center">
       <span class="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-1.5 text-xs font-semibold text-white backdrop-blur-sm"><span class="h-1.5 w-1.5 rounded-full bg-accent-400"></span>Nền tảng đặt sân thể thao tại Buôn Ma Thuột</span>
-      <h1 class="mt-5 font-heading text-3xl font-extrabold leading-tight text-white sm:text-4xl lg:text-[52px] lg:leading-[1.1]">Đặt sân thể thao nhanh chóng tại Buôn Ma Thuột</h1>
+      <h1 class="mt-5 font-heading text-3xl font-extrabold leading-tight text-white sm:text-4xl lg:text-5xl lg:leading-tight">Đặt sân thể thao nhanh chóng tại Buôn Ma Thuột</h1>
       <p class="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-white/80 md:text-base">Tìm kiếm, lựa chọn và đặt sân bóng đá, sân cầu lông chỉ trong vài thao tác.</p>
       <?php if ($banner): ?>
         <a href="<?= e($banner['link_url'] ? url($banner['link_url']) : '#') ?>" class="mx-auto mt-4 inline-flex max-w-full items-center gap-2 rounded-full bg-accent-500 px-4 py-1.5 text-xs font-bold"><i class="ri-coupon-3-line" aria-hidden="true"></i><span class="truncate"><?= e($banner['title']) ?> — <?= e($banner['summary']) ?></span></a>
@@ -35,7 +35,7 @@ render_page([
         <form action="<?= url('/tim-san') ?>" method="get" id="hero-search">
           <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-[1.1fr_1.1fr_1.2fr_1fr_auto] lg:items-end">
             <div class="rounded-md px-3 py-2 hover:bg-background-50">
-              <label for="hero-sport" class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-foreground-500">Loại sân</label>
+              <label for="hero-sport" class="mb-1 block text-xs font-semibold uppercase tracking-wider text-foreground-500">Loại sân</label>
               <div class="flex items-center gap-2"><i class="ri-football-line text-primary-600" aria-hidden="true"></i>
                 <select id="hero-sport" name="sport" class="w-full cursor-pointer appearance-none bg-transparent text-sm font-medium text-foreground-950 focus:outline-none">
                   <?php foreach (SPORT_OPTIONS as $o): ?><option value="<?= $o['value'] === 'all' ? '' : $o['value'] ?>"><?= e($o['label']) ?></option><?php endforeach; ?>
@@ -43,7 +43,7 @@ render_page([
               </div>
             </div>
             <div class="rounded-md px-3 py-2 hover:bg-background-50">
-              <label for="hero-area" class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-foreground-500">Khu vực</label>
+              <label for="hero-area" class="mb-1 block text-xs font-semibold uppercase tracking-wider text-foreground-500">Khu vực</label>
               <div class="flex items-center gap-2"><i class="ri-map-pin-line text-primary-600" aria-hidden="true"></i>
                 <select id="hero-area" name="area" class="w-full cursor-pointer appearance-none bg-transparent text-sm font-medium text-foreground-950 focus:outline-none">
                   <option value="">Tất cả khu vực</option>
@@ -52,13 +52,13 @@ render_page([
               </div>
             </div>
             <div class="rounded-md px-3 py-2 hover:bg-background-50">
-              <label for="hero-date" class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-foreground-500">Ngày chơi</label>
+              <label for="hero-date" class="mb-1 block text-xs font-semibold uppercase tracking-wider text-foreground-500">Ngày chơi</label>
               <div class="flex items-center gap-2"><i class="ri-calendar-line text-primary-600" aria-hidden="true"></i>
                 <input id="hero-date" name="date" type="date" min="<?= $today ?>" value="<?= $today ?>" class="w-full cursor-pointer bg-transparent text-sm font-medium text-foreground-950 focus:outline-none">
               </div>
             </div>
             <div class="rounded-md px-3 py-2 hover:bg-background-50">
-              <label for="hero-time" class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-foreground-500">Khung giờ</label>
+              <label for="hero-time" class="mb-1 block text-xs font-semibold uppercase tracking-wider text-foreground-500">Khung giờ</label>
               <div class="flex items-center gap-2"><i class="ri-time-line text-primary-600" aria-hidden="true"></i>
                 <select id="hero-time" name="time" class="w-full cursor-pointer appearance-none bg-transparent text-sm font-medium text-foreground-950 focus:outline-none">
                   <option value="">Mọi khung giờ</option>
@@ -74,7 +74,7 @@ render_page([
         <?php foreach (SITE_STATS as $s): ?>
           <div class="rounded-lg border px-3 py-3 backdrop-blur-sm photo-panel">
             <p class="font-heading text-xl font-extrabold text-white md:text-2xl"><?= e($s['value']) ?></p>
-            <p class="mt-1 text-[11px] leading-snug text-white/75 md:text-xs"><?= e($s['label']) ?></p>
+            <p class="mt-1 text-xs leading-snug text-white/75"><?= e($s['label']) ?></p>
           </div>
         <?php endforeach; ?>
       </div>
@@ -220,7 +220,7 @@ render_page([
       </div>
     </div>
     <div class="order-1 w-full lg:order-2">
-      <span class="inline-flex items-center gap-2 rounded-full bg-primary-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-800"><i class="ri-add-circle-line" aria-hidden="true"></i>Dành cho chủ sân</span>
+      <span class="inline-flex items-center gap-2 rounded-full bg-primary-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-800"><i class="ri-add-circle-line" aria-hidden="true"></i>Đăng ký sân</span>
       <h2 class="mt-3 font-heading text-2xl font-extrabold leading-tight text-foreground-950 md:text-3xl">Có sân trống? Đưa sân lên Đặt Sân BMT 24H</h2>
       <p class="mt-3 text-sm leading-relaxed text-foreground-700 md:text-base">Mở tài khoản đối tác miễn phí, đăng thông tin sân và bắt đầu nhận đơn đặt sân ngay trong tuần. Bạn toàn quyền quyết định giá, khung giờ và chính sách cọc của sân mình.</p>
       <ul class="mt-6 space-y-4">
@@ -233,7 +233,7 @@ render_page([
       </ul>
       <div class="mt-7 flex flex-col gap-3 sm:flex-row">
         <a href="<?= url('/dang-ky-chu-san') ?>" class="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-primary-600"><i class="ri-store-2-line text-base" aria-hidden="true"></i>Trở thành đối tác chủ sân</a>
-        <a href="<?= url('/dang-nhap') ?>" class="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-background-300 bg-white px-5 py-3 text-sm font-semibold text-foreground-800 transition-colors hover:border-primary-300 hover:text-primary-700">Đã có tài khoản chủ sân</a>
+        <a href="<?= url('/dang-nhap?redirect=/chu-san') ?>" class="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-background-300 bg-white px-5 py-3 text-sm font-semibold text-foreground-800 transition-colors hover:border-primary-300 hover:text-primary-700">Đã có tài khoản chủ sân</a>
       </div>
     </div>
   </div>
@@ -251,7 +251,7 @@ render_page([
           <article class="overflow-hidden rounded-lg border border-background-200 bg-background-100" data-faq <?= $i === 0 ? 'data-open' : '' ?>>
             <h3>
               <button type="button" aria-expanded="<?= $i === 0 ? 'true' : 'false' ?>" class="flex w-full cursor-pointer items-center justify-between gap-3 px-4 py-3.5 text-left transition-colors hover:bg-background-50 md:px-5">
-                <span class="text-sm font-semibold text-foreground-950 md:text-[15px]"><?= e($f['title']) ?></span>
+                <span class="text-sm md:text-base font-semibold text-foreground-950"><?= e($f['title']) ?></span>
                 <span data-faq-icon class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors"><i aria-hidden="true"></i></span>
               </button>
             </h3>

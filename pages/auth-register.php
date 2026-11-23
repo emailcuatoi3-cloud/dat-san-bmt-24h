@@ -1,7 +1,11 @@
 <?php
 require __DIR__ . '/_auth_layout.php';
 $redirectTarget = get_auth_redirect_target();
-if (current_user()) redirect($redirectTarget);
+if ($redirectTarget !== '/') {
+    $_SESSION['auth_redirect'] = $redirectTarget;
+}
+$u = current_user();
+if ($u) redirect(get_auth_redirect_target($redirectTarget !== '/' ? $redirectTarget : null, $u['role'] ?? null));
 $ownerPage = !empty($OWNER_PAGE); // true khi mở từ /dang-ky-chu-san
 $role = $ownerPage || in_array($_GET['vai-tro'] ?? ($_GET['role'] ?? ''), ['owner', 'chu-san'], true) ? 'owner' : 'customer';
 
