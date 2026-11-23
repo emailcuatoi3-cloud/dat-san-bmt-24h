@@ -220,7 +220,7 @@ render_page([
       </div>
     </div>
     <div class="order-1 w-full lg:order-2">
-      <span class="inline-flex items-center gap-2 rounded-full bg-primary-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-800"><i class="ri-add-circle-line" aria-hidden="true"></i>Dành cho chủ sân</span>
+      <span class="inline-flex items-center gap-2 rounded-full bg-primary-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-800"><i class="ri-add-circle-line" aria-hidden="true"></i>Đăng ký sân</span>
       <h2 class="mt-3 font-heading text-2xl font-extrabold leading-tight text-foreground-950 md:text-3xl">Có sân trống? Đưa sân lên Đặt Sân BMT 24H</h2>
       <p class="mt-3 text-sm leading-relaxed text-foreground-700 md:text-base">Mở tài khoản đối tác miễn phí, đăng thông tin sân và bắt đầu nhận đơn đặt sân ngay trong tuần. Bạn toàn quyền quyết định giá, khung giờ và chính sách cọc của sân mình.</p>
       <ul class="mt-6 space-y-4">

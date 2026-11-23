@@ -36,8 +36,12 @@ export async function api(file, action, body = undefined, method = undefined) {
   if (opts.method === 'GET' && body) {
     target += '&' + new URLSearchParams(body).toString();
   } else if (body !== undefined) {
-    opts.headers['Content-Type'] = 'application/json';
-    opts.body = JSON.stringify(body);
+    if (body instanceof FormData) {
+      opts.body = body;
+    } else {
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(body);
+    }
   }
   let res;
   try {

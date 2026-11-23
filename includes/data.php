@@ -409,10 +409,12 @@ const OWNER_REQUEST_SPORTS = ['football' => 'Bóng đá', 'badminton' => 'Cầu 
 function map_owner_request(?array $r): ?array
 {
     if (!$r) return null;
+    $images = !empty($r['images']) ? (is_array($r['images']) ? $r['images'] : jd($r['images'])) : [];
     return [
         'id' => $r['id'], 'userId' => (int) $r['user_id'], 'businessName' => $r['business_name'], 'contactName' => $r['contact_name'],
         'phone' => $r['phone'], 'email' => $r['email'], 'address' => $r['address'], 'sports' => $r['sports'],
         'sportsLabel' => OWNER_REQUEST_SPORTS[$r['sports']] ?? $r['sports'], 'courtCount' => (int) $r['court_count'], 'note' => (string) $r['note'],
+        'images' => is_array($images) ? $images : [],
         'status' => $r['status'], 'adminNote' => $r['admin_note'], 'reviewedBy' => $r['reviewed_by'], 'reviewedAt' => iso($r['reviewed_at']),
         'createdAt' => iso($r['created_at']), 'userRole' => $r['user_role'] ?? null, 'userStatus' => $r['user_status'] ?? null,
     ];
@@ -422,6 +424,68 @@ function map_owner_request(?array $r): ?array
 function latest_owner_request(int $userId): ?array
 {
     return map_owner_request(q_one('SELECT * FROM owner_requests WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [$userId]));
+}
+
+/**
+ * Lưu ảnh sân được tải lên (từ $_FILES hoặc chuỗi Base64 / URL) vào /uploads/courts/
+ */
+function save_court_images(array $files = [], $additionalImages = []): array
+{
+    $results = [];
+    $uploadDir = __DIR__ . '/../uploads/courts';
+    if (!is_dir($uploadDir)) {
+        @mkdir($uploadDir, 0755, true);
+    }
+
+    // 1. Xử lý ảnh dạng file upload qua $_FILES
+    if (!empty($files) && isset($files['name'])) {
+        $names = is_array($files['name']) ? $files['name'] : [$files['name']];
+        $tmpNames = is_array($files['tmp_name']) ? $files['tmp_name'] : [$files['tmp_name']];
+        $errors = is_array($files['error']) ? $files['error'] : [$files['error']];
+        $sizes = is_array($files['size']) ? $files['size'] : [$files['size']];
+
+        $allowedExts = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+        for ($i = 0; $i < count($names); $i++) {
+            if (($errors[$i] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) continue;
+            $tmp = $tmpNames[$i] ?? '';
+            if (!$tmp || !is_uploaded_file($tmp)) continue;
+            if (($sizes[$i] ?? 0) > 8 * 1024 * 1024) continue; // Tối đa 8MB / ảnh
+
+            $ext = strtolower(pathinfo($names[$i] ?? '', PATHINFO_EXTENSION));
+            if (!in_array($ext, $allowedExts, true)) $ext = 'jpg';
+
+            $safeName = 'court_' . date('Ymd_His') . '_' . bin2hex(random_bytes(6)) . '.' . $ext;
+            $dest = $uploadDir . '/' . $safeName;
+            if (move_uploaded_file($tmp, $dest)) {
+                $results[] = '/uploads/courts/' . $safeName;
+            }
+        }
+    }
+
+    // 2. Xử lý ảnh bổ sung (chuỗi Base64 hoặc URL)
+    $list = is_string($additionalImages) ? json_decode($additionalImages, true) : $additionalImages;
+    if (is_array($list)) {
+        foreach ($list as $item) {
+            $item = trim((string) $item);
+            if ($item === '') continue;
+            if (preg_match('#^data:image/(png|jpeg|jpg|webp|gif);base64,(.+)$#i', $item, $m)) {
+                $ext = strtolower($m[1]) === 'jpeg' ? 'jpg' : strtolower($m[1]);
+                $bin = base64_decode($m[2]);
+                if ($bin && strlen($bin) <= 8 * 1024 * 1024) {
+                    $safeName = 'court_b64_' . date('Ymd_His') . '_' . bin2hex(random_bytes(6)) . '.' . $ext;
+                    if (file_put_contents($uploadDir . '/' . $safeName, $bin) !== false) {
+                        $results[] = '/uploads/courts/' . $safeName;
+                        continue;
+                    }
+                }
+            }
+            if (str_starts_with($item, 'http://') || str_starts_with($item, 'https://') || str_starts_with($item, '/uploads/')) {
+                $results[] = $item;
+            }
+        }
+    }
+
+    return array_values(array_unique($results));
 }
 
 /** Kiểm tra dữ liệu và tạo yêu cầu (trạng thái chờ duyệt) */
@@ -436,10 +500,19 @@ function create_owner_request(array $user, array $d): array
     if (mb_strlen($address) < 8) fail('Vui lòng nhập địa chỉ sân đầy đủ (số nhà, đường, phường).');
     if (!preg_match('/^0\d{9,10}$/', $phone) && !preg_match('/^\+84\d{9,10}$/', $phone)) fail('Số điện thoại liên hệ chưa đúng (ví dụ 0912 345 678).');
     if (q_val("SELECT id FROM owner_requests WHERE user_id = ? AND status = 'pending'", [$user['id']])) fail('Bạn đã có một yêu cầu đang chờ duyệt. Vui lòng chờ quản trị viên phản hồi.');
+
+    ensure_sitemap_schema();
+
+    // Thu thập file ảnh từ $_FILES hoặc dữ liệu gửi lên
+    $files = $_FILES['images'] ?? ($_FILES['court_images'] ?? []);
+    $extraImgs = $d['images'] ?? ($d['court_images'] ?? []);
+    $savedImages = save_court_images($files, $extraImgs);
+
     $id = uid('or-');
-    q('INSERT INTO owner_requests (id, user_id, business_name, contact_name, phone, email, address, sports, court_count, note) VALUES (?,?,?,?,?,?,?,?,?,?)', [
+    q('INSERT INTO owner_requests (id, user_id, business_name, contact_name, phone, email, address, sports, court_count, note, images) VALUES (?,?,?,?,?,?,?,?,?,?,?)', [
         $id, $user['id'], mb_substr($business, 0, 160), mb_substr(trim((string) ($d['contactName'] ?? $user['full_name'])) ?: $user['full_name'], 0, 120),
         $phone, $user['email'], mb_substr($address, 0, 255), $sports, $count, mb_substr(trim((string) ($d['note'] ?? '')), 0, 1000),
+        !empty($savedImages) ? j($savedImages) : null,
     ]);
     return map_owner_request(q_one('SELECT * FROM owner_requests WHERE id = ?', [$id]));
 }

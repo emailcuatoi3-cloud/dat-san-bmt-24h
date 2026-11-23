@@ -102,6 +102,44 @@ function owner_request_extra_fields(string $prefix): void
   <div><label for="<?= $prefix ?>-count" class="mb-1.5 block text-sm font-medium text-foreground-800">Số sân hiện có</label>
     <input id="<?= $prefix ?>-count" name="courtCount" type="number" min="1" max="50" value="1" class="<?= $cls ?>"></div>
 </div>
+
+<!-- Tải nhiều hình ảnh bao quát sân -->
+<div class="mt-4" data-court-images-group>
+  <div class="flex flex-wrap items-center justify-between gap-1 mb-1.5">
+    <label for="<?= $prefix ?>-images-input" class="block text-sm font-semibold text-foreground-800">
+      <span class="flex items-center gap-1.5">
+        <i class="ri-image-add-line text-primary-600 text-base" aria-hidden="true"></i>
+        <span>Hình ảnh sân (Tải nhiều ảnh bao quát sân)</span>
+      </span>
+    </label>
+    <span class="text-xs text-foreground-500 font-normal">Tối đa 10 ảnh · JPG, PNG, WEBP (&le; 8MB/ảnh)</span>
+  </div>
+
+  <div class="relative rounded-xl border-2 border-dashed border-background-300 bg-background-50/70 p-5 text-center transition-all hover:border-primary-400 hover:bg-primary-50/30 cursor-pointer group" data-dropzone>
+    <input id="<?= $prefix ?>-images-input" type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif" class="hidden" data-images-input>
+    <div class="flex flex-col items-center justify-center pointer-events-none">
+      <div class="flex h-12 w-12 items-center justify-center rounded-full bg-primary-100 text-primary-600 transition-transform group-hover:scale-110 mb-2">
+        <i class="ri-upload-cloud-2-line text-2xl" aria-hidden="true"></i>
+      </div>
+      <p class="text-sm font-semibold text-foreground-900">
+        <span class="text-primary-600 group-hover:underline">Bấm để chọn nhiều ảnh</span> hoặc kéo thả vào khung này
+      </p>
+      <p class="mt-1 text-xs text-foreground-500 max-w-lg leading-relaxed">
+        Khuyên dùng tải từ 2 - 5 ảnh: Ảnh toàn cảnh sân, mặt cỏ/mặt thảm, khán đài, đèn chiếu sáng hoặc quầy dịch vụ để duyệt nhanh hơn.
+      </p>
+    </div>
+  </div>
+
+  <!-- Danh sách ảnh đã chọn (Preview Grid) -->
+  <div class="mt-3 hidden" data-preview-wrapper>
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-xs font-semibold text-foreground-700" data-img-counter>Đã chọn 0 ảnh</span>
+      <button type="button" data-clear-all-images class="text-xs text-accent-600 hover:underline hover:text-accent-700">Xóa tất cả</button>
+    </div>
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4" data-images-preview></div>
+  </div>
+</div>
+
 <div class="mt-4"><label for="<?= $prefix ?>-note" class="mb-1.5 block text-sm font-medium text-foreground-800">Giới thiệu ngắn <span class="font-normal text-foreground-500">(không bắt buộc)</span></label>
   <textarea id="<?= $prefix ?>-note" name="note" rows="3" maxlength="1000" placeholder="Loại sân, giờ mở cửa, tiện ích... giúp quản trị viên duyệt nhanh hơn" class="<?= $cls ?>"></textarea></div>
 <?php

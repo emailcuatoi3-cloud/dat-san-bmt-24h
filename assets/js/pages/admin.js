@@ -476,6 +476,22 @@ function ownerRequestsBlock(reqs, showAll) {
         <p class="mt-1 text-xs text-foreground-600"><i class="ri-user-line"></i> ${esc(r.contactName)} · <a href="tel:${esc(r.phone)}" class="text-primary-700">${esc(r.phone)}</a> · ${esc(r.email)}</p>
         <p class="mt-0.5 text-xs text-foreground-600"><i class="ri-map-pin-line"></i> ${esc(r.address)} · ${esc(r.sportsLabel)} · ${r.courtCount} sân</p>
         ${r.note ? `<p class="mt-2 rounded bg-background-100 px-2.5 py-1.5 text-xs text-foreground-700">${esc(r.note)}</p>` : ''}
+        ${r.images && r.images.length ? `
+          <div class="mt-2.5">
+            <p class="text-xs font-semibold text-foreground-700 flex items-center gap-1 mb-1.5"><i class="ri-image-line text-primary-600"></i> Ảnh bao quát sân (${r.images.length} ảnh):</p>
+            <div class="flex flex-wrap gap-2">
+              ${r.images.map((img) => {
+                const src = img.startsWith('http') ? img : url(img);
+                return `
+                  <a href="${esc(src)}" target="_blank" rel="noopener" class="group relative block h-14 w-20 overflow-hidden rounded-md border border-background-200 bg-background-100 shadow-sm transition-transform hover:scale-105" title="Bấm xem ảnh gốc">
+                    <img src="${esc(src)}" alt="Ảnh sân" class="h-full w-full object-cover">
+                    <span class="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity"><i class="ri-zoom-in-line"></i></span>
+                  </a>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        ` : ''}
         ${r.adminNote || r.reviewedBy ? `<p class="mt-1.5 text-[11px] text-foreground-500">${r.reviewedBy ? `Xử lý bởi ${esc(r.reviewedBy)} · ${formatDateTime(r.reviewedAt)}` : ''}${r.adminNote ? ` — ${esc(r.adminNote)}` : ''}</p>` : ''}
         <p class="mt-1 text-[11px] text-foreground-400">Gửi lúc ${formatDateTime(r.createdAt)}</p>
       </div>

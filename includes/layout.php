@@ -322,9 +322,9 @@ function render_site_header(bool $tr): void
           <span class="hdr-wide-only">Kênh chủ sân</span><span class="hdr-compact-only">Chủ sân</span>
         </a>
       <?php else: ?>
-        <a href="<?= url('/dang-ky-chu-san') ?>" title="Dành cho chủ sân" <?= tcls($tr, 'border-white/40 text-white hover:border-white hover:bg-white/15', 'border-accent-300 bg-accent-50 text-accent-800 hover:border-accent-400 hover:bg-accent-100', $chip) ?>>
+        <a href="<?= url('/dang-ky-chu-san') ?>" title="Đăng ký sân" <?= tcls($tr, 'border-white/40 text-white hover:border-white hover:bg-white/15', 'border-accent-300 bg-accent-50 text-accent-800 hover:border-accent-400 hover:bg-accent-100', $chip) ?>>
           <i class="ri-store-2-line text-sm" aria-hidden="true"></i>
-          <span class="hdr-wide-only">Dành cho chủ sân</span><span class="hdr-compact-only">Chủ sân</span>
+          <span class="hdr-wide-only">Đăng ký sân</span><span class="hdr-compact-only">Đăng ký sân</span>
         </a>
       <?php endif; ?>
       <form action="<?= url('/tim-san') ?>" method="get" role="search" class="hdr-search-form">
@@ -425,7 +425,7 @@ function render_site_header(bool $tr): void
       </form>
       <?php if (!$isOwner && !$isAdmin): ?>
         <a href="<?= url('/dang-ky-chu-san') ?>" class="mt-1 flex items-center justify-between rounded-full border border-accent-300 bg-accent-50 px-3 py-2.5 text-sm font-semibold text-accent-800 hover:bg-accent-100">
-          <span class="flex items-center gap-2.5"><i class="ri-store-2-line text-base text-accent-600" aria-hidden="true"></i>Dành cho chủ sân</span><i class="ri-arrow-right-s-line text-accent-500" aria-hidden="true"></i>
+          <span class="flex items-center gap-2.5"><i class="ri-store-2-line text-base text-accent-600" aria-hidden="true"></i>Đăng ký sân</span><i class="ri-arrow-right-s-line text-accent-500" aria-hidden="true"></i>
         </a>
       <?php endif; ?>
       <?php foreach ($navMain as $item): ?>
@@ -525,7 +525,7 @@ function render_site_footer(): void
         ['Chính sách đặt, hủy, hoàn cọc', '/gioi-thieu#chinh-sach'],
         ['Câu hỏi thường gặp', '/gioi-thieu#faq'],
         ['Liên hệ hỗ trợ', '/lien-he'],
-        ['Dành cho chủ sân', '/dang-ky-chu-san'],
+        ['Đăng ký sân', '/dang-ky-chu-san'],
         ['Tài khoản của tôi', '/tai-khoan'],
         ['Kênh chủ sân', '/chu-san'],
     ];
@@ -551,7 +551,7 @@ function render_site_footer(): void
             <a href="#" aria-label="<?= $s[1] ?>" class="w-9 h-9 flex items-center justify-center rounded-md bg-primary-500/15 text-foreground-700 transition-colors hover:bg-primary-500 hover:text-foreground-950"><i class="<?= $s[0] ?> text-base" aria-hidden="true"></i></a>
           <?php endforeach; ?>
         </div>
-        <a href="<?= url('/dang-ky-chu-san') ?>" class="mt-6 inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-primary-300 bg-white px-4 py-2.5 text-sm font-semibold text-primary-700 transition-colors hover:border-primary-500 hover:bg-primary-500 hover:text-white"><i class="ri-store-2-line text-base" aria-hidden="true"></i>Dành cho chủ sân</a>
+        <a href="<?= url('/dang-ky-chu-san') ?>" class="mt-6 inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-primary-300 bg-white px-4 py-2.5 text-sm font-semibold text-primary-700 transition-colors hover:border-primary-500 hover:bg-primary-500 hover:text-white"><i class="ri-store-2-line text-base" aria-hidden="true"></i>Đăng ký sân</a>
         <p class="mt-2 text-xs leading-relaxed text-foreground-500">Miễn phí đăng ký, nhận đơn đặt sân mỗi ngày.</p>
       </div>
       <div>

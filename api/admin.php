@@ -438,9 +438,11 @@ run_api([
                 ['id' => 'morning', 'label' => 'Buổi sáng và chiều', 'shortLabel' => 'Sáng – chiều', 'start' => '05:00', 'end' => '17:00', 'price' => $price],
                 ['id' => 'evening', 'label' => 'Buổi tối', 'shortLabel' => 'Tối', 'start' => '17:00', 'end' => '23:00', 'price' => $peak, 'peak' => true],
             ];
-            $img = $sport === 'badminton' ? CATEGORY_IMAGE_BADMINTON : CATEGORY_IMAGE_FOOTBALL;
+            $defaultImg = $sport === 'badminton' ? CATEGORY_IMAGE_BADMINTON : CATEGORY_IMAGE_FOOTBALL;
+            $reqImgs = !empty($r['images']) ? jd($r['images']) : [];
+            $courtImages = !empty($reqImgs) && is_array($reqImgs) ? $reqImgs : [$defaultImg];
             q('INSERT INTO courts (id, slug, owner_id, name, sport, sport_label, area, address, price_per_hour, peak_price, price_bands, images, description, status, open_time, close_time, highlights, facilities, map_query) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-                [$cid, $slug, $r['user_id'], $r['business_name'], $sport, sport_label($sport), 'Tân Lợi', $r['address'] ?: 'TP. Buôn Ma Thuột', $price, $peak, j($bands), j([$img]), $r['note'] ?: ('Cơ sở ' . $r['business_name'] . ' tại Buôn Ma Thuột.'), 'active', '05:00', '23:00', j(['Sân mới đăng ký', 'Đặt lịch online 24/7']), j(['Bãi giữ xe', 'Nước uống']), $r['address'] ?: 'TP. Buôn Ma Thuột']);
+                [$cid, $slug, $r['user_id'], $r['business_name'], $sport, sport_label($sport), 'Tân Lợi', $r['address'] ?: 'TP. Buôn Ma Thuột', $price, $peak, j($bands), j($courtImages), $r['note'] ?: ('Cơ sở ' . $r['business_name'] . ' tại Buôn Ma Thuột.'), 'active', '05:00', '23:00', j(['Sân mới đăng ký', 'Đặt lịch online 24/7']), j(['Bãi giữ xe', 'Nước uống']), $r['address'] ?: 'TP. Buôn Ma Thuột']);
         }
         audit('accounts', $approve ? 'Duyệt đăng ký chủ sân' : 'Từ chối đăng ký chủ sân', $r['business_name'] . ' · ' . $r['user_email'], $note, $approve ? 'success' : 'warning');
         return true;

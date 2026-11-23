@@ -80,6 +80,14 @@ function ensure_sitemap_schema(): void
         }
     } catch (Throwable $e) {}
 
+    // Bổ sung cột images cho owner_requests (lưu danh sách ảnh bao quát sân tải lên)
+    try {
+        $hasReqImages = $pdo->query("SHOW COLUMNS FROM owner_requests LIKE 'images'")->fetchColumn();
+        if (!$hasReqImages) {
+            $pdo->exec("ALTER TABLE owner_requests ADD COLUMN images TEXT NULL AFTER note");
+        }
+    } catch (Throwable $e) {}
+
     // Kiểm tra nhanh nếu cột sport trong owner_services đã tồn tại thì bỏ qua DDL nặng
     try {
         $hasSport = $pdo->query("SHOW COLUMNS FROM owner_services LIKE 'sport'")->fetchColumn();
