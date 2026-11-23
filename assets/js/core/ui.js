@@ -71,13 +71,15 @@ export function toast(message, tone = 'success', ms = 3200) {
   if (!root) return;
   const existing = Array.from(root.children).find((c) => c.textContent.trim().includes(message.trim()));
   if (existing) return;
-  const icon = tone === 'error' ? 'ri-error-warning-line' : tone === 'info' ? 'ri-information-line' : 'ri-checkbox-circle-line';
+  const icon = tone === 'error' ? 'ri-error-warning-line' : tone === 'warning' ? 'ri-time-line' : tone === 'info' ? 'ri-information-line' : 'ri-checkbox-circle-line';
   const color =
     tone === 'error'
       ? 'border-accent-300 text-accent-800'
-      : tone === 'info'
-        ? 'border-secondary-300 text-foreground-800'
-        : 'border-primary-300 text-primary-800';
+      : tone === 'warning'
+        ? 'border-amber-300 text-amber-900 bg-amber-50'
+        : tone === 'info'
+          ? 'border-secondary-300 text-foreground-800'
+          : 'border-primary-300 text-primary-800';
   const el = document.createElement('div');
   el.className = `pointer-events-auto flex max-w-md items-center gap-2 rounded-lg border bg-white px-4 py-3 text-sm font-semibold shadow-lg animate-fade-up ${color}`;
   el.innerHTML = `<i class="${icon} text-lg" aria-hidden="true"></i><span>${esc(message)}</span>`;
@@ -143,7 +145,7 @@ export function openModal({ html, size = 'max-w-lg', onClose, dismissible = true
     if (event.target === wrap && dismissible) close();
   });
   wrap.addEventListener('click', (event) => {
-    if (event.target.closest('[data-close]')) close();
+    if (event.target.closest('[data-close], [data-modal-close]')) close();
   });
   root.appendChild(wrap);
   return { el: wrap.firstElementChild, close };

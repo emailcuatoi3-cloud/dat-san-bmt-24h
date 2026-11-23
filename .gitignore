@@ -5,3 +5,6 @@ node_modules/
 Thumbs.db
 uploads/courts/*
 !uploads/courts/.gitkeep
+cloudflared.exe
+uploads/emails/
+*.exe

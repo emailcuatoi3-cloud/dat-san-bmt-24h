@@ -72,6 +72,41 @@ run_api([
         }
         $reason = mb_substr(in_str('reason'), 0, 250) ?: 'Khách hàng đã hủy đơn';
         q("UPDATE bookings SET status = 'cancelled', cancel_reason = ? WHERE id = ?", [$reason, $row['id']]);
+
+        // Nếu đơn đã cọc hoặc thanh toán -> tự động tạo bản ghi hoàn cọc vào bảng refunds
+        if (in_array($row['payment_status'], ['paid', 'deposit_paid'], true)) {
+            $refundAmount = $row['payment_status'] === 'paid' ? (int) $row['total_price'] : (int) $row['deposit_amount'];
+            $bank = in_str('refundBank');
+            $acc = in_str('refundAccount');
+            $accName = in_str('refundName');
+            $bankInfo = trim($bank . ' ' . $acc . ' (' . $accName . ')');
+            $refNote = 'Hoàn cọc hủy trước ' . CANCEL_CUTOFF_HOURS . 'h' . ($bankInfo ? ": $bankInfo" : '');
+            $court = q_one('SELECT owner_id, name FROM courts WHERE id = ?', [$row['court_id']]);
+            $ownerId = (int) ($court['owner_id'] ?? 1);
+            $refId = uid('ref-');
+            q('INSERT INTO refunds (id, owner_id, booking_code, customer_name, court_name, amount, method, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())', [
+                $refId,
+                $ownerId,
+                $row['code'],
+                $accName ?: ($row['customer_name'] ?: 'Khách hàng'),
+                $row['court_name'],
+                $refundAmount,
+                'transfer',
+                $refNote,
+            ]);
+
+            // Bắn thông báo đến chủ sân
+            if ($ownerId > 0) {
+                push_notification(
+                    $ownerId,
+                    'Yêu cầu hoàn cọc đơn #' . $row['code'],
+                    'Khách hàng ' . ($row['customer_name'] ?: 'Khách') . ' đã hủy đơn trước giờ chơi. Cần hoàn ' . number_format($refundAmount, 0, ',', '.') . 'đ qua STK: ' . ($bankInfo ?: 'Chưa nhập STK'),
+                    'booking',
+                    '/chu-san?tab=bookings'
+                );
+            }
+        }
+
         return map_booking(q_one(BOOKING_SELECT . ' WHERE b.id = ?', [$row['id']]));
     },
 

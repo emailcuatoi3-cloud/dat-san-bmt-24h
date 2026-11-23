@@ -10,6 +10,7 @@
  * Giá tiền luôn được TÍNH LẠI ở máy chủ, không tin số tiền trình duyệt gửi lên.
  */
 require_once __DIR__ . '/../includes/bootstrap.php';
+require_once __DIR__ . '/../includes/mailer.php';
 
 const EXTRA_SERVICES = [
     'bong' => ['Thuê bóng thi đấu', 30000],
@@ -473,35 +474,14 @@ run_api([
         return ['autoConfirmSeconds' => AUTO_CONFIRM_SECONDS];
     },
 
-    // Sau thời gian đối soát, hệ thống ghi nhận cọc thành công, hoàn tất giữ sân và kích hoạt vé
+    // Xác nhận tiền cọc: chỉ xác nhận khi đơn đã được đối soát qua SePay/Webhook thành công
     'auto_confirm' => function () {
         $b = q_one('SELECT * FROM bookings WHERE id = ?', [in_str('id')]);
-        if (!$b || $b['payment_status'] === 'unpaid') fail('Không tìm thấy đơn để xác nhận tiền cọc. Vui lòng tải lại trang và thử lại.');
-        if ($b['payment_status'] === 'deposit_claimed') {
-            $full = $b['payment_method'] === 'vietqr-full' || (int) $b['deposit_amount'] >= (int) $b['total_price'];
-            $u = current_user();
-            // Đã nhận cọc và chủ sân đã duyệt trước đó -> Hoàn tất giữ sân chính thức (status = 'confirmed')
-            if (!$b['customer_id'] && $u) {
-                q("UPDATE bookings SET customer_id = ?, payment_status = ?, status = 'confirmed' WHERE id = ?", [$u['id'], $full ? 'paid' : 'deposit_paid', $b['id']]);
-            } else {
-                q("UPDATE bookings SET payment_status = ?, status = 'confirmed' WHERE id = ?", [$full ? 'paid' : 'deposit_paid', $b['id']]);
-            }
-
-            $targetUserId = (int) ($b['customer_id'] ?: ($u['id'] ?? 0));
-            if (!$targetUserId && !empty($b['customer_phone'])) {
-                $targetUserId = (int) q_val('SELECT id FROM users WHERE phone = ?', [$b['customer_phone']]);
-            }
-            if ($targetUserId > 0) {
-                $payText = $full ? 'toàn bộ tiền sân' : 'tiền cọc ' . number_format((int) $b['deposit_amount'], 0, ',', '.') . 'đ';
-                push_notification($targetUserId, 'Xác nhận thanh toán đơn #' . $b['code'] . ' thành công!', 'Hệ thống đã nhận ' . $payText . ' cho đơn đặt sân tại ' . ($b['court_name'] ?: 'sân thể thao') . '. Vé đặt sân của bạn đã chính thức được kích hoạt!', 'payment', '/tai-khoan?tab=history');
-            }
-
-            $court = q_one('SELECT owner_id FROM courts WHERE id = ?', [$b['court_id']]);
-            if (!empty($court['owner_id'])) {
-                push_notification((int) $court['owner_id'], 'Đơn #' . $b['code'] . ' đã hoàn tất cọc', 'Khách hàng ' . ($b['customer_name'] ?: 'Khách') . ' đã chuyển cọc cho lịch đặt ngày ' . date('d/m/Y', strtotime($b['booking_date'])) . '.', 'payment', '/chu-san?tab=bookings');
-            }
+        if (!$b) fail('Không tìm thấy đơn.');
+        if (in_array($b['payment_status'], ['paid', 'deposit_paid'], true)) {
+            return booking_by_code($b['code']);
         }
-        return booking_by_code($b['code']);
+        fail('Hệ thống chưa nhận được tiền chuyển khoản từ tài khoản MBBank. Vui lòng chuyển tiền đúng nội dung đơn hàng rồi kiểm tra lại.');
     },
 
     // Khách hủy lượt giữ sân khi chưa chuyển khoản
@@ -516,5 +496,19 @@ run_api([
         $b = booking_by_code(strtoupper(trim($_GET['code'] ?? in_str('code'))));
         if (!$b) fail('Không tìm thấy đơn với mã này.');
         return $b;
+    },
+
+    // Kiểm tra trực tiếp biến động số dư SePay (Real-time Polling siêu nhanh dựa vào Webhook)
+    'check_sepay' => function () {
+        $id = in_str('id');
+        $code = strtoupper(trim(in_str('code')));
+        $b = $id ? q_one('SELECT * FROM bookings WHERE id = ?', [$id]) : ($code ? q_one('SELECT * FROM bookings WHERE code = ?', [$code]) : null);
+        if (!$b) fail('Không tìm thấy đơn.');
+
+        if (in_array($b['payment_status'], ['paid', 'deposit_paid'], true)) {
+            return ['confirmed' => true, 'booking' => booking_by_code($b['code'])];
+        }
+
+        return ['confirmed' => false, 'booking' => booking_by_code($b['code'])];
     },
 ]);

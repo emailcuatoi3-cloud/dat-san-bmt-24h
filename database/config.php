@@ -28,8 +28,8 @@ define('SUPPORT_EMAIL', 'hotro@datsanbmt24h.vn');
 // ---- Tài khoản nhận cọc (mã VietQR) ----
 define('BANK_BIN', '970422');
 define('BANK_NAME', 'MB Bank');
-define('BANK_ACCOUNT', '0388888888');
-define('BANK_ACCOUNT_NAME', 'DAT SAN BMT 24H');
+define('BANK_ACCOUNT', '0898383246');
+define('BANK_ACCOUNT_NAME', 'MA MINH HOAN');
 
 /** Tỷ lệ cọc mặc định khi khách chọn "cọc 30%" */
 define('DEPOSIT_RATE', 0.3);
@@ -48,5 +48,16 @@ define('FACEBOOK_APP_SECRET', getenv('FACEBOOK_APP_SECRET') ?: '');
 define('CHATBOT_PROVIDER', strtolower(trim((string)(getenv('CHATBOT_PROVIDER') ?: 'gemini'))));
 define('CHATBOT_API_KEY', getenv('CHATBOT_API_KEY') ?: '');
 define('CHATBOT_MODEL', trim((string)(getenv('CHATBOT_MODEL') ?: '')));
+
+// ---- Cổng Webhook thanh toán tự động (SePay / PayOS / Ngân hàng) ----
+define('WEBHOOK_PAYMENT_API_KEY', 'LANEZCK7GWTCZMDU1DJPMMB83LUVJLQLAUV2J9ARBYXM6C9VSPHYVKW5HKJXPIOH');
+define('SEPAY_API_TOKEN', 'LANEZCK7GWTCZMDU1DJPMMB83LUVJLQLAUV2J9ARBYXM6C9VSPHYVKW5HKJXPIOH');
+
+// ---- Cấu hình gửi thư điện tử (SMTP Gmail) ----
+define('SMTP_HOST', getenv('SMTP_HOST') ?: 'smtp.gmail.com');
+define('SMTP_PORT', (int)(getenv('SMTP_PORT') ?: 587));
+define('SMTP_USER', getenv('SMTP_USER') ?: '');
+define('SMTP_PASS', getenv('SMTP_PASS') ?: '');
+define('SMTP_FROM_NAME', getenv('SMTP_FROM_NAME') ?: SITE_NAME);
 
 date_default_timezone_set('Asia/Ho_Chi_Minh');

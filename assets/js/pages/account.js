@@ -533,6 +533,35 @@ function openCancel(b) {
   const reasons = PAGE.cancelReasons || [];
   const other = PAGE.cancelOther;
   const allowed = isBeforeCancelCutoff(b.date, b.slots);
+  const isPaidOrDeposited = ['paid', 'deposit_paid'].includes(b.paymentStatus);
+  const refundAmount = b.paymentStatus === 'paid' ? b.totalPrice : (b.depositAmount || Math.round(b.totalPrice * 0.3));
+
+  const refundSectionHtml = isPaidOrDeposited && allowed ? `
+    <div class="mt-4 rounded-lg border border-primary-200 bg-primary-50/70 p-3.5">
+      <div class="flex items-center gap-2">
+        <i class="ri-bank-card-line text-lg text-primary-700" aria-hidden="true"></i>
+        <div>
+          <p class="font-heading text-xs font-bold text-primary-950">Thông tin nhận hoàn tiền cọc (${formatVnd(refundAmount)})</p>
+          <p class="text-[11px] text-primary-800">Đơn đủ điều kiện hoàn 100% tiền cọc. Vui lòng nhập số tài khoản để nhận tiền hoàn.</p>
+        </div>
+      </div>
+      <div class="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 text-xs">
+        <div>
+          <label class="block font-semibold text-foreground-700 mb-1">Tên ngân hàng <span class="text-accent-600">*</span></label>
+          <input type="text" data-refund-bank placeholder="VD: MB Bank, Vietcombank..." class="w-full rounded border border-background-300 bg-white px-2.5 py-1.5 focus:border-primary-400 focus:outline-none">
+        </div>
+        <div>
+          <label class="block font-semibold text-foreground-700 mb-1">Số tài khoản <span class="text-accent-600">*</span></label>
+          <input type="text" data-refund-acc placeholder="VD: 0388888888" class="w-full rounded border border-background-300 bg-white px-2.5 py-1.5 font-mono focus:border-primary-400 focus:outline-none">
+        </div>
+        <div class="sm:col-span-2">
+          <label class="block font-semibold text-foreground-700 mb-1">Tên chủ tài khoản <span class="text-accent-600">*</span></label>
+          <input type="text" data-refund-name placeholder="VD: NGUYEN VAN A" class="w-full rounded border border-background-300 bg-white px-2.5 py-1.5 uppercase focus:border-primary-400 focus:outline-none">
+        </div>
+      </div>
+    </div>
+  ` : '';
+
   const modal = openModal({
     size: 'max-w-lg',
     html: `<div class="flex items-start justify-between gap-3 border-b border-background-200 px-5 py-4"><div><h2 class="font-heading text-lg font-extrabold text-foreground-950">Hủy đơn đặt sân</h2><p class="mt-1 text-xs text-foreground-500">Mã đơn ${esc(b.code)}</p></div><button type="button" data-close aria-label="Đóng" class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md text-foreground-500 transition-colors hover:bg-background-100 hover:text-foreground-900"><i class="ri-close-line text-xl" aria-hidden="true"></i></button></div>
@@ -542,6 +571,7 @@ function openCancel(b) {
       ${!allowed ? `<div class="mt-3 flex items-start gap-2.5 rounded-md border border-accent-300 bg-accent-100 px-3.5 py-3"><i class="ri-lock-2-line mt-0.5 text-accent-800" aria-hidden="true"></i><div class="text-xs leading-relaxed text-accent-900"><p>Đơn này đã vào ${CANCEL_CUTOFF_HOURS} giờ cuối nên không hủy tự động được. Bạn liên hệ hotline để chủ sân hỗ trợ đổi giờ hoặc xử lý.</p><a href="tel:${HOTLINE.replace(/\D/g, '')}" class="mt-1 inline-flex font-semibold underline">Gọi ${HOTLINE}</a></div></div>` : ''}
       <fieldset class="mt-4"><legend class="text-sm font-semibold text-foreground-900">Lý do hủy <span class="text-accent-600">*</span></legend><div class="mt-2 space-y-1.5">${reasons.map((r) => `<label class="flex cursor-pointer items-center gap-2.5 rounded-md border border-background-200 px-3 py-2.5 text-sm text-foreground-700 hover:border-background-300 has-[:checked]:border-primary-400 has-[:checked]:bg-primary-50"><input type="radio" name="reason" value="${esc(r)}" class="h-4 w-4 cursor-pointer accent-primary-500">${esc(r)}</label>`).join('')}</div></fieldset>
       <div data-other class="mt-3 hidden"><label class="mb-1.5 block text-sm font-semibold text-foreground-900">Lý do cụ thể <span class="text-accent-600">*</span></label><textarea rows="3" maxlength="200" placeholder="Ví dụ: đội mình có người bị ốm đột xuất..." class="w-full resize-none rounded-md border border-background-300 bg-white px-3 py-2.5 text-sm text-foreground-950 placeholder:text-foreground-400 focus:border-primary-400 focus:outline-none"></textarea></div>
+      ${refundSectionHtml}
       <p data-err class="mt-2 hidden items-center gap-1.5 text-xs font-medium text-accent-700"></p>
     </div>
     <div class="flex flex-col-reverse gap-2.5 border-t border-background-200 px-5 py-4 sm:flex-row sm:justify-end"><button type="button" data-close class="cursor-pointer whitespace-nowrap rounded-md border border-background-300 px-4 py-2.5 text-sm font-semibold text-foreground-800 transition-colors hover:border-primary-400 hover:text-primary-700">Giữ lại đơn</button>${allowed ? '<button type="button" data-ok class="cursor-pointer whitespace-nowrap rounded-md bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-600">Xác nhận hủy đơn</button>' : ''}</div>`,
@@ -559,13 +589,33 @@ function openCancel(b) {
     const note = el.querySelector('textarea').value.trim();
     if (!picked) return err('Vui lòng chọn lý do hủy đơn để chúng tôi hỗ trợ tốt hơn.');
     if (picked === other && note.length < 3) return err('Vui lòng ghi rõ lý do bạn hủy sân (ít nhất 3 ký tự).');
+
+    let refundBank = '';
+    let refundAccount = '';
+    let refundName = '';
+    if (isPaidOrDeposited && allowed) {
+      refundBank = (el.querySelector('[data-refund-bank]')?.value || '').trim();
+      refundAccount = (el.querySelector('[data-refund-acc]')?.value || '').trim();
+      refundName = (el.querySelector('[data-refund-name]')?.value || '').trim();
+      if (!refundBank || !refundAccount || !refundName) {
+        return err('Vui lòng điền đầy đủ thông tin ngân hàng để nhận lại tiền cọc.');
+      }
+    }
+
     setBusy(e.currentTarget, true, 'Đang hủy...');
     try {
-      const updated = await api('account', 'cancel', { id: b.id, reason: picked === other ? `${other}: ${note}` : picked, codes: readMyBookingCodes() });
+      const updated = await api('account', 'cancel', {
+        id: b.id,
+        reason: picked === other ? `${other}: ${note}` : picked,
+        codes: readMyBookingCodes(),
+        refundBank,
+        refundAccount,
+        refundName,
+      });
       st.bookings = st.bookings.map((x) => (x.id === b.id ? updated : x));
       st.invoices = null;
       modal.close();
-      toast(`Đã hủy đơn ${b.code}. Khung giờ vừa hủy đã được mở lại cho người chơi khác.`);
+      toast(isPaidOrDeposited ? `Đã hủy đơn ${b.code}. Yêu cầu hoàn cọc ${formatVnd(refundAmount)} đã gửi tới chủ sân.` : `Đã hủy đơn ${b.code}. Khung giờ vừa hủy đã được mở lại cho người chơi khác.`);
       render();
     } catch (error) {
       setBusy(e.currentTarget, false);

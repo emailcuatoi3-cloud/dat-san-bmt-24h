@@ -5,7 +5,7 @@
  * - Điều khiển luồng duyệt đơn & đồng hồ giữ chỗ 5 phút, đối soát thanh toán VietQR và render vé QR
  */
 
-import { $, $$, PAGE, APP, api, esc, url, cx, formatVnd, copyText, openModal } from '../core/ui.js';
+import { $, $$, PAGE, APP, api, esc, url, cx, formatVnd, copyText, openModal, toast } from '../core/ui.js';
 import { ticketData, ticketQrUrl, downloadTicket, openShareSheet } from '../core/ticket.js';
 import { buildDaySlots, calcCourtPriceForRange, getPriceBands, lowestPrice, priceBandAt } from '../lib/courtPricing.js';
 import { DURATION_OPTIONS, calcDeposit, endTimeOf, extraServices, formatCountdown, formatTimeRange, remainingHoldSeconds, slotsInRange } from '../lib/booking.js';
@@ -1375,6 +1375,33 @@ function renderStep3() {
     <p class="mt-3 text-center text-xs text-foreground-500">Cần hỗ trợ? Gọi <a href="tel:${HOTLINE.replace(/\D/g, '')}" class="font-semibold text-primary-600 hover:text-primary-700">${HOTLINE}</a></p>`;
 
   startHoldTimer();
+  startSepayRealtimeCheck(b.id);
+}
+
+let sepayPollingInterval = null;
+function startSepayRealtimeCheck(bookingId) {
+  if (sepayPollingInterval) clearInterval(sepayPollingInterval);
+  sepayPollingInterval = setInterval(async () => {
+    if (S.step !== 3 || !S.booking || S.booking.id !== bookingId) {
+      clearInterval(sepayPollingInterval);
+      return;
+    }
+    // Chỉ dừng khi ĐÃ CỌC hoặc ĐÃ THANH TOÁN XONG (không dùng status vì chủ sân duyệt đã là confirmed)
+    if (['paid', 'deposit_paid'].includes(S.booking.paymentStatus)) {
+      clearInterval(sepayPollingInterval);
+      return;
+    }
+    try {
+      const res = await api('booking', 'check_sepay', { id: bookingId });
+      if (res && res.confirmed) {
+        clearInterval(sepayPollingInterval);
+        clearInterval(holdTimer);
+        S.booking = res.booking;
+        toast('Đã nhận tiền chuyển khoản SePay thành công! Đang kích hoạt vé QR...');
+        showTicket(res.booking);
+      }
+    } catch {}
+  }, 1500);
 }
 
 function startHoldTimer() {
@@ -1386,28 +1413,123 @@ function startHoldTimer() {
     if (badge) badge.innerHTML = `<i class="ri-time-line" aria-hidden="true"></i>${left <= 0 ? 'Đã hết giờ chuyển cọc' : `Thời gian cọc còn lại: ${formatCountdown(left)}`}`;
     if (left <= 0) {
       clearInterval(holdTimer);
+      clearInterval(sepayPollingInterval);
       renderStep3();
     }
   }, 1000);
 }
 
-function showVerifyOverlay() {
+function showVerifyOverlay(onCancel) {
   const overlay = document.createElement('div');
-  overlay.className = 'fixed inset-0 z-[95] flex items-center justify-center bg-foreground-950/70 p-4';
-  overlay.innerHTML = `<div class="w-full max-w-sm rounded-lg border border-background-200 bg-white p-6 text-center">
-    <span class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary-50 text-primary-600"><i class="ri-loader-4-line animate-spin text-3xl" aria-hidden="true"></i></span>
-    <p class="mt-4 font-heading text-base font-bold text-foreground-950">Đang kiểm tra giao dịch chuyển khoản</p>
-    <p class="mt-1.5 text-sm text-foreground-600">Hệ thống tự động đối soát và xác nhận tiền cọc. Bạn không cần làm gì thêm.</p>
-    <div class="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-background-200"><div data-bar class="h-full rounded-full bg-primary-500 transition-all duration-1000 ease-linear" style="width:0%"></div></div>
-    <p data-left class="mt-2 text-xs font-semibold text-foreground-500"></p></div>`;
+  overlay.className = 'fixed inset-0 z-[95] flex items-center justify-center bg-foreground-950/70 p-4 animate-fade-in backdrop-blur-[2px]';
+  overlay.innerHTML = `<div class="w-full max-w-sm rounded-2xl border border-background-200 bg-white p-6 text-center shadow-2xl">
+    <div class="relative mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary-50 text-primary-600 ring-8 ring-primary-50/60">
+      <i class="ri-loader-4-line animate-spin text-3xl" aria-hidden="true"></i>
+    </div>
+    <h3 class="mt-4 font-heading text-base font-bold text-foreground-950">Đang đối soát giao dịch MBBank</h3>
+    <p class="mt-1.5 text-xs text-foreground-600 leading-relaxed">Hệ thống đang kiểm tra biến động số dư qua SePay...</p>
+    <div class="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-background-200">
+      <div data-bar class="h-full rounded-full bg-primary-500 transition-all duration-1000 ease-linear" style="width:0%"></div>
+    </div>
+    <div class="mt-2.5 flex items-center justify-between text-[11px] text-foreground-500 font-medium">
+      <span>Đang kết nối ngân hàng</span>
+      <span data-left>Còn 6 giây</span>
+    </div>
+    <button type="button" data-close-overlay class="mt-4 text-xs font-semibold text-foreground-500 hover:text-foreground-800 transition-colors cursor-pointer">
+      Đóng và chờ tự động mở vé
+    </button>
+  </div>`;
   document.body.appendChild(overlay);
+
+  overlay.querySelector('[data-close-overlay]')?.addEventListener('click', () => {
+    overlay.remove();
+    if (typeof onCancel === 'function') onCancel();
+  });
+
   return {
-    set(sec) {
-      overlay.querySelector('[data-bar]').style.width = `${Math.min(100, ((AUTO_CONFIRM_SECONDS - sec + 1) / AUTO_CONFIRM_SECONDS) * 100)}%`;
-      overlay.querySelector('[data-left]').textContent = `Còn khoảng ${Math.max(1, sec)} giây`;
+    set(sec, total = 6) {
+      const pct = Math.min(100, Math.max(0, ((total - sec + 1) / total) * 100));
+      const bar = overlay.querySelector('[data-bar]');
+      const left = overlay.querySelector('[data-left]');
+      if (bar) bar.style.width = `${pct}%`;
+      if (left) left.textContent = `Còn khoảng ${Math.max(1, sec)}s`;
     },
     close: () => overlay.remove(),
   };
+}
+
+function showPaymentPendingModal(b) {
+  const isFull = b.paymentMethod === 'vietqr-full';
+  const payAmount = isFull ? b.totalPrice : (b.depositAmount || calcDeposit(b.totalPrice));
+
+  const modal = openModal({
+    size: 'max-w-md',
+    dismissible: true,
+    html: `
+      <div class="p-5 sm:p-6 text-center">
+        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-amber-50 text-amber-500 ring-8 ring-amber-50/60">
+          <i class="ri-time-line text-3xl" aria-hidden="true"></i>
+        </div>
+        <h3 class="mt-4 font-heading text-lg font-bold text-foreground-950">Chưa nhận được tiền chuyển khoản</h3>
+        <p class="mt-1.5 text-xs text-foreground-600 leading-relaxed">
+          Tài khoản ngân hàng chưa ghi nhận biến động số dư cho mã đơn <span class="font-mono font-bold text-primary-700">${esc(b.code)}</span>.
+        </p>
+
+        <div class="mt-4 rounded-xl border border-background-200 bg-background-50/90 p-3.5 text-left text-xs space-y-2">
+          <div class="flex items-center justify-between text-foreground-600">
+            <span>Ngân hàng thụ hưởng:</span>
+            <span class="font-bold text-foreground-900">${esc(bankAccount.bankName)}</span>
+          </div>
+          <div class="flex items-center justify-between text-foreground-600">
+            <span>Số tài khoản:</span>
+            <span class="font-mono font-bold text-foreground-900">${esc(bankAccount.accountNumber)}</span>
+          </div>
+          <div class="flex items-center justify-between text-foreground-600">
+            <span>Chủ tài khoản:</span>
+            <span class="font-bold text-foreground-900">${esc(bankAccount.accountName)}</span>
+          </div>
+          <div class="flex items-center justify-between text-foreground-600">
+            <span>Số tiền cần chuyển:</span>
+            <span class="font-bold text-primary-600">${formatVnd(payAmount)}</span>
+          </div>
+          <div class="flex items-center justify-between text-foreground-600 border-t border-background-200 pt-2">
+            <span>Nội dung chuyển khoản:</span>
+            <span class="font-mono font-bold text-primary-700">${esc(b.code)}</span>
+          </div>
+        </div>
+
+        <div class="mt-3.5 rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-left text-xs leading-relaxed text-amber-900">
+          <div class="flex items-start gap-2">
+            <i class="ri-lightbulb-line mt-0.5 text-base text-amber-600 shrink-0"></i>
+            <div>
+              <p class="font-bold text-amber-950">Lưu ý đối soát:</p>
+              <ul class="mt-1 list-disc pl-3.5 space-y-1 text-[11px] text-amber-900/90">
+                <li><b>Nếu bạn vừa chuyển tiền:</b> Ngân hàng có thể mất 10 - 30 giây để gửi thông báo. Bạn chỉ cần chờ tại màn hình, hệ thống sẽ <b>tự động mở vé QR</b> ngay khi nhận được tiền.</li>
+                <li><b>Nếu bạn chưa chuyển:</b> Quét lại mã VietQR trên màn hình để chuyển khoản chính xác số tiền và nội dung.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-5 flex flex-col-reverse sm:flex-row items-center gap-2.5">
+          <button type="button" data-close data-modal-close class="w-full sm:flex-1 cursor-pointer rounded-lg border border-background-300 bg-white py-2.5 text-xs font-semibold text-foreground-700 hover:bg-background-50 transition-colors">
+            Đóng, tôi sẽ chờ
+          </button>
+          <button type="button" data-recheck class="w-full sm:flex-1 cursor-pointer rounded-lg bg-accent-500 py-2.5 text-xs font-bold text-background-950 hover:bg-accent-600 transition-colors">
+            <i class="ri-refresh-line mr-1" aria-hidden="true"></i>Kiểm tra lại
+          </button>
+        </div>
+      </div>
+    `,
+  });
+
+  modal.el.querySelector('[data-modal-close], [data-close]')?.addEventListener('click', () => {
+    modal.close();
+  });
+  modal.el.querySelector('[data-recheck]')?.addEventListener('click', () => {
+    modal.close();
+    confirmDeposit();
+  });
 }
 
 async function confirmDeposit() {
@@ -1416,20 +1538,50 @@ async function confirmDeposit() {
   renderStep3();
   let overlay = null;
   try {
-    await api('booking', 'claim', { id: S.booking.id });
-    overlay = showVerifyOverlay();
-    for (let sec = AUTO_CONFIRM_SECONDS; sec > 0; sec -= 1) {
-      overlay.set(sec);
-      await new Promise((r) => setTimeout(r, 1000));
+    // 1. Kiểm tra ngay xem SePay Webhook đã ghi nhận chưa
+    const check1 = await api('booking', 'check_sepay', { id: S.booking.id });
+    if (check1 && check1.confirmed) {
+      clearInterval(sepayPollingInterval);
+      S.busy = false;
+      toast('Đã ghi nhận tiền chuyển khoản qua MBBank thành công!');
+      return showTicket(check1.booking);
     }
-    const confirmed = await api('booking', 'auto_confirm', { id: S.booking.id });
-    overlay.close();
+
+    // 2. Hiển thị popup đối soát SePay trong 6 giây, kiểm tra mỗi 1 giây
+    let cancelled = false;
+    overlay = showVerifyOverlay(() => {
+      cancelled = true;
+    });
+
+    const waitSeconds = 6;
+    for (let sec = waitSeconds; sec > 0; sec -= 1) {
+      if (cancelled) break;
+      overlay.set(sec, waitSeconds);
+      await new Promise((r) => setTimeout(r, 1000));
+      if (cancelled) break;
+
+      const midCheck = await api('booking', 'check_sepay', { id: S.booking.id });
+      if (midCheck && midCheck.confirmed) {
+        clearInterval(sepayPollingInterval);
+        overlay.close();
+        S.busy = false;
+        toast('Đã ghi nhận tiền chuyển khoản qua MBBank thành công!');
+        return showTicket(midCheck.booking);
+      }
+    }
+
+    if (overlay) overlay.close();
     S.busy = false;
-    showTicket(confirmed);
+    renderStep3();
+
+    if (!cancelled) {
+      toast('Chưa nhận được tiền chuyển khoản cho mã đơn ' + S.booking.code, 'warning');
+      showPaymentPendingModal(S.booking);
+    }
   } catch (error) {
     if (overlay) overlay.close();
     S.busy = false;
-    S.error = error.message;
+    S.error = error.message || 'Lỗi kiểm tra thanh toán';
     renderStep3();
   }
 }
@@ -1440,7 +1592,13 @@ let ticketPollInterval = 0;
 function showTicket(b) {
   clearDraft();
   clearInterval(holdTimer);
+  clearInterval(sepayPollingInterval);
   clearInterval(ticketPollInterval);
+  document.querySelectorAll('.modal-wrapper').forEach((m) => {
+    if (typeof m._closeModal === 'function') m._closeModal();
+    else m.remove();
+  });
+  document.body.style.overflow = '';
   const confirmed = b.status === 'confirmed' || b.status === 'completed';
   const isPending = b.status === 'pending';
   const deposit = b.paymentStatus === 'paid' ? b.totalPrice : b.depositAmount;
