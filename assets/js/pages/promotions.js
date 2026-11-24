@@ -4,7 +4,50 @@ import { WEEKDAY_SHORT, describeConditions, describeDiscount, promotionState } f
 
 const items = (PAGE.promotions || []).filter((p) => ['active', 'upcoming'].includes(promotionState(p)));
 const st = { filter: 'all', keyword: '', copied: '', saved: new Set() };
+const savedMap = new Map();
 let lastCheckedPromo = null;
+
+export function formatVoucherCountdown(expiresAt) {
+  if (!expiresAt) return '';
+  const now = Date.now();
+  const target = new Date(expiresAt).getTime();
+  const diffSec = Math.max(0, Math.floor((target - now) / 1000));
+  if (diffSec <= 0) return 'Đã hết hạn';
+  const d = Math.floor(diffSec / 86400);
+  const h = Math.floor((diffSec % 86400) / 3600);
+  const m = Math.floor((diffSec % 3600) / 60);
+  const s = diffSec % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  if (d > 0) return `${d} ngày ${pad(h)}:${pad(m)}:${pad(s)}`;
+  return `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+
+function tickVoucherCountdowns() {
+  const nodes = document.querySelectorAll('[data-voucher-countdown]');
+  nodes.forEach((el) => {
+    const exp = el.getAttribute('data-voucher-countdown');
+    if (exp) {
+      el.textContent = formatVoucherCountdown(exp);
+    }
+  });
+}
+setInterval(tickVoucherCountdowns, 1000);
+
+async function loadSavedVouchers() {
+  if (!APP.user) return;
+  try {
+    const list = await api('account', 'vouchers');
+    if (Array.isArray(list)) {
+      list.forEach((v) => {
+        const c = (v.code || '').toUpperCase();
+        st.saved.add(c);
+        savedMap.set(c, v);
+      });
+      render();
+    }
+  } catch (e) {}
+}
+loadSavedVouchers();
 const meta = {
   active: ['Đang áp dụng', 'bg-primary-50 text-primary-800', 'bg-primary-500'],
   upcoming: ['Sắp mở', 'bg-secondary-100 text-secondary-900', 'bg-secondary-500'],
@@ -20,6 +63,9 @@ function card(p) {
   const copied = st.copied === p.code;
   const saved = st.saved.has(p.code);
   const headline = p.discountType === 'percent' ? `${p.discountValue}%` : `${Math.round(p.discountValue / 1000)}K`;
+  const claimed = p.claimedCount !== undefined && p.claimedCount !== null ? p.claimedCount : (p.savedCount || 0);
+  const remaining = p.usageLimit ? (p.remainingCount !== undefined && p.remainingCount !== null ? p.remainingCount : Math.max(0, p.usageLimit - claimed)) : null;
+  const isSoldOut = remaining !== null && remaining <= 0;
   return `<article class="flex h-full flex-col overflow-hidden rounded-lg border border-background-200 bg-white transition-shadow hover:shadow-lg">
     <div class="relative flex items-start justify-between gap-3 bg-foreground-950 px-4 py-3.5">
       <div class="min-w-0"><p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-background-300">${isGoldenHour(p) ? 'Ưu đãi giờ vàng' : 'Mã ưu đãi'}</p>
@@ -43,8 +89,33 @@ function card(p) {
         ${p.ownerName ? `<li class="flex items-start gap-2"><i class="ri-store-2-line mt-0.5 shrink-0 text-foreground-400" aria-hidden="true"></i><span class="truncate">Từ ${esc(p.ownerName)}</span></li>` : ''}
       </ul>
       <p class="mt-2.5 rounded-md bg-background-50 px-2.5 py-2 text-[11px] leading-relaxed text-foreground-500">${esc(describeConditions(p))}</p>
-      <div class="mt-auto flex items-center gap-2 pt-4">
-        <button type="button" data-save-voucher="${esc(p.code)}" class="inline-flex flex-1 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md border ${saved ? 'border-primary-300 bg-primary-50 text-primary-800' : 'border-background-300 bg-white text-foreground-800 hover:border-primary-400 hover:text-primary-700'} px-3 py-2.5 text-xs font-semibold transition-colors"><i class="${saved ? 'ri-check-line' : 'ri-wallet-3-line'}" aria-hidden="true"></i>${saved ? 'Đã lưu ví' : 'Lưu ví'}</button>
+      ${p.usageLimit ? `
+        <div class="mt-2.5 rounded-md border ${isSoldOut ? 'border-accent-200 bg-accent-50/70' : 'border-background-200 bg-background-50'} p-2 text-xs">
+          <div class="flex items-center justify-between text-[11px] mb-1">
+            <span class="font-bold flex items-center gap-1 ${isSoldOut ? 'text-accent-800' : (remaining <= 5 ? 'text-accent-700' : 'text-foreground-700')}">
+              <i class="ri-fire-fill ${isSoldOut ? 'text-accent-600' : (remaining <= 5 ? 'text-accent-600 animate-pulse' : 'text-primary-600')}"></i>
+              Đếm ngược số lượng: <span data-remaining-code="${esc(p.code)}" class="font-mono text-xs font-extrabold ${isSoldOut ? 'text-accent-700' : (remaining <= 5 ? 'text-accent-700' : 'text-primary-700')}">Còn ${remaining}/${p.usageLimit}</span>
+            </span>
+            <span class="text-[10px] font-semibold text-foreground-500">${isSoldOut ? '<span class="text-accent-700 font-bold">Đã hết lượt</span>' : (remaining <= 5 ? '<span class="text-accent-600 font-bold">Sắp hết!</span>' : `Đã lưu ${claimed}`)}</span>
+          </div>
+          <div class="h-1.5 w-full rounded-full bg-background-200 overflow-hidden">
+            <div data-remaining-bar="${esc(p.code)}" class="h-full rounded-full ${isSoldOut ? 'bg-accent-600' : (remaining <= 5 ? 'bg-gradient-to-r from-amber-500 to-accent-600' : 'bg-gradient-to-r from-primary-500 to-primary-600')} transition-all duration-300" style="width: ${Math.min(100, Math.round(((p.usageLimit - remaining) / p.usageLimit) * 100))}%"></div>
+          </div>
+        </div>
+      ` : ''}
+      ${saved ? `
+        <div class="mt-2.5 flex items-center justify-between rounded-md border border-accent-200 bg-accent-50/90 px-2.5 py-1.5 text-xs text-accent-900">
+          <span class="flex items-center gap-1.5 font-bold"><i class="ri-timer-flash-line animate-pulse text-accent-600"></i>Đang đếm ngược:</span>
+          <span data-voucher-countdown="${(savedMap.get(p.code) && savedMap.get(p.code).expiresAt) || ''}" class="font-mono text-xs font-extrabold text-accent-700">${formatVoucherCountdown((savedMap.get(p.code) && savedMap.get(p.code).expiresAt) || '')}</span>
+        </div>
+      ` : `
+        <p class="mt-2 flex items-center gap-1 text-[11px] text-foreground-500"><i class="ri-timer-line text-foreground-400"></i>Bắt đầu đếm ngược ${p.countdownHours || 24}h khi lưu vào ví</p>
+      `}
+      <div class="mt-auto flex items-center gap-2 pt-3">
+        ${isSoldOut && !saved
+          ? `<button type="button" disabled class="inline-flex flex-1 cursor-not-allowed items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-background-200 bg-background-100 px-3 py-2.5 text-xs font-semibold text-foreground-400"><i class="ri-close-circle-line"></i>Hết số lượng</button>`
+          : `<button type="button" data-save-voucher="${esc(p.code)}" class="inline-flex flex-1 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md border ${saved ? 'border-primary-300 bg-primary-50 text-primary-800' : 'border-background-300 bg-white text-foreground-800 hover:border-primary-400 hover:text-primary-700'} px-3 py-2.5 text-xs font-semibold transition-colors"><i class="${saved ? 'ri-check-line' : 'ri-wallet-3-line'}" aria-hidden="true"></i>${saved ? 'Đã lưu ví' : 'Lưu ví'}</button>`
+        }
         ${state === 'active'
       ? `<a href="${url(`/dat-san?promo=${encodeURIComponent(p.code)}`)}" class="inline-flex flex-1 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-primary-500 px-3 py-2.5 text-xs font-bold text-white transition-colors hover:bg-primary-600">Đặt sân ngay<i class="ri-arrow-right-line" aria-hidden="true"></i></a>`
       : `<span class="inline-flex flex-1 cursor-not-allowed items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-background-200 px-3 py-2.5 text-xs font-bold text-foreground-500">${state === 'upcoming' ? 'Chưa tới ngày' : 'Tạm dừng'}</span>`
@@ -387,7 +458,7 @@ document.addEventListener('click', async (event) => {
       return;
     }
     try {
-      await api('account', 'voucher_save', {
+      const res = await api('account', 'voucher_save', {
         code: p.code,
         title: p.title,
         description: p.description || describeConditions(p),
@@ -398,7 +469,21 @@ document.addEventListener('click', async (event) => {
         source: p.isWheelPrize ? 'wheel' : 'promo',
       });
       st.saved.add(code);
-      toast(`Đã lưu mã ${code} vào Ví voucher!`);
+      if (res && res.expiresAt) {
+        savedMap.set(code, { code, expiresAt: res.expiresAt });
+      }
+      if (res && res.remainingCount !== undefined && res.remainingCount !== null) {
+        p.remainingCount = res.remainingCount;
+        p.claimedCount = res.claimedCount;
+      } else if (p.usageLimit) {
+        const curClaimed = p.claimedCount || 0;
+        p.claimedCount = curClaimed + 1;
+        p.remainingCount = Math.max(0, p.usageLimit - p.claimedCount);
+      }
+      toast(p.usageLimit
+        ? `Đã lưu mã ${code} vào ví! Đang đếm ngược số lượng: còn ${p.remainingCount}/${p.usageLimit} lượt.`
+        : `Đã lưu mã ${code} vào ví! Bắt đầu đếm ngược thời gian sử dụng.`
+      );
       render();
       const btnInResult = $(`#promo-checker-result [data-save-voucher="${code}"]`);
       if (btnInResult) {
@@ -495,6 +580,20 @@ function renderCheckResult(promo, state, message) {
             ${promo.startTime && promo.endTime ? `<span class="flex items-center gap-1.5 text-accent-700 font-semibold"><i class="ri-time-line"></i>Giờ vàng: ${promo.startTime} - ${promo.endTime}</span>` : ''}
             ${promo.ownerName ? `<span class="flex items-center gap-1.5"><i class="ri-store-2-line text-foreground-400"></i>Áp dụng: ${esc(promo.ownerName)}</span>` : ''}
           </div>
+          ${promo.usageLimit ? `
+            <div class="mt-2 text-xs font-semibold flex items-center gap-1.5 ${promo.remainingCount !== null && promo.remainingCount <= 0 ? 'text-accent-700' : 'text-primary-700'}">
+              <i class="ri-numbers-line"></i>
+              Số lượng phát hành: <b class="font-mono">Còn ${promo.remainingCount !== null && promo.remainingCount !== undefined ? promo.remainingCount : promo.usageLimit}/${promo.usageLimit} lượt</b>
+            </div>
+          ` : ''}
+          ${isSaved ? `
+            <div class="mt-2.5 flex items-center gap-2 rounded-md border border-accent-200 bg-accent-50/90 px-2.5 py-1 text-xs text-accent-900">
+              <span class="font-bold flex items-center gap-1"><i class="ri-timer-flash-line animate-pulse text-accent-600"></i>Đang đếm ngược:</span>
+              <span data-voucher-countdown="${(savedMap.get(promo.code) && savedMap.get(promo.code).expiresAt) || ''}" class="font-mono font-extrabold text-accent-700">${formatVoucherCountdown((savedMap.get(promo.code) && savedMap.get(promo.code).expiresAt) || '')}</span>
+            </div>
+          ` : `
+            <p class="mt-2 text-[11px] text-foreground-500"><i class="ri-timer-line mr-1 text-foreground-400"></i>Bắt đầu đếm ngược ${promo.countdownHours || 24} giờ khi bạn lưu mã vào ví</p>
+          `}
           <p class="mt-2 text-xs font-semibold ${isExhausted ? 'text-accent-700' : 'text-primary-700'} flex items-center gap-1.5"><i class="${isExhausted ? 'ri-error-warning-line text-accent-600' : 'ri-checkbox-circle-line text-primary-600'}"></i>${esc(message || (isExhausted ? 'Mã ưu đãi này đã hết lượt sử dụng.' : 'Mã ưu đãi sẵn sàng áp dụng!'))}</p>
         </div>
 

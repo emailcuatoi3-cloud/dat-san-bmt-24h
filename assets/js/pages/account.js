@@ -298,6 +298,21 @@ function renderRecurring() {
   </div>`;
 }
 
+function formatVoucherCountdown(expiresAt) {
+  if (!expiresAt) return '';
+  const now = Date.now();
+  const target = new Date(expiresAt).getTime();
+  const diffSec = Math.max(0, Math.floor((target - now) / 1000));
+  if (diffSec <= 0) return 'Đã hết hạn';
+  const d = Math.floor(diffSec / 86400);
+  const h = Math.floor((diffSec % 86400) / 3600);
+  const m = Math.floor((diffSec % 3600) / 60);
+  const s = diffSec % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  if (d > 0) return `${d} ngày ${pad(h)}:${pad(m)}:${pad(s)}`;
+  return `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+
 function renderVouchers() {
   if (!user)
     return `<div class="rounded-lg border border-background-200 bg-white p-6 text-center"><span class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary-50 text-primary-600"><i class="ri-coupon-3-line text-2xl"></i></span><p class="mt-4 font-heading text-base font-bold text-foreground-950">Đăng nhập để mở Ví voucher</p><p class="mt-1 text-sm text-foreground-600">Lưu trữ mọi mã giảm giá và quà trúng từ Vòng quay ưu đãi.</p><a href="${url('/dang-nhap?redirect=' + encodeURIComponent('/tai-khoan?tab=vouchers'))}" class="mt-4 inline-block rounded-md bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-600">Đăng nhập</a></div>`;
@@ -306,6 +321,15 @@ function renderVouchers() {
     return loadingBlock('Đang tải ví voucher...');
   }
   const srcLabel = { wheel: 'Vòng quay ưu đãi', promo: 'Trang ưu đãi', system: 'Hệ thống' };
+  st.voucherTab = st.voucherTab || 'all';
+  const availableVouchers = st.vouchers.filter((v) => v.status !== 'used');
+  const usedVouchers = st.vouchers.filter((v) => v.status === 'used');
+  const displayedVouchers = st.voucherTab === 'used'
+    ? usedVouchers
+    : st.voucherTab === 'available'
+      ? availableVouchers
+      : st.vouchers;
+
   return `<div class="flex flex-col gap-4">
     <div class="flex flex-wrap items-end justify-between gap-3 rounded-lg border border-background-200 bg-white p-5">
       <div><h2 class="font-heading text-lg font-bold text-foreground-950">Ví voucher</h2><p class="mt-1 text-sm text-foreground-600">Các mã ưu đãi đã lưu hoặc quay trúng. Sao chép và áp dụng ngay khi đặt sân.</p></div>
@@ -314,19 +338,39 @@ function renderVouchers() {
         <a href="${url('/uu-dai')}" class="inline-flex items-center gap-1.5 rounded-md border border-background-300 px-3.5 py-2 text-xs font-semibold text-foreground-800 hover:border-primary-400">Săn ưu đãi</a>
       </div>
     </div>
-    ${st.vouchers.length ? `<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">${st.vouchers.map((v) => `<article class="flex flex-col rounded-lg border border-background-200 bg-white p-4">
+    <div class="flex flex-wrap gap-2">
+      <button type="button" data-voucher-tab="all" class="cursor-pointer rounded-full px-3.5 py-1 text-xs font-semibold ${st.voucherTab === 'all' ? 'bg-primary-500 text-white shadow-xs' : 'bg-background-200 text-foreground-700 hover:bg-background-300'}">Tất cả (${st.vouchers.length})</button>
+      <button type="button" data-voucher-tab="available" class="cursor-pointer rounded-full px-3.5 py-1 text-xs font-semibold ${st.voucherTab === 'available' ? 'bg-primary-500 text-white shadow-xs' : 'bg-background-200 text-foreground-700 hover:bg-background-300'}">Khả dụng (${availableVouchers.length})</button>
+      <button type="button" data-voucher-tab="used" class="cursor-pointer rounded-full px-3.5 py-1 text-xs font-semibold ${st.voucherTab === 'used' ? 'bg-primary-500 text-white shadow-xs' : 'bg-background-200 text-foreground-700 hover:bg-background-300'}">Đã được sử dụng (${usedVouchers.length})</button>
+    </div>
+    ${displayedVouchers.length ? `<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">${displayedVouchers.map((v) => {
+      const isUsed = v.status === 'used';
+      return `<article class="flex flex-col rounded-lg border border-background-200 ${isUsed ? 'bg-background-50 opacity-80' : 'bg-white'} p-4">
       <div class="flex items-start justify-between gap-2">
-        <span class="rounded bg-primary-50 px-2 py-0.5 font-mono text-xs font-extrabold text-primary-700 border border-primary-200">${esc(v.code)}</span>
-        <span class="rounded-full bg-background-100 px-2 py-0.5 text-[10px] font-semibold text-foreground-600">${srcLabel[v.source] || 'Ưu đãi'}</span>
+        <span class="rounded ${isUsed ? 'bg-background-200 text-foreground-600 border-background-300' : 'bg-primary-50 text-primary-700 border-primary-200'} px-2 py-0.5 font-mono text-xs font-extrabold border">${esc(v.code)}</span>
+        <div class="flex items-center gap-1.5">
+          ${isUsed ? `<span class="rounded-full bg-accent-100 px-2 py-0.5 text-[10px] font-bold text-accent-800">Đã được sử dụng</span>` : ''}
+          <span class="rounded-full bg-background-100 px-2 py-0.5 text-[10px] font-semibold text-foreground-600">${srcLabel[v.source] || 'Ưu đãi'}</span>
+        </div>
       </div>
       <h3 class="mt-2.5 font-heading text-sm font-bold text-foreground-950">${esc(v.title)}</h3>
       <p class="mt-1 text-xs text-foreground-600">${esc(v.description || '')}</p>
-      <p class="mt-2 text-[11px] text-foreground-500">${v.expiresAt ? `HSD: ${formatShortDate(v.expiresAt)}` : 'Không giới hạn hạn dùng'}${v.minOrder ? ` · Đơn từ ${formatVnd(v.minOrder)}` : ''}</p>
+      ${!isUsed && v.expiresAt ? `
+        <div class="mt-2.5 flex items-center justify-between rounded-md border border-accent-200 bg-accent-50/80 px-2.5 py-1.5 text-xs text-accent-900">
+          <span class="flex items-center gap-1.5 font-bold"><i class="ri-timer-flash-line animate-pulse text-accent-600"></i>Đang đếm ngược:</span>
+          <span data-voucher-countdown="${v.expiresAt}" class="font-mono text-xs font-extrabold text-accent-700">${formatVoucherCountdown(v.expiresAt)}</span>
+        </div>
+      ` : !isUsed ? `<p class="mt-2 text-[11px] text-foreground-500">Không giới hạn hạn dùng</p>` : ''}
+      <p class="mt-1.5 text-[11px] text-foreground-500">${v.expiresAt ? `HSD: ${formatShortDate(v.expiresAt)}` : ''}${v.minOrder ? ` · Đơn từ ${formatVnd(v.minOrder)}` : ''}</p>
       <div class="mt-auto flex gap-2 pt-3">
-        <button type="button" data-copy-voucher="${esc(v.code)}" class="flex-1 cursor-pointer rounded-md border border-background-300 px-3 py-2 text-xs font-semibold text-foreground-800 hover:border-primary-400"><i class="ri-file-copy-line mr-1"></i>Sao chép</button>
-        <a href="${url(`/dat-san?promo=${encodeURIComponent(v.code)}`)}" class="flex-1 text-center rounded-md bg-primary-500 px-3 py-2 text-xs font-bold text-white hover:bg-primary-600">Dùng ngay</a>
+        ${isUsed
+          ? `<span class="w-full text-center rounded-md bg-background-200 px-3 py-2 text-xs font-semibold text-foreground-400 cursor-not-allowed">Đã được sử dụng</span>`
+          : `<button type="button" data-copy-voucher="${esc(v.code)}" class="flex-1 cursor-pointer rounded-md border border-background-300 px-3 py-2 text-xs font-semibold text-foreground-800 hover:border-primary-400"><i class="ri-file-copy-line mr-1"></i>Sao chép</button>
+             <a href="${url(`/dat-san?promo=${encodeURIComponent(v.code)}`)}" class="flex-1 text-center rounded-md bg-primary-500 px-3 py-2 text-xs font-bold text-white hover:bg-primary-600">Dùng ngay</a>`
+        }
       </div>
-    </article>`).join('')}</div>` : emptyState('ri-coupon-3-line', 'Ví voucher đang trống', 'Hãy ghé trang Ưu đãi hoặc Vòng quay ưu đãi để săn mã giảm giá lưu vào ví nhé.')}
+    </article>`;
+    }).join('')}</div>` : emptyState('ri-coupon-3-line', st.voucherTab === 'used' ? 'Chưa có voucher nào đã sử dụng' : 'Ví voucher đang trống', st.voucherTab === 'used' ? 'Khi bạn áp dụng mã giảm giá để đặt sân, các mã đã sử dụng sẽ nằm tại đây.' : 'Hãy ghé trang Ưu đãi hoặc Vòng quay ưu đãi để săn mã giảm giá lưu vào ví nhé.')}
   </div>`;
 }
 
@@ -402,11 +446,12 @@ function openRecurringModal() {
   });
 }
 
-// ---------------- Bộ đếm ngược giữ sân ----------------
+// ---------------- Bộ đếm ngược giữ sân & ví voucher ----------------
 let countdownInterval = null;
 function tickCountdowns() {
   const nodes = document.querySelectorAll('[data-countdown]');
-  if (!nodes.length) {
+  const voucherNodes = document.querySelectorAll('[data-voucher-countdown]');
+  if (!nodes.length && !voucherNodes.length) {
     if (countdownInterval) {
       clearInterval(countdownInterval);
       countdownInterval = null;
@@ -421,6 +466,12 @@ function tickCountdowns() {
     el.textContent = formatCountdown(sec);
     if (sec <= 0) hasExpired = true;
   });
+  voucherNodes.forEach((el) => {
+    const exp = el.getAttribute('data-voucher-countdown');
+    if (exp) {
+      el.textContent = formatVoucherCountdown(exp);
+    }
+  });
   if (hasExpired) {
     clearInterval(countdownInterval);
     countdownInterval = null;
@@ -430,7 +481,7 @@ function tickCountdowns() {
 
 function startCountdownTicker() {
   if (countdownInterval) clearInterval(countdownInterval);
-  const nodes = document.querySelectorAll('[data-countdown]');
+  const nodes = document.querySelectorAll('[data-countdown], [data-voucher-countdown]');
   if (nodes.length) {
     countdownInterval = setInterval(tickCountdowns, 1000);
   }
@@ -661,6 +712,11 @@ document.addEventListener('click', (e) => {
   const ifl = t.closest('[data-ifilter]');
   if (ifl) {
     st.invoiceFilter = ifl.dataset.ifilter;
+    return render();
+  }
+  const vtb = t.closest('[data-voucher-tab]');
+  if (vtb) {
+    st.voucherTab = vtb.dataset.voucherTab;
     return render();
   }
   if (t.closest('[data-export]')) return exportInvoices(st.invoices, 'hoa-don-cua-toi.csv');

@@ -307,6 +307,10 @@ function map_promotion(array $r): array
         'startTime' => $r['start_time'],
         'endTime' => $r['end_time'],
         'usageLimit' => $r['usage_limit'] !== null ? (int) $r['usage_limit'] : null,
+        'countdownHours' => isset($r['countdown_hours']) && $r['countdown_hours'] !== null ? (int) $r['countdown_hours'] : 24,
+        'savedCount' => isset($r['saved_count']) && $r['saved_count'] !== null ? (int) $r['saved_count'] : null,
+        'claimedCount' => isset($r['claimed_count']) && $r['claimed_count'] !== null ? (int) $r['claimed_count'] : null,
+        'remainingCount' => isset($r['remaining_count']) && $r['remaining_count'] !== null ? (int) $r['remaining_count'] : null,
         'status' => $r['status'],
         'createdAt' => iso($r['created_at']),
         'updatedAt' => iso($r['updated_at']),
@@ -316,6 +320,20 @@ function map_promotion(array $r): array
 function promo_used_count(string $code): int
 {
     return (int) q_val("SELECT COUNT(*) FROM bookings WHERE promo_code = ? AND status <> 'cancelled'", [$code]);
+}
+
+/** Đếm tổng số lượng mã đã được người dùng nhận (lưu vào ví) hoặc dùng đặt sân */
+function promo_claimed_count(string $code): int
+{
+    $code = strtoupper(trim($code));
+    $saved = (int) q_val("SELECT COUNT(*) FROM user_vouchers WHERE UPPER(code) = ?", [$code]);
+    $directBookings = (int) q_val("SELECT COUNT(*) FROM bookings b
+                                   WHERE UPPER(b.promo_code) = ?
+                                     AND b.status <> 'cancelled'
+                                     AND (b.customer_id IS NULL OR b.customer_id NOT IN (
+                                         SELECT uv.user_id FROM user_vouchers uv WHERE UPPER(uv.code) = ?
+                                     ))", [$code, $code]);
+    return $saved + $directBookings;
 }
 
 /** Tính tiền giảm (làm tròn nghìn) — giống utils/promotions.js. */

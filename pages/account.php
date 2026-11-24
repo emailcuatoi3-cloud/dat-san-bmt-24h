@@ -66,6 +66,7 @@ render_page([
         <p class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-foreground-500"><i class="ri-customer-service-2-line text-primary-600" aria-hidden="true"></i>Cần hỗ trợ</p>
         <a href="tel:<?= preg_replace('/\D/', '', HOTLINE) ?>" class="mt-2 flex items-center gap-2 text-sm font-semibold text-primary-600 hover:text-primary-700"><i class="ri-phone-line" aria-hidden="true"></i><?= HOTLINE ?></a>
         <a href="<?= url('/lien-he') ?>" class="mt-1.5 flex items-center gap-2 text-sm font-medium text-foreground-700 hover:text-primary-700"><i class="ri-mail-line" aria-hidden="true"></i>Gửi yêu cầu hỗ trợ</a>
+        <button type="button" data-open-chatbot-history class="mt-2.5 flex w-full cursor-pointer items-center justify-between rounded-md border border-background-200 bg-background-50 px-3 py-2 text-xs font-semibold text-foreground-800 transition-colors hover:border-primary-400 hover:bg-white hover:text-primary-700"><span class="flex items-center gap-2"><i class="ri-history-line text-primary-600 text-sm" aria-hidden="true"></i>Lịch sử tư vấn AI</span><i class="ri-arrow-right-s-line text-foreground-400" aria-hidden="true"></i></button>
         <?php if ($u): ?><button type="button" data-logout class="mt-3 flex w-full items-center gap-2 border-t border-background-200 pt-3 text-xs font-semibold text-foreground-500 hover:text-accent-700"><i class="ri-logout-box-r-line" aria-hidden="true"></i><span>Đăng xuất khỏi tài khoản</span></button><?php endif; ?>
       </div>
     </aside>

@@ -159,6 +159,15 @@ function render_ghost_login_banner(): void
         </a>
       </div>
     </aside>
+    <script>
+      (function(){
+        var b = document.getElementById('ghost-login-banner');
+        if (b) {
+          var h = b.offsetHeight || 44;
+          document.documentElement.style.setProperty('--ghost-banner-height', h + 'px');
+        }
+      })();
+    </script>
     <?php
 }
 
@@ -184,7 +193,7 @@ function render_page(array $opt, callable $content): void
   <div class="site-backdrop pointer-events-none fixed inset-0 z-0" aria-hidden="true"></div>
   <div class="relative z-10 flex min-h-screen flex-col">
     <?php render_site_header($transparent); ?>
-    <?php if (!$transparent): ?><div class="<?= $imp ? 'h-[118px]' : 'h-[72px]' ?> shrink-0" aria-hidden="true"></div><?php endif; ?>
+    <?php if (!$transparent): ?><div style="<?= $imp ? 'height: calc(72px + var(--ghost-banner-height, 44px));' : 'height: 72px;' ?>" class="shrink-0" aria-hidden="true"></div><?php endif; ?>
     <main class="flex-1"><?php $content(); ?></main>
     <?php render_site_footer(); ?>
   </div>
@@ -193,7 +202,7 @@ function render_page(array $opt, callable $content): void
 </div>
 <?php render_toast_root(); ?>
 <?php render_scripts($opt); ?>
-  <script type="module" src="<?= asset('js/core/chatbot.js') ?>"></script>
+  <script type="module" src="<?= asset('js/core/chatbot.js') ?>&t=<?= filemtime(__DIR__ . '/../assets/js/core/chatbot.js') ?>"></script>
 </body>
 </html>
 <?php

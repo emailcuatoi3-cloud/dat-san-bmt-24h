@@ -229,12 +229,13 @@ run_api([
             'id' => $r['id'], 'code' => $r['code'], 'title' => $r['title'], 'description' => $r['description'],
             'discountType' => $r['discount_type'], 'discountValue' => (int) $r['discount_value'],
             'minOrder' => (int) $r['min_order'], 'source' => $r['source'], 'status' => $r['status'],
-            'expiresAt' => $r['expires_at'], 'createdAt' => iso($r['created_at']),
+            'expiresAt' => $r['expires_at'] ? iso($r['expires_at']) : null, 'createdAt' => iso($r['created_at']),
         ], $rows);
     },
 
     'voucher_save' => function () {
         $u = api_require_login();
+        ensure_sitemap_schema();
         $code = strtoupper(trim(in_str('code')));
         if (!$code) fail('Mã voucher không hợp lệ.');
         $title = in_str('title') ?: ('Mã ưu đãi ' . $code);
@@ -243,11 +244,51 @@ run_api([
         $dval = in_int('discountValue');
         $minOrder = in_int('minOrder');
         $source = in_array(in_str('source'), ['promo', 'wheel', 'system'], true) ? in_str('source') : 'promo';
-        $expires = in_str('expiresAt') ?: date('Y-m-d', strtotime('+30 days'));
+
+        // Bắt đầu đếm ngược thời hạn và số lượng sử dụng ngay khi người dùng bấm lưu mã
+        $promo = q_one('SELECT * FROM promotions WHERE UPPER(code) = ?', [$code]);
+        if ($promo && !empty($promo['usage_limit'])) {
+            $limit = (int) $promo['usage_limit'];
+            $claimed = promo_claimed_count($code);
+            $alreadySaved = (bool) q_val("SELECT COUNT(*) FROM user_vouchers WHERE user_id = ? AND UPPER(code) = ?", [$u['id'], $code]);
+            if (!$alreadySaved && $claimed >= $limit) {
+                fail('Mã ưu đãi này đã hết số lượng phát hành (giới hạn ' . $limit . ' lượt).');
+            }
+        }
+        $cdHours = $promo && !empty($promo['countdown_hours']) ? (int) $promo['countdown_hours'] : 24;
+
+        $now = time();
+        $expireTs = $now + $cdHours * 3600;
+
+        // Nếu chương trình khuyến mãi có ngày kết thúc sớm hơn thì dùng thời điểm 23:59:59 của ngày đó
+        if ($promo && !empty($promo['end_date'])) {
+            $campaignEndTs = strtotime($promo['end_date'] . ' 23:59:59');
+            if ($campaignEndTs > $now && $campaignEndTs < $expireTs) {
+                $expireTs = $campaignEndTs;
+            }
+        }
+
+        $expires = date('Y-m-d H:i:s', $expireTs);
+
         q('INSERT INTO user_vouchers (id, user_id, code, title, description, discount_type, discount_value, min_order, source, status, expires_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)
            ON DUPLICATE KEY UPDATE title = VALUES(title), description = VALUES(description), expires_at = VALUES(expires_at), status = "available"',
             [uid('uv-'), $u['id'], $code, $title, $desc, $dtype, $dval, $minOrder, $source, 'available', $expires]);
-        return true;
+
+        $newClaimed = promo_claimed_count($code);
+        $savedCount = (int) q_val("SELECT COUNT(*) FROM user_vouchers WHERE UPPER(code) = ?", [$code]);
+        $remaining = $promo && !empty($promo['usage_limit']) ? max(0, (int) $promo['usage_limit'] - $newClaimed) : null;
+
+        return [
+            'ok' => true,
+            'code' => $code,
+            'expiresAt' => iso($expires),
+            'countdownHours' => $cdHours,
+            'countdownSeconds' => max(0, $expireTs - $now),
+            'savedCount' => $savedCount,
+            'claimedCount' => $newClaimed,
+            'remainingCount' => $remaining,
+            'usageLimit' => $promo && !empty($promo['usage_limit']) ? (int) $promo['usage_limit'] : null,
+        ];
     },
 
     'wheel_spin' => function () {
@@ -269,7 +310,7 @@ run_api([
         $desc = mb_substr(in_str('description'), 0, 290);
         $dtype = in_array(in_str('discountType'), ['percent', 'amount', 'gift'], true) ? in_str('discountType') : 'percent';
         $dval = in_int('discountValue');
-        $expires = date('Y-m-d', strtotime('+30 days'));
+        $expires = date('Y-m-d H:i:s', time() + 48 * 3600);
         q('INSERT INTO wheel_spins (id, user_id, prize_code, prize_title, prize_desc) VALUES (?,?,?,?,?)',
             [uid('ws-'), $u['id'], $code, $title, $desc]);
         q('INSERT INTO user_vouchers (id, user_id, code, title, description, discount_type, discount_value, min_order, source, status, expires_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)
@@ -280,6 +321,7 @@ run_api([
             'code' => $code,
             'title' => $title,
             'desc' => $desc,
+            'expiresAt' => iso($expires),
         ];
     },
 

@@ -806,6 +806,25 @@ function renderPromo() {
     ${S.promoError ? `<p class="mt-1.5 flex items-start gap-1 text-xs text-accent-700"><i class="ri-error-warning-line mt-0.5" aria-hidden="true"></i>${esc(S.promoError)}</p>` : ''}`;
 }
 
+function formatVoucherCountdown(expiresAt) {
+  if (!expiresAt) return '';
+  const exp = new Date(expiresAt).getTime();
+  const now = Date.now();
+  const diff = exp - now;
+  if (isNaN(exp) || diff <= 0) return 'Đã hết hạn';
+  const totalSecs = Math.floor(diff / 1000);
+  const hours = Math.floor(totalSecs / 3600);
+  const mins = Math.floor((totalSecs % 3600) / 60);
+  const secs = totalSecs % 60;
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24);
+    const remH = hours % 24;
+    return `${days} ngày ${remH}h ${mins}m`;
+  }
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(hours)}:${pad(mins)}:${pad(secs)}`;
+}
+
 let voucherModalTab = 'all';
 
 async function openVoucherModal() {
@@ -864,6 +883,11 @@ async function openVoucherModal() {
       }
     }
 
+    if (eligible && !p.isUserVoucher && p.usageLimit && p.remainingCount !== null && p.remainingCount !== undefined && p.remainingCount <= 0) {
+      eligible = false;
+      reason = 'Mã ưu đãi này đã hết số lượng phát hành.';
+    }
+
     return {
       ...p,
       eligible,
@@ -906,8 +930,16 @@ async function openVoucherModal() {
                 <h4 class="mt-1 font-heading text-sm font-bold text-foreground-950 truncate">${esc(item.title)}</h4>
                 <p class="text-xs text-foreground-600 line-clamp-1">${esc(describeDiscount(item))} &bull; ${esc(describeConditions(item))}</p>
                 <div class="mt-1 flex flex-wrap items-center gap-3 text-[11px]">
-                  <span class="text-foreground-400 flex items-center gap-1"><i class="ri-time-line"></i>HSD: ${esc(endFormatted)}</span>
+                  ${item.isUserVoucher && item.expiresAt ? `
+                    <span class="flex items-center gap-1 font-bold text-accent-700 bg-accent-50 px-2 py-0.5 rounded border border-accent-200">
+                      <i class="ri-timer-flash-line animate-pulse"></i>
+                      Còn <span data-voucher-countdown="${item.expiresAt}">${formatVoucherCountdown(item.expiresAt)}</span>
+                    </span>
+                  ` : `
+                    <span class="text-foreground-400 flex items-center gap-1"><i class="ri-time-line"></i>HSD: ${esc(endFormatted)}</span>
+                  `}
                   ${item.discountAmount > 0 ? `<span class="font-bold text-emerald-700 flex items-center gap-0.5"><i class="ri-checkbox-circle-fill"></i>Tiết kiệm: -${formatVnd(item.discountAmount)}</span>` : ''}
+                  ${item.usageLimit ? `<span class="text-foreground-500 font-mono text-[10px] flex items-center gap-0.5"><i class="ri-numbers-line"></i>Còn ${item.remainingCount !== undefined && item.remainingCount !== null ? item.remainingCount : item.usageLimit}/${item.usageLimit}</span>` : ''}
                 </div>
               </div>
             </div>
@@ -934,6 +966,12 @@ async function openVoucherModal() {
                 </div>
                 <h4 class="mt-1 font-heading text-sm font-semibold text-foreground-800 truncate">${esc(item.title)}</h4>
                 <p class="text-xs text-foreground-500 line-clamp-1">${esc(describeDiscount(item))} &bull; ${esc(describeConditions(item))}</p>
+                ${item.isUserVoucher && item.expiresAt ? `
+                  <div class="mt-1.5 flex items-center gap-1 text-[11px] font-bold text-accent-700">
+                    <i class="ri-timer-line"></i>
+                    Còn <span data-voucher-countdown="${item.expiresAt}">${formatVoucherCountdown(item.expiresAt)}</span>
+                  </div>
+                ` : ''}
                 <div class="mt-2 flex items-start gap-1.5 rounded-md border border-amber-200/80 bg-amber-50/90 px-2.5 py-1.5 text-xs font-medium text-amber-800">
                   <i class="ri-error-warning-line shrink-0 text-amber-600 mt-0.5"></i>
                   <span>${esc(item.reason)}</span>
@@ -1059,6 +1097,17 @@ async function openVoucherModal() {
   });
 
   const modalEl = modalInstance.el;
+
+  const cdTimer = setInterval(() => {
+    if (!modalEl || !document.body.contains(modalEl)) {
+      clearInterval(cdTimer);
+      return;
+    }
+    modalEl.querySelectorAll('[data-voucher-countdown]').forEach((el) => {
+      const exp = el.getAttribute('data-voucher-countdown');
+      if (exp) el.textContent = formatVoucherCountdown(exp);
+    });
+  }, 1000);
 
   modalEl.addEventListener('click', async (e) => {
     const tabBtn = e.target.closest('[data-vtab]');

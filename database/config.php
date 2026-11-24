@@ -47,7 +47,7 @@ define('FACEBOOK_APP_ID', getenv('FACEBOOK_APP_ID') ?: '');
 define('FACEBOOK_APP_SECRET', getenv('FACEBOOK_APP_SECRET') ?: '');
 define('CHATBOT_PROVIDER', strtolower(trim((string)(getenv('CHATBOT_PROVIDER') ?: 'gemini'))));
 define('CHATBOT_API_KEY', getenv('CHATBOT_API_KEY') ?: '');
-define('CHATBOT_MODEL', trim((string)(getenv('CHATBOT_MODEL') ?: '')));
+define('CHATBOT_MODEL', trim((string)(getenv('CHATBOT_MODEL') ?: 'gemini-flash-lite-latest')));
 
 // ---- Cổng Webhook thanh toán tự động (SePay / PayOS / Ngân hàng) ----
 define('WEBHOOK_PAYMENT_API_KEY', 'LANEZCK7GWTCZMDU1DJPMMB83LUVJLQLAUV2J9ARBYXM6C9VSPHYVKW5HKJXPIOH');

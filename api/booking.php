@@ -155,7 +155,36 @@ function taken_slots(string $courtId, string $date, string $excludeId = ''): arr
 function find_active_promo(string $code): ?array
 {
     $row = q_one("SELECT * FROM promotions WHERE code = ? AND status = 'active'", [strtoupper($code)]);
-    return $row ? map_promotion($row) : null;
+    if ($row) return map_promotion($row);
+
+    $u = current_user();
+    if ($u) {
+        $uv = q_one("SELECT * FROM user_vouchers WHERE user_id = ? AND UPPER(code) = ? AND status = 'available' AND (expires_at IS NULL OR expires_at >= NOW())", [$u['id'], strtoupper($code)]);
+        if ($uv) {
+            return [
+                'id' => $uv['id'],
+                'ownerId' => null,
+                'ownerName' => 'Ví cá nhân',
+                'code' => strtoupper($uv['code']),
+                'title' => $uv['title'],
+                'description' => $uv['description'],
+                'discountType' => $uv['discount_type'],
+                'discountValue' => (int) $uv['discount_value'],
+                'maxDiscount' => null,
+                'minOrder' => (int) $uv['min_order'],
+                'startDate' => substr($uv['created_at'], 0, 10),
+                'endDate' => $uv['expires_at'] ? substr($uv['expires_at'], 0, 10) : '2099-12-31',
+                'expiresAt' => $uv['expires_at'] ? iso($uv['expires_at']) : null,
+                'weekdays' => [],
+                'startTime' => '',
+                'endTime' => '',
+                'usageLimit' => 1,
+                'status' => 'active',
+                'isUserVoucher' => true,
+            ];
+        }
+    }
+    return null;
 }
 
 function booking_by_code(string $code): ?array
@@ -188,10 +217,19 @@ run_api([
 
     // Danh sách toàn bộ mã giảm giá đang hoạt động trên hệ thống (và ví cá nhân nếu đăng nhập)
     'promotions' => function () {
-        $promos = array_map('map_promotion', q_all("SELECT * FROM promotions WHERE status = 'active' AND end_date >= CURDATE() ORDER BY discount_value DESC, updated_at DESC"));
+        $promos = array_map(function ($r) {
+            $p = map_promotion($r);
+            $c = strtoupper($p['code']);
+            $claimed = promo_claimed_count($c);
+            $saved = (int) q_val("SELECT COUNT(*) FROM user_vouchers WHERE UPPER(code) = ?", [$c]);
+            $p['savedCount'] = $saved;
+            $p['claimedCount'] = $claimed;
+            $p['remainingCount'] = $p['usageLimit'] ? max(0, $p['usageLimit'] - $claimed) : null;
+            return $p;
+        }, q_all("SELECT * FROM promotions WHERE status = 'active' AND end_date >= CURDATE() ORDER BY discount_value DESC, updated_at DESC"));
         $u = current_user();
         if ($u) {
-            $uvs = q_all("SELECT * FROM user_vouchers WHERE user_id = ? AND status = 'available' AND (expires_at IS NULL OR expires_at >= CURDATE())", [$u['id']]);
+            $uvs = q_all("SELECT * FROM user_vouchers WHERE user_id = ? AND status = 'available' AND (expires_at IS NULL OR expires_at >= NOW())", [$u['id']]);
             $existingCodes = array_map(fn($p) => strtoupper($p['code']), $promos);
             foreach ($uvs as $uv) {
                 $c = strtoupper($uv['code']);
@@ -208,7 +246,8 @@ run_api([
                         'maxDiscount' => null,
                         'minOrder' => (int) $uv['min_order'],
                         'startDate' => substr($uv['created_at'], 0, 10),
-                        'endDate' => $uv['expires_at'] ?: '2099-12-31',
+                        'endDate' => $uv['expires_at'] ? substr($uv['expires_at'], 0, 10) : '2099-12-31',
+                        'expiresAt' => $uv['expires_at'] ? iso($uv['expires_at']) : null,
                         'weekdays' => [],
                         'startTime' => '',
                         'endTime' => '',
@@ -254,15 +293,19 @@ run_api([
         $row = q_one('SELECT * FROM promotions WHERE UPPER(code) = ?', [$code]);
         if ($row) {
             $p = map_promotion($row);
-            $usedCount = promo_used_count($row['code']);
-            $isLimitReached = $p['usageLimit'] && $p['usageLimit'] > 0 && $usedCount >= $p['usageLimit'];
+            $claimedCount = promo_claimed_count($row['code']);
+            $savedCount = (int) q_val("SELECT COUNT(*) FROM user_vouchers WHERE UPPER(code) = ?", [strtoupper($row['code'])]);
+            $p['savedCount'] = $savedCount;
+            $p['claimedCount'] = $claimedCount;
+            $p['remainingCount'] = $p['usageLimit'] ? max(0, $p['usageLimit'] - $claimedCount) : null;
+            $isLimitReached = $p['usageLimit'] && $p['usageLimit'] > 0 && $claimedCount >= $p['usageLimit'];
 
             if ($isLimitReached) {
                 return [
                     'found' => true,
                     'promotion' => $p,
                     'state' => 'exhausted',
-                    'message' => 'Mã ưu đãi này đã hết lượt sử dụng.',
+                    'message' => 'Mã ưu đãi này đã hết số lượng phát hành (tối đa ' . $p['usageLimit'] . ' lượt).',
                 ];
             }
 
@@ -330,7 +373,7 @@ run_api([
         if ($u) {
             $uv = q_one('SELECT * FROM user_vouchers WHERE user_id = ? AND UPPER(code) = ?', [$u['id'], $code]);
             if ($uv) {
-                $isExpired = $uv['expires_at'] && $uv['expires_at'] < $today;
+                $isExpired = $uv['expires_at'] && strtotime($uv['expires_at']) < time();
                 $isUsed = $uv['status'] === 'used';
                 $promo = [
                     'id' => $uv['id'],
@@ -344,7 +387,8 @@ run_api([
                     'maxDiscount' => null,
                     'minOrder' => (int) $uv['min_order'],
                     'startDate' => substr($uv['created_at'], 0, 10),
-                    'endDate' => $uv['expires_at'] ?: date('Y-m-d', strtotime('+30 days')),
+                    'endDate' => $uv['expires_at'] ? substr($uv['expires_at'], 0, 10) : date('Y-m-d', strtotime('+30 days')),
+                    'expiresAt' => $uv['expires_at'] ? iso($uv['expires_at']) : null,
                     'weekdays' => [],
                     'startTime' => '',
                     'endTime' => '',

@@ -31,55 +31,43 @@ function build_venue_context(): string
         $lines[] = "- Hotline hỗ trợ 24/7: {$hotline}";
         $lines[] = "- Khu vực hoạt động: {$siteAddress}";
         $lines[] = "- Chính sách cọc giữ chỗ: {$depositRate}% tổng tiền sân qua chuyển khoản VietQR (thời gian giữ chỗ thanh toán: {$holdMinutes} phút).";
-        $lines[] = "- Chính sách hủy sân: Hoàn 100% tiền cọc khi hủy trước giờ chơi từ {$cutoffHours} giờ trở lên. Trong vòng {$cutoffHours} giờ trước giờ nhận sân, tính năng hủy online sẽ tự động khóa để bảo vệ quyền lợi chủ sân, khách hàng cần liên hệ hotline để được hỗ trợ.";
+        $lines[] = "- Chính sách hủy sân: Hoàn 100% tiền cọc khi hủy trước giờ chơi từ {$cutoffHours} giờ trở lên. Dưới {$cutoffHours} giờ tính năng hủy online sẽ tự động khóa, khách hàng cần liên hệ hotline để được hỗ trợ.";
         if ($generalPolicy) {
             $lines[] = "- Lưu ý quy định: " . trim(preg_replace('/\s+/', ' ', $generalPolicy));
         }
 
         $lines[] = "";
-        $lines[] = "DANH SÁCH SÂN BÓNG ĐÁ VÀ CẦU LÔNG ĐANG HOẠT ĐỘNG TẠI BUÔN MA THUỘT:";
+        $lines[] = "DANH SÁCH SÂN VÀ GIÁ TẠI BUÔN MA THUỘT:";
 
-        $courts = q_all("SELECT id, name, sport, sport_label, area, address, price_per_hour, peak_price, price_note, open_time, close_time, facilities, highlights 
+        $courts = q_all("SELECT name, sport, sport_label, area, price_per_hour, peak_price 
                          FROM courts 
                          WHERE deleted_at IS NULL AND status = 'active' 
                          ORDER BY sort_order ASC, name ASC");
 
         if (!empty($courts)) {
             foreach ($courts as $c) {
-                $sport = $c['sport_label'] ?: ($c['sport'] === 'badminton' ? 'Sân cầu lông' : 'Sân bóng đá');
+                $sport = $c['sport_label'] ?: ($c['sport'] === 'badminton' ? 'Cầu lông' : 'Bóng đá');
                 $priceStr = number_format((int)$c['price_per_hour'], 0, ',', '.') . 'đ/h';
                 if (!empty($c['peak_price']) && (int)$c['peak_price'] > (int)$c['price_per_hour']) {
-                    $priceStr .= ' (Giờ cao điểm: ' . number_format((int)$c['peak_price'], 0, ',', '.') . 'đ/h)';
+                    $priceStr .= ' (Cao điểm: ' . number_format((int)$c['peak_price'], 0, ',', '.') . 'đ/h)';
                 }
-                if (!empty($c['price_note'])) {
-                    $priceStr .= ' - ' . $c['price_note'];
-                }
-                $hours = ($c['open_time'] && $c['close_time']) ? "{$c['open_time']} - {$c['close_time']}" : "05:00 - 23:00";
-                
-                $facilitiesList = '';
-                if (!empty($c['facilities'])) {
-                    $fac = is_array($c['facilities']) ? $c['facilities'] : json_decode((string)$c['facilities'], true);
-                    if (is_array($fac) && !empty($fac)) {
-                        $facilitiesList = ' • Tiện ích: ' . implode(', ', array_slice($fac, 0, 4));
-                    }
-                }
-
-                $lines[] = "• [{$c['name']}] ({$sport} - Khu vực: {$c['area']}): Địa chỉ {$c['address']}. Giờ mở cửa: {$hours}. Giá: {$priceStr}{$facilitiesList}.";
+                $lines[] = "• {$c['name']} ({$sport} - {$c['area']}): {$priceStr}";
             }
         } else {
-            $lines[] = "Hệ thống có các sân bóng đá mini (5-7 người) và cụm sân cầu lông tiêu chuẩn trên địa bàn Buôn Ma Thuột với mức giá từ 65.000đ đến 400.000đ/giờ, mở cửa từ 05:00 đến 23:00 hàng ngày.";
+            $lines[] = "• Hệ thống có các sân bóng đá mini và cầu lông tại BMT giá từ 65.000đ đến 400.000đ/h.";
         }
 
         $lines[] = "";
-        $lines[] = "QUY TẮC TƯ VẤN CHO KHÁCH HÀNG:";
-        $lines[] = "1. Trả lời bằng tiếng Việt tự nhiên, ngắn gọn, súc tích, lịch sự và hữu ích.";
-        $lines[] = "2. Ưu tiên cung cấp chính xác tên sân, mức giá, địa chỉ và khung giờ có trong danh sách trên.";
-        $lines[] = "3. Hướng dẫn khách hàng chọn sân và bấm \"Đặt sân\" trực tiếp trên website hoặc gọi Hotline {$hotline} khi cần hỗ trợ gấp.";
+        $lines[] = "QUY TẮC TƯ VẤN (BẮT BUỘC ĐỂ PHẢN HỒI NHANH VÀ CHÍNH XÁC):";
+        $lines[] = "1. Trả lời bằng tiếng Việt tự nhiên, NGẮN GỌN, SÚC TÍCH, đi thẳng vào câu hỏi của khách (dưới 120 từ).";
+        $lines[] = "2. Khi khách hỏi giá hoặc tìm sân nói chung: Tóm tắt khoảng giá theo từng môn (Bóng đá: 150k - 400k/h; Cầu lông: 65k - 130k/h), sau đó chỉ chọn nêu 3-4 sân tiêu biểu. TUYỆT ĐỐI KHÔNG liệt kê toàn bộ mọi sân trong hệ thống để câu trả lời được gửi đi tức thì và dễ đọc trên di động.";
+        $lines[] = "3. Khi khách hỏi cụ thể về 1 sân hoặc 1 khu vực: Cung cấp đầy đủ giá, địa chỉ và khung giờ của sân đó.";
+        $lines[] = "4. Luôn kết thúc câu trả lời hoàn chỉnh, chu đáo, không bao giờ ngắt câu dở dang. Mời khách đặt sân hoặc gọi Hotline {$hotline} khi cần hỗ trợ nhanh.";
 
         return implode("\n", $lines);
     } catch (Throwable $e) {
         error_log('build_venue_context error: ' . $e->getMessage());
-        return "Bạn là Trợ lý AI tư vấn đặt sân thể thao Đặt Sân BMT 24H. Hotline: 0262 399 8888. Hỗ trợ đặt sân bóng đá và cầu lông tại Buôn Ma Thuột. Chính sách cọc 30% qua VietQR, hủy trước 4 giờ hoàn cọc 100%.";
+        return "Bạn là Trợ lý AI tư vấn đặt sân thể thao Đặt Sân BMT 24H. Hotline: 0262 399 8888. Hỗ trợ đặt sân bóng đá và cầu lông tại Buôn Ma Thuột. Chính sách cọc 30% qua VietQR, hủy trước 4 giờ hoàn cọc 100%. Sân bóng BMT Arena giá 180.000đ/h.";
     }
 }
 
@@ -131,8 +119,8 @@ function format_gemini_payload(string $message, string $systemPrompt, array $his
         ],
         'contents' => $contents,
         'generationConfig' => [
-            'temperature' => 0.7,
-            'maxOutputTokens' => 1000,
+            'temperature' => 0.4,
+            'maxOutputTokens' => 2048,
         ]
     ];
 }
@@ -181,6 +169,20 @@ function parse_gemini_response($raw): ?string
     $data = is_array($raw) ? $raw : json_decode((string)$raw, true);
     if (!is_array($data)) return null;
 
+    $parts = $data['candidates'][0]['content']['parts'] ?? null;
+    if (is_array($parts) && !empty($parts)) {
+        $texts = [];
+        foreach ($parts as $p) {
+            if (isset($p['text']) && empty($p['thought'])) {
+                $texts[] = (string)$p['text'];
+            }
+        }
+        $combined = trim(implode('', $texts));
+        if ($combined !== '') {
+            return $combined;
+        }
+    }
+
     if (!empty($data['candidates'][0]['content']['parts'][0]['text'])) {
         return (string)$data['candidates'][0]['content']['parts'][0]['text'];
     }
@@ -204,7 +206,8 @@ function parse_openai_response($raw): ?string
 }
 
 /**
- * Gọi Google Gemini API qua cURL với thời gian chờ 15s và tự động chuyển đổi sang model dự phòng nếu gặp tải cao (503) hoặc lỗi
+ * Gọi Google Gemini API qua cURL với thời gian chờ tối ưu (kết nối <= 3s, timeout <= 6s)
+ * Thoát ngay lập tức nếu mạng bị timeout để chuyển sang Fallback ngoại tuyến, không làm treo giao diện.
  */
 function call_gemini_api(string $apiKey, string $model, array $payload): ?string
 {
@@ -212,21 +215,20 @@ function call_gemini_api(string $apiKey, string $model, array $payload): ?string
     if ($apiKey === '') return null;
 
     $model = trim($model);
-    if ($model === '' || $model === 'gemini-1.5-flash' || $model === 'gemini-2.5-flash' || $model === 'gemini-2.5-flash-lite') {
-        $model = 'gemini-3.1-flash-lite';
+    if ($model === '' || $model === 'gemini-1.5-flash' || $model === 'gemini-2.5-flash-lite') {
+        $model = 'gemini-flash-lite-latest';
     }
 
-    // Danh sách model ưu tiên theo thứ tự: model cấu hình -> gemini-3.1-flash-lite -> gemini-flash-lite-latest -> gemini-3.5-flash-lite
     $candidates = array_values(array_unique([
         $model,
-        'gemini-3.1-flash-lite',
         'gemini-flash-lite-latest',
         'gemini-3.5-flash-lite',
+        'gemini-flash-latest',
     ]));
 
     $jsonPayload = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
-    foreach ($candidates as $candidate) {
+    foreach ($candidates as $idx => $candidate) {
         $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode($candidate) . ':generateContent?key=' . rawurlencode($apiKey);
 
         $ch = curl_init($url);
@@ -240,15 +242,28 @@ function call_gemini_api(string $apiKey, string $model, array $payload): ?string
                 'Content-Type: application/json; charset=utf-8',
                 'x-goog-api-key: ' . $apiKey,
             ],
-            CURLOPT_CONNECTTIMEOUT => 5,
-            CURLOPT_TIMEOUT => 15,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CONNECTTIMEOUT => 4,
+            CURLOPT_TIMEOUT => 18,
             CURLOPT_SSL_VERIFYPEER => false,
             CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
+            CURLOPT_NOSIGNAL => 1,
         ]);
 
         $raw = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlErr = curl_error($ch);
+
+        // Nếu Google trả về 503 (tải cao nhất thời), tạm dừng 400ms rồi thử lại 1 lần chính candidate này
+        if ($httpCode === 503) {
+            usleep(400000);
+            $rawRetry = curl_exec($ch);
+            $retryCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            if ($rawRetry !== false && $retryCode === 200) {
+                $raw = $rawRetry;
+                $httpCode = $retryCode;
+            }
+        }
         curl_close($ch);
 
         if ($raw !== false && $httpCode === 200) {
@@ -260,13 +275,21 @@ function call_gemini_api(string $apiKey, string $model, array $payload): ?string
 
         $sanitizedUrl = preg_replace('/key=[^&]+/', 'key=***', $url);
         error_log("Gemini API call ({$candidate}) failed (HTTP {$httpCode}). Curl error: {$curlErr}");
+
+        // Nếu timeout do mạng nghẽn hoàn toàn, dừng sớm
+        if ($curlErr && (str_contains($curlErr, 'timed out') || str_contains($curlErr, 'timeout'))) {
+            break;
+        }
+
+        // Thử tối đa 2 model hợp lệ
+        if ($idx >= 2) break;
     }
 
     return null;
 }
 
 /**
- * Gọi OpenAI API qua cURL với thời gian chờ 15s và xác thực SSL nghiêm ngặt
+ * Gọi OpenAI API qua cURL với thời gian chờ tối ưu (kết nối <= 3s, timeout <= 6s)
  */
 function call_openai_api(string $apiKey, string $model, array $payload): ?string
 {
@@ -287,10 +310,11 @@ function call_openai_api(string $apiKey, string $model, array $payload): ?string
             'Content-Type: application/json; charset=utf-8',
             'Authorization: Bearer ' . $apiKey,
         ],
-        CURLOPT_CONNECTTIMEOUT => 5,
-        CURLOPT_TIMEOUT => 15,
+        CURLOPT_CONNECTTIMEOUT => 3, // Giảm từ 5s xuống 3s
+        CURLOPT_TIMEOUT => 6,        // Giảm từ 15s xuống 6s
         CURLOPT_SSL_VERIFYPEER => false,
         CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
+        CURLOPT_NOSIGNAL => 1,
     ]);
 
     $raw = curl_exec($ch);
@@ -328,7 +352,7 @@ function chatbot_fallback_reply(string $message = ''): array
         $extraText = " Chính sách: Bạn chỉ cần đặt cọc {$depositRate}% qua VietQR để giữ sân. Khi có việc đột xuất, bạn có thể hủy trước giờ chơi từ {$cutoffHours} giờ trở lên để nhận hoàn 100% tiền cọc.";
     }
 
-    $fallbackIntro = "Chào bạn! Hiện tại Trợ lý AI đang hoạt động ở chế độ giải đáp cơ bản (hệ thống chưa kết nối khóa API hoặc kết nối tạm gián đoạn).{$extraText} Bạn có thể tra cứu nhanh danh sách sân, bảng giá và đặt sân trực tiếp tại website, hoặc liên hệ Hotline {$hotline} để được hỗ trợ nhanh nhất 24/7 nhé!";
+    $fallbackIntro = "Chào bạn! Hiện tại Trợ lý AI đang hoạt động ở chế độ giải đáp cơ bản (bị kết nối gián đoạn).{$extraText} Bạn có thể tra cứu nhanh danh sách sân, bảng giá và đặt sân trực tiếp tại website, hoặc liên hệ Hotline {$hotline} để được hỗ trợ nhanh nhất 24/7 nhé!";
 
     return [
         'text' => $fallbackIntro,
@@ -450,7 +474,7 @@ function chatbot_reply(string $message, array $history = []): array
         ? trim($settings['ai_model']) 
         : (defined('CHATBOT_MODEL') && CHATBOT_MODEL !== '' 
             ? CHATBOT_MODEL 
-            : ($provider === 'openai' ? 'gpt-4o-mini' : 'gemini-3.1-flash-lite'));
+            : ($provider === 'openai' ? 'gpt-4o-mini' : 'gemini-flash-lite-latest'));
 
     // Nếu không có API Key, chuyển sang chế độ Fallback tư vấn ngoại tuyến an toàn
     if ($apiKey === '') {
@@ -509,7 +533,7 @@ function chatbot_status(): array
         ? trim($settings['ai_model']) 
         : (defined('CHATBOT_MODEL') && CHATBOT_MODEL !== '' 
             ? CHATBOT_MODEL 
-            : ($provider === 'openai' ? 'gpt-4o-mini' : 'gemini-3.1-flash-lite'));
+            : ($provider === 'openai' ? 'gpt-4o-mini' : 'gemini-flash-lite-latest'));
 
     $enabled = ($settings['ai_enabled'] ?? '1') !== '0';
 
@@ -537,7 +561,7 @@ function chatbot_test_connection(?string $providerOverride = null, ?string $keyO
 
     $model = $modelOverride 
         ? trim($modelOverride) 
-        : (!empty($settings['ai_model']) ? trim($settings['ai_model']) : (defined('CHATBOT_MODEL') && CHATBOT_MODEL !== '' ? CHATBOT_MODEL : ($provider === 'openai' ? 'gpt-4o-mini' : 'gemini-3.1-flash-lite')));
+        : (!empty($settings['ai_model']) ? trim($settings['ai_model']) : (defined('CHATBOT_MODEL') && CHATBOT_MODEL !== '' ? CHATBOT_MODEL : ($provider === 'openai' ? 'gpt-4o-mini' : 'gemini-flash-lite-latest')));
 
     if ($apiKey === '') {
         return [

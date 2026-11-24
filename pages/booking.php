@@ -2,9 +2,18 @@
 // MODULE: ĐẶT SÂN & TÍNH TIỀN CỌC
 /** ĐẶT SÂN 3 BƯỚC — /dat-san hoặc /dat-san/{slug}. Toàn bộ luồng do assets/js/pages/booking.js điều khiển. */
 $u = current_user();
-$bookingPromos = array_map('map_promotion', q_all("SELECT * FROM promotions WHERE status = 'active' AND end_date >= CURDATE() ORDER BY discount_value DESC, updated_at DESC"));
+$bookingPromos = array_map(function ($r) {
+    $p = map_promotion($r);
+    $c = strtoupper($p['code']);
+    $claimed = promo_claimed_count($c);
+    $saved = (int) q_val("SELECT COUNT(*) FROM user_vouchers WHERE UPPER(code) = ?", [$c]);
+    $p['savedCount'] = $saved;
+    $p['claimedCount'] = $claimed;
+    $p['remainingCount'] = $p['usageLimit'] ? max(0, $p['usageLimit'] - $claimed) : null;
+    return $p;
+}, q_all("SELECT * FROM promotions WHERE status = 'active' AND end_date >= CURDATE() ORDER BY discount_value DESC, updated_at DESC"));
 if ($u) {
-    $uvs = q_all("SELECT * FROM user_vouchers WHERE user_id = ? AND status = 'available' AND (expires_at IS NULL OR expires_at >= CURDATE())", [$u['id']]);
+    $uvs = q_all("SELECT * FROM user_vouchers WHERE user_id = ? AND status = 'available' AND (expires_at IS NULL OR expires_at >= NOW())", [$u['id']]);
     $existingCodes = array_map(fn($p) => strtoupper($p['code']), $bookingPromos);
     foreach ($uvs as $uv) {
         $c = strtoupper($uv['code']);
@@ -21,7 +30,8 @@ if ($u) {
                 'maxDiscount' => null,
                 'minOrder' => (int) $uv['min_order'],
                 'startDate' => substr($uv['created_at'], 0, 10),
-                'endDate' => $uv['expires_at'] ?: '2099-12-31',
+                'endDate' => $uv['expires_at'] ? substr($uv['expires_at'], 0, 10) : '2099-12-31',
+                'expiresAt' => $uv['expires_at'] ? iso($uv['expires_at']) : null,
                 'weekdays' => [],
                 'startTime' => '',
                 'endTime' => '',

@@ -264,6 +264,15 @@ document.addEventListener('click', async (event) => {
   btn.disabled = true;
   btn.lastChild.textContent = 'Đang đăng xuất...';
   try {
+    // Đóng cửa sổ chat và làm sạch phiên chat của khách vãng lai khi đăng xuất
+    localStorage.removeItem('bmt24h_chatbot_sessions_guest');
+    localStorage.removeItem('bmt24h_chatbot_active_guest');
+    localStorage.removeItem('bmt24h_chatbot_open_guest');
+    Object.keys(localStorage).forEach((k) => {
+      if (k.includes('_open')) localStorage.removeItem(k);
+    });
+  } catch (e) {}
+  try {
     await api('auth', 'logout', {});
   } catch {
     /* vẫn đưa về trang chủ */
