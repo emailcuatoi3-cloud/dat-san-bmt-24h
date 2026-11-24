@@ -1,9 +1,10 @@
 /** Chi tiết sân: thư viện ảnh, khung giờ trống hôm nay, đánh giá, sân lân cận. */
-import { $, $$, PAGE, api, esc, url, statusBadge, formatVnd } from '../core/ui.js';
+import { $, $$, PAGE, api, esc, url, statusBadge, formatVnd, toast } from '../core/ui.js';
 import { bindFavoriteButtons, courtCard } from '../core/components.js';
 import { openReviewModal } from '../core/reviewModal.js';
 import { buildDaySlots, pricePerHourAt } from '../lib/courtPricing.js';
 import { formatLongDate, isPastSlot, toIsoDate } from '../lib/format.js';
+import { subscribeSlots, createLivePulseBadge } from '../core/realtime.js';
 
 const court = PAGE.court;
 const gallery = PAGE.gallery || [];
@@ -23,10 +24,17 @@ $$('[data-gallery-thumb]').forEach((btn) =>
 );
 $$('[data-status-badge]').forEach((el) => (el.outerHTML = statusBadge(el.dataset.statusBadge)));
 
-// ---- Khung giờ trống hôm nay ----
+// ---- Khung giờ trống hôm nay & Đồng bộ Realtime ----
 const today = toIsoDate(new Date());
 $('[data-today-label]').textContent = `Hôm nay, ${formatLongDate(today)}`;
+const badgeBox = $('#realtime-live-badge');
+if (badgeBox) {
+  badgeBox.appendChild(createLivePulseBadge('Trực tiếp'));
+}
+
 let taken = [];
+let recentTakenSet = new Set();
+let recentFreedSet = new Set();
 
 function renderSlots() {
   const slots = buildDaySlots(court);
@@ -35,21 +43,63 @@ function renderSlots() {
     .map((slot) => {
       const booked = taken.includes(slot);
       const past = isPastSlot(today, slot, now);
+      const isJustTaken = recentTakenSet.has(slot);
+      const isJustFreed = recentFreedSet.has(slot);
+
       if (booked || past || court.status === 'maintenance') {
-        return `<span title="${past ? 'Khung giờ đã qua' : 'Khung giờ đã kín'}" class="cursor-not-allowed rounded-md bg-background-100 px-2 py-2 text-center text-xs font-medium text-foreground-400"><span class="block line-through">${slot}</span><span class="mt-0.5 block text-[10px]">${past ? 'Đã qua' : 'Đã kín'}</span></span>`;
+        const pulseCls = isJustTaken ? 'ring-2 ring-accent-500 bg-accent-100 text-accent-800 animate-pulse' : 'bg-background-100 text-foreground-400';
+        return `<span title="${past ? 'Khung giờ đã qua' : 'Khung giờ đã kín'}" class="cursor-not-allowed rounded-md px-2 py-2 text-center text-xs font-medium transition-all ${pulseCls}">
+          <span class="block line-through">${slot}</span>
+          <span class="mt-0.5 block text-[10px]">${isJustTaken ? 'Vừa kín!' : past ? 'Đã qua' : 'Đã kín'}</span>
+        </span>`;
       }
-      return `<a href="${url(`/dat-san/${court.slug}?date=${today}&slot=${slot}`)}" class="rounded-md border border-primary-200 bg-primary-50 px-2 py-2 text-center text-xs font-semibold text-primary-800 transition-colors hover:border-primary-400 hover:bg-primary-100"><span class="block whitespace-nowrap">${slot}</span><span class="mt-0.5 block whitespace-nowrap text-[10px] font-medium text-primary-600">${formatVnd(pricePerHourAt(court, slot))}</span></a>`;
+
+      const pulseFreeCls = isJustFreed ? 'ring-2 ring-emerald-500 bg-emerald-100 text-emerald-800 animate-bounce' : 'border-primary-200 bg-primary-50 text-primary-800 hover:border-primary-400 hover:bg-primary-100';
+      return `<a href="${url(`/dat-san/${court.slug}?date=${today}&slot=${slot}`)}" class="rounded-md border px-2 py-2 text-center text-xs font-semibold transition-all ${pulseFreeCls}">
+        <span class="block whitespace-nowrap">${slot}</span>
+        <span class="mt-0.5 block whitespace-nowrap text-[10px] font-medium text-primary-600">${formatVnd(pricePerHourAt(court, slot))}</span>
+      </a>`;
     })
     .join('');
 }
 renderSlots();
-setInterval(renderSlots, 30000);
-api('booking', 'availability', { date: today }, 'GET')
-  .then((data) => {
-    taken = [...(data.occupied[court.id] || []), ...(data.blocked[`${court.id}:${today}`] || [])];
+setInterval(renderSlots, 60000);
+
+// Khởi tạo kết nối Real-time SSE đồng bộ tức thì
+const realtimeSub = subscribeSlots({
+  date: today,
+  courtId: court.id,
+  onUpdate: ({ allTaken, justTaken, justFreed }) => {
+    taken = allTaken;
+
+    if (justTaken && justTaken.length > 0) {
+      justTaken.forEach((s) => recentTakenSet.add(s));
+      setTimeout(() => {
+        justTaken.forEach((s) => recentTakenSet.delete(s));
+        renderSlots();
+      }, 4000);
+      toast(`Khung giờ ${justTaken.join(', ')} vừa được khách khác đặt giữ chỗ!`, 'warning');
+    }
+
+    if (justFreed && justFreed.length > 0) {
+      justFreed.forEach((s) => recentFreedSet.add(s));
+      setTimeout(() => {
+        justFreed.forEach((s) => recentFreedSet.delete(s));
+        renderSlots();
+      }, 4000);
+      toast(`Khung giờ ${justFreed.join(', ')} vừa được giải phóng còn trống!`, 'success');
+    }
+
     renderSlots();
-  })
-  .catch(() => { });
+  },
+  onStatusChange: (status) => {
+    const txt = badgeBox ? badgeBox.querySelector('[data-live-text]') : null;
+    if (txt) {
+      if (status === 'connected') txt.textContent = 'Trực tiếp';
+      else if (status === 'reconnecting') txt.textContent = 'Đang đồng bộ...';
+    }
+  },
+});
 
 // ---- Sân lân cận ----
 const related = $('#related');

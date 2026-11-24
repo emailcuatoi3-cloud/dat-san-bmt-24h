@@ -141,7 +141,13 @@ render_page([
       </div>
 
       <div class="mt-5 rounded-lg border border-background-200 bg-white p-5">
-        <div class="flex flex-wrap items-center justify-between gap-2"><h2 class="font-heading text-base font-bold text-foreground-950">Khung giờ trống</h2><span class="rounded-md bg-background-100 px-2.5 py-1 text-xs font-medium text-foreground-600" data-today-label></span></div>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-2.5">
+            <h2 class="font-heading text-base font-bold text-foreground-950">Khung giờ trống</h2>
+            <div id="realtime-live-badge"></div>
+          </div>
+          <span class="rounded-md bg-background-100 px-2.5 py-1 text-xs font-medium text-foreground-600" data-today-label></span>
+        </div>
         <div class="mt-3 flex flex-wrap items-center gap-3 text-xs text-foreground-500">
           <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm border border-primary-300 bg-primary-50"></span>Còn trống</span>
           <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-background-200"></span>Đã kín</span>
