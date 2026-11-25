@@ -66,7 +66,7 @@ export function modal(title, body, footer = '', size = 'max-w-lg') {
     size,
     html: `<div class="flex items-center justify-between gap-3 border-b border-background-200 px-5 py-4"><h2 class="font-heading text-lg font-extrabold text-foreground-950">${title}</h2><button type="button" data-close aria-label="Đóng" class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md text-foreground-500 hover:bg-background-100"><i class="ri-close-line text-xl" aria-hidden="true"></i></button></div>
       <div class="px-5 py-4">${body}</div>
-      ${footer ? `<div class="flex flex-col-reverse gap-2 border-t border-background-200 px-5 py-4 sm:flex-row sm:justify-end">${footer}</div>` : ''}`,
+      ${footer ? `<div class="flex flex-col-reverse gap-2 border-t border-background-200 px-5 py-4 sm:flex-row sm:flex-wrap sm:justify-end">${footer}</div>` : ''}`,
   });
 }
 

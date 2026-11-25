@@ -9,7 +9,7 @@ import { TIME_OPTIONS, WEEKDAY_KEYS, WEEKDAY_LABELS, normalizeWeeklyHours, weekd
 import {
   S, PAGE, TODAY, main, actions, loadData, refreshBadges, BTN, BTN_OUT, BTN_DANGER, BTN_SM, BTN_SM_PRI, BTN_SM_DANGER, INPUT, LABEL, CARD,
   chip, statCard, sectionTitle, modal, slotText, dateText, longDate, money, isActive, courtById, addDays, sourceBadge, courtOptions,
-} from './owner-shared.js?v=20261125_02';
+} from './owner-shared.js?v=20261125_03';
 
 const rerender = () => window.__ownerRender && window.__ownerRender();
 
@@ -151,7 +151,7 @@ export function openBookingDetail(b) {
      ${b.cancelReason ? row('Lý do khách hủy', esc(b.cancelReason)) : ''}
      ${row('Tạo lúc', formatDateTime(b.createdAt))}`,
     `<button type="button" data-close class="${BTN_OUT}">Đóng</button>${btns.join('')}`,
-    'max-w-xl',
+    'max-w-2xl',
   );
   on(m.el, 'click', '[data-act]', async (e, el) => {
     const act = el.dataset.act;
