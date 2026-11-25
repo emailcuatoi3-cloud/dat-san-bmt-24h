@@ -98,10 +98,13 @@ export function subscribeSlots({
       }&lastHash=${encodeURIComponent(lastHash)}`
     );
 
+    let sseErrorCount = 0;
     try {
       eventSource = new EventSource(sseUrl);
 
       eventSource.addEventListener('open', () => {
+        sseErrorCount = 0;
+        console.log('[Realtime] Đã kết nối luồng thời gian thực SSE:', currentDate);
         if (typeof onStatusChange === 'function') {
           onStatusChange('connected', 'sse');
         }
@@ -124,10 +127,14 @@ export function subscribeSlots({
       });
 
       eventSource.onerror = () => {
-        // Nếu SSE mất kết nối hoặc bị ngắt, tạm chuyển sang polling fallback sau 3s nếu không tự phục hồi
+        sseErrorCount++;
+        // Sau 2 lần lỗi SSE liên tiếp (ví dụ do Apache buffer hoặc mạng), tự động chuyển sang Polling fallback 2.5s
         if (!isPollingFallback) {
           if (typeof onStatusChange === 'function') {
             onStatusChange('reconnecting', 'sse');
+          }
+          if (sseErrorCount >= 2) {
+            startPollingFallback();
           }
         }
       };
@@ -141,6 +148,7 @@ export function subscribeSlots({
     if (isUnsubscribed || isPollingFallback) return;
     isPollingFallback = true;
     cleanupSse();
+    console.log('[Realtime] Đang chạy chế độ Adaptive Polling (chu kỳ 3s)');
 
     if (typeof onStatusChange === 'function') {
       onStatusChange('connected', 'poll');
@@ -253,14 +261,14 @@ export function subscribeSlots({
 /**
  * Tạo huy hiệu hiển thị trạng thái Real-time trực quan trên giao diện
  */
-export function createLivePulseBadge(label = 'Lịch trực tiếp') {
+export function createLivePulseBadge(label = 'Trực tiếp') {
   const span = document.createElement('span');
   span.className =
-    'inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 shadow-2xs transition-all';
+    'inline-flex items-center gap-1.5 rounded-full border border-primary-300 bg-primary-50 px-2.5 py-0.5 text-[11px] font-semibold text-primary-800 shadow-2xs transition-all';
   span.innerHTML = `
     <span class="relative flex h-2 w-2">
-      <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-      <span class="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
+      <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary-400 opacity-75"></span>
+      <span class="relative inline-flex h-2 w-2 rounded-full bg-primary-500"></span>
     </span>
     <span data-live-text>${label}</span>
   `;

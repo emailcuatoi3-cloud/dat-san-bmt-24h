@@ -37,6 +37,7 @@ function app_config(): array
         'holdMinutes' => max(1, (int) ($cfg['hold_minutes'] ?: HOLD_MINUTES)),
         'autoConfirmSeconds' => AUTO_CONFIRM_SECONDS,
         'cancelCutoffHours' => max(1, (int) ($cfg['cancel_cutoff_hours'] ?: CANCEL_CUTOFF_HOURS)),
+        'paymentTestMode' => defined('PAYMENT_TEST_MODE') && PAYMENT_TEST_MODE,
         'today' => date('Y-m-d'),
         'ai' => [
             'enabled' => ($cfg['ai_enabled'] ?? '1') === '1',

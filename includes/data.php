@@ -193,10 +193,16 @@ function auto_cancel_expired_holds(): void
     q("UPDATE bookings SET status = 'cancelled', cancel_reason = 'Hết thời gian giữ chỗ (5 phút) do chưa thanh toán tiền cọc.'
        WHERE source = 'online' AND status IN ('pending', 'confirmed') AND payment_status = 'unpaid'
          AND hold_expires_at IS NOT NULL AND hold_expires_at <= NOW()");
+
+    // Đồng bộ hủy lịch cố định tương ứng nếu đơn đặt sân giữ chỗ bị hủy
+    q("UPDATE recurring_bookings rb
+       INNER JOIN bookings b ON rb.note LIKE CONCAT('%Đơn gốc: ', b.code, '%')
+       SET rb.status = 'cancelled'
+       WHERE b.status = 'cancelled' AND rb.status = 'active'");
 }
 
 /**
- * Khung giờ đã bị chiếm trong một ngày: đơn còn hiệu lực + lượt đang giữ sân chưa hết hạn.
+ * Khung giờ đã bị chiếm trong một ngày: đơn còn hiệu lực + lượt đang giữ sân chưa hết hạn + lịch cố định đang hoạt động.
  * Trả về [court_id => [slot, ...]].
  */
 function occupied_slots(string $date, string $excludeId = ''): array
@@ -210,6 +216,36 @@ function occupied_slots(string $date, string $excludeId = ''): array
         if (is_expired_hold($r)) continue;
         $map[$r['court_id']] = array_values(array_unique(array_merge($map[$r['court_id']] ?? [], jd($r['slots']))));
     }
+
+    // Bổ sung các khung giờ từ Lịch đặt cố định (recurring_bookings) đang có hiệu lực trong chu kỳ
+    $isoDay = (int) date('N', strtotime($date)); // 1=Thứ 2 ... 7=Chủ nhật
+    $excludeCode = $excludeId ? (string) q_val("SELECT code FROM bookings WHERE id = ?", [$excludeId]) : '';
+    $recs = q_all("SELECT id, court_id, weekdays, start_slot, duration_minutes, note FROM recurring_bookings
+                   WHERE status = 'active' AND start_date <= ? AND end_date >= ?", [$date, $date]);
+    foreach ($recs as $rec) {
+        if ($excludeCode && str_contains((string) ($rec['note'] ?? ''), "Đơn gốc: $excludeCode")) {
+            continue;
+        }
+        $wds = jd($rec['weekdays']) ?: [];
+        $matches = false;
+        foreach ($wds as $w) {
+            if ((int) $w === $isoDay) {
+                $matches = true;
+                break;
+            }
+        }
+        if ($matches) {
+            $duration = (int) ($rec['duration_minutes'] ?: 60);
+            $parts = explode(':', $rec['start_slot']);
+            $startM = ((int) ($parts[0] ?? 0)) * 60 + ((int) ($parts[1] ?? 0));
+            $recSlots = [];
+            for ($m = $startM; $m < $startM + $duration; $m += 60) {
+                $recSlots[] = sprintf('%02d:%02d', intdiv($m, 60) % 24, $m % 60);
+            }
+            $map[$rec['court_id']] = array_values(array_unique(array_merge($map[$rec['court_id']] ?? [], $recSlots)));
+        }
+    }
+
     return $map;
 }
 
