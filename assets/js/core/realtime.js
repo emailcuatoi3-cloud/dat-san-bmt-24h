@@ -46,6 +46,7 @@ export function subscribeSlots({
     if (isUnsubscribed || !data) return;
 
     const occupied = data.occupied || {};
+    const occupiedDetails = data.occupiedDetails || {};
     const blocked = data.blocked || {};
     const newTaken = extractCourtTaken(occupied, blocked);
 
@@ -63,6 +64,7 @@ export function subscribeSlots({
     if (typeof onUpdate === 'function') {
       onUpdate({
         occupied,
+        occupiedDetails,
         blocked,
         date: currentDate,
         hash: lastHash,

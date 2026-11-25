@@ -188,10 +188,24 @@ function calc_deposit(int $total): int
     return (int) (round($total * DEPOSIT_RATE / 1000) * 1000);
 }
 
-/** Các khung giờ đang bận của 1 sân trong 1 ngày (đơn + khóa của chủ sân). */
-function taken_slots(string $courtId, string $date, string $excludeId = ''): array
+/** Các khung giờ đang bận của 1 sân trong 1 ngày (đơn + khóa của chủ sân), có hỗ trợ lọc theo thuộc tính phân loại sân. */
+function taken_slots(string $courtId, string $date, string $excludeId = '', string $fieldType = '', string $spaceType = ''): array
 {
-    $occ = occupied_slots($date, $excludeId)[$courtId] ?? [];
+    $details = occupied_slots_details($date, $excludeId)[$courtId] ?? [];
+    $occ = [];
+    if (!empty($details)) {
+        foreach ($details as $item) {
+            $matchField = empty($item['fieldType']) || empty($fieldType) || $item['fieldType'] === $fieldType;
+            $matchSpace = empty($item['spaceType']) || empty($spaceType) || $item['spaceType'] === $spaceType;
+            if ($matchField && $matchSpace) {
+                $occ[] = $item['slot'];
+            }
+        }
+        $occ = array_values(array_unique($occ));
+    } else {
+        $occ = occupied_slots($date, $excludeId)[$courtId] ?? [];
+    }
+
     $blk = blocked_slots_map($date, [$courtId])[$courtId . ':' . $date] ?? [];
     return array_values(array_unique(array_merge($occ, $blk)));
 }
@@ -238,11 +252,15 @@ function booking_by_code(string $code): ?array
 }
 
 run_api([
-    // Khung giờ đã bị chiếm + khung giờ chủ sân khóa trong 1 ngày
+    // Khung giờ đã bị chiếm + khung giờ chủ sân khóa trong 1 ngày (bao gồm phân loại thuộc tính sân)
     'availability' => function () {
         $date = $_GET['date'] ?? date('Y-m-d');
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) fail('Ngày không hợp lệ.');
-        return ['occupied' => (object) occupied_slots($date), 'blocked' => (object) blocked_slots_map($date)];
+        return [
+            'occupied' => (object) occupied_slots($date),
+            'occupiedDetails' => (object) occupied_slots_details($date),
+            'blocked' => (object) blocked_slots_map($date),
+        ];
     },
 
     // Sân đang hoạt động + khung giờ tối nay còn trống (dùng cho trợ lý chat)
@@ -498,15 +516,15 @@ run_api([
         if (!preg_match('/^0\d{9}$/', $phone)) fail('Số điện thoại phải gồm 10 số và bắt đầu bằng 0.');
         if ($email && !filter_var($email, FILTER_VALIDATE_EMAIL)) fail('Email chưa đúng định dạng.');
 
-        $slots = slots_in_range($start, $duration);
-        $clash = array_values(array_intersect($slots, taken_slots($court['id'], $date)));
-        if ($clash) fail('Khung giờ ' . implode(', ', $clash) . ' vừa có người đặt. Vui lòng chọn khung giờ khác.');
-
         $types = (isset($court['fieldTypes']) && is_array($court['fieldTypes']) && count($court['fieldTypes']) > 0)
             ? $court['fieldTypes']
             : ($court['sport'] === 'football' ? ['Sân 5 người', 'Sân 7 người'] : ['Sân tiêu chuẩn', 'Sân VIP']);
         $actualFieldType = ($fieldType && in_array($fieldType, $types, true)) ? $fieldType : $types[0];
         $spaceLabel = $spaceType === 'indoor' ? 'Có mái che' : 'Ngoài trời';
+
+        $slots = slots_in_range($start, $duration);
+        $clash = array_values(array_intersect($slots, taken_slots($court['id'], $date, '', $actualFieldType, $spaceType)));
+        if ($clash) fail('Khung giờ ' . implode(', ', $clash) . ' vừa có người đặt. Vui lòng chọn khung giờ khác.');
 
         $recurringWeekdays = array_values(array_unique(array_filter(array_map('intval', in_arr('recurringWeekdays')), fn($d) => $d >= 1 && $d <= 7)));
         if ($bookingType === 'recurring' && empty($recurringWeekdays)) {
@@ -525,7 +543,7 @@ run_api([
                 $checkDate = date('Y-m-d', $curTs);
                 $checkIsoDay = (int) date('N', $curTs);
                 if (in_array($checkIsoDay, $recurringWeekdays, true)) {
-                    $taken = taken_slots($court['id'], $checkDate);
+                    $taken = taken_slots($court['id'], $checkDate, '', $actualFieldType, $spaceType);
                     $dayClash = array_intersect($slots, $taken);
                     if (!empty($dayClash)) {
                         $clashedDays[] = date('d/m/Y', $curTs) . " (" . implode(', ', $dayClash) . ")";
@@ -627,7 +645,8 @@ run_api([
         if ($b['payment_status'] === 'unpaid' && $b['hold_expires_at'] && strtotime($b['hold_expires_at']) <= time()) {
             fail('Đã hết thời gian 5 phút chuyển cọc. Đơn đã tự động hủy.');
         }
-        $clash = array_values(array_intersect(jd($b['slots']), taken_slots($b['court_id'], $b['booking_date'], $b['id'])));
+        $bAttrs = extract_booking_attributes($b['court_name'] ?? '', $b['note'] ?? '');
+        $clash = array_values(array_intersect(jd($b['slots']), taken_slots($b['court_id'], $b['booking_date'], $b['id'], $bAttrs['fieldType'], $bAttrs['spaceType'])));
         if ($clash) fail('Khung giờ ' . implode(', ', $clash) . ' vừa được người khác đặt. Vui lòng chọn khung giờ khác.');
         $u = current_user();
         if (!$b['customer_id'] && $u) {

@@ -29,16 +29,18 @@ function get_slot_state(string $date, string $courtId = ''): array
 {
     auto_cancel_expired_holds();
     $occ = occupied_slots($date);
+    $occDetails = occupied_slots_details($date);
     $blk = blocked_slots_map($date);
 
-    // Tính mã băm đại diện cho toàn bộ trạng thái bận/rảnh trong ngày
-    $stateStr = json_encode([$occ, $blk]);
+    // Tính mã băm đại diện cho toàn bộ trạng thái bận/rảnh trong ngày (bao gồm cả phân loại thuộc tính)
+    $stateStr = json_encode([$occ, $occDetails, $blk]);
     $hash = md5($stateStr);
 
     return [
         'date' => $date,
         'hash' => $hash,
         'occupied' => (object) $occ,
+        'occupiedDetails' => (object) $occDetails,
         'blocked' => (object) $blk,
         'timestamp' => time(),
     ];
@@ -62,6 +64,7 @@ if (!$isStream) {
         'date' => $state['date'],
         'hash' => $state['hash'],
         'occupied' => $changed ? $state['occupied'] : null,
+        'occupiedDetails' => $changed ? $state['occupiedDetails'] : null,
         'blocked' => $changed ? $state['blocked'] : null,
         'timestamp' => $state['timestamp'],
     ], JSON_UNESCAPED_UNICODE);
@@ -107,6 +110,7 @@ while (!connection_aborted()) {
             'date' => $state['date'],
             'hash' => $state['hash'],
             'occupied' => $state['occupied'],
+            'occupiedDetails' => $state['occupiedDetails'],
             'blocked' => $state['blocked'],
             'timestamp' => $state['timestamp'],
         ], JSON_UNESCAPED_UNICODE);

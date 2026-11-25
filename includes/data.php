@@ -202,25 +202,67 @@ function auto_cancel_expired_holds(): void
 }
 
 /**
- * Khung giờ đã bị chiếm trong một ngày: đơn còn hiệu lực + lượt đang giữ sân chưa hết hạn + lịch cố định đang hoạt động.
- * Trả về [court_id => [slot, ...]].
+ * Trích xuất thuộc tính phân loại sân (kích thước, không gian) từ tên sân hoặc ghi chú.
  */
-function occupied_slots(string $date, string $excludeId = ''): array
+function extract_booking_attributes(?string $courtName, ?string $note = ''): array
+{
+    $combined = ($courtName ?? '') . ' ' . ($note ?? '');
+    $fieldType = '';
+    if (str_contains($combined, 'Sân 5 người')) {
+        $fieldType = 'Sân 5 người';
+    } elseif (str_contains($combined, 'Sân 7 người')) {
+        $fieldType = 'Sân 7 người';
+    } elseif (str_contains($combined, 'Sân 11 người')) {
+        $fieldType = 'Sân 11 người';
+    } elseif (str_contains($combined, 'Sân VIP')) {
+        $fieldType = 'Sân VIP';
+    } elseif (str_contains($combined, 'Sân tập luyện')) {
+        $fieldType = 'Sân tập luyện';
+    } elseif (str_contains($combined, 'Sân tiêu chuẩn')) {
+        $fieldType = 'Sân tiêu chuẩn';
+    }
+
+    $spaceType = '';
+    if (str_contains($combined, 'Có mái che') || str_contains($combined, 'indoor')) {
+        $spaceType = 'indoor';
+    } elseif (str_contains($combined, 'Ngoài trời') || str_contains($combined, 'outdoor')) {
+        $spaceType = 'outdoor';
+    }
+
+    return [
+        'fieldType' => $fieldType,
+        'spaceType' => $spaceType,
+    ];
+}
+
+/**
+ * Chi tiết khung giờ đã bị chiếm kèm thuộc tính phân loại (fieldType, spaceType).
+ * Trả về [court_id => [ ['slot' => '18:00', 'fieldType' => 'Sân 5 người', 'spaceType' => 'outdoor'], ... ]].
+ */
+function occupied_slots_details(string $date, string $excludeId = ''): array
 {
     auto_cancel_expired_holds();
-    $rows = q_all("SELECT id, court_id, slots, source, status, payment_status, hold_expires_at FROM bookings
+    $rows = q_all("SELECT id, court_id, court_name, slots, source, status, payment_status, hold_expires_at, note FROM bookings
                    WHERE booking_date = ? AND status IN ('pending','confirmed')", [$date]);
     $map = [];
     foreach ($rows as $r) {
         if ($excludeId && $r['id'] === $excludeId) continue;
         if (is_expired_hold($r)) continue;
-        $map[$r['court_id']] = array_values(array_unique(array_merge($map[$r['court_id']] ?? [], jd($r['slots']))));
+        $attrs = extract_booking_attributes($r['court_name'] ?? '', $r['note'] ?? '');
+        $slots = jd($r['slots']) ?: [];
+        foreach ($slots as $s) {
+            $map[$r['court_id']][] = [
+                'slot' => (string) $s,
+                'fieldType' => $attrs['fieldType'],
+                'spaceType' => $attrs['spaceType'],
+            ];
+        }
     }
 
     // Bổ sung các khung giờ từ Lịch đặt cố định (recurring_bookings) đang có hiệu lực trong chu kỳ
     $isoDay = (int) date('N', strtotime($date)); // 1=Thứ 2 ... 7=Chủ nhật
     $excludeCode = $excludeId ? (string) q_val("SELECT code FROM bookings WHERE id = ?", [$excludeId]) : '';
-    $recs = q_all("SELECT id, court_id, weekdays, start_slot, duration_minutes, note FROM recurring_bookings
+    $recs = q_all("SELECT id, court_id, court_name, weekdays, start_slot, duration_minutes, note FROM recurring_bookings
                    WHERE status = 'active' AND start_date <= ? AND end_date >= ?", [$date, $date]);
     foreach ($recs as $rec) {
         if ($excludeCode && str_contains((string) ($rec['note'] ?? ''), "Đơn gốc: $excludeCode")) {
@@ -238,14 +280,36 @@ function occupied_slots(string $date, string $excludeId = ''): array
             $duration = (int) ($rec['duration_minutes'] ?: 60);
             $parts = explode(':', $rec['start_slot']);
             $startM = ((int) ($parts[0] ?? 0)) * 60 + ((int) ($parts[1] ?? 0));
-            $recSlots = [];
+            $attrs = extract_booking_attributes($rec['court_name'] ?? '', $rec['note'] ?? '');
             for ($m = $startM; $m < $startM + $duration; $m += 60) {
-                $recSlots[] = sprintf('%02d:%02d', intdiv($m, 60) % 24, $m % 60);
+                $recSlot = sprintf('%02d:%02d', intdiv($m, 60) % 24, $m % 60);
+                $map[$rec['court_id']][] = [
+                    'slot' => $recSlot,
+                    'fieldType' => $attrs['fieldType'],
+                    'spaceType' => $attrs['spaceType'],
+                ];
             }
-            $map[$rec['court_id']] = array_values(array_unique(array_merge($map[$rec['court_id']] ?? [], $recSlots)));
         }
     }
 
+    return $map;
+}
+
+/**
+ * Khung giờ đã bị chiếm trong một ngày: đơn còn hiệu lực + lượt đang giữ sân chưa hết hạn + lịch cố định đang hoạt động.
+ * Trả về [court_id => [slot, ...]].
+ */
+function occupied_slots(string $date, string $excludeId = ''): array
+{
+    $details = occupied_slots_details($date, $excludeId);
+    $map = [];
+    foreach ($details as $courtId => $items) {
+        $slots = [];
+        foreach ($items as $it) {
+            $slots[] = $it['slot'];
+        }
+        $map[$courtId] = array_values(array_unique($slots));
+    }
     return $map;
 }
 

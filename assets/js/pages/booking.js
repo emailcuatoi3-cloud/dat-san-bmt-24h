@@ -34,7 +34,7 @@ const S = {
   recurringWeekdays: [1, 3, 5], // Đa thuộc tính: Mặc định Thứ 2, 4, 6 (1=T2..7=CN)
   recurringWeeks: 4, // Đa thuộc tính: Thời hạn gói 1 tháng = 4 tuần
   filters: { keyword: '', sport: 'all', area: '', priceId: 'all', sort: 'popular' },
-  availability: { occupied: {}, blocked: {}, loading: true },
+  availability: { occupied: {}, occupiedDetails: {}, blocked: {}, loading: true },
   form: { name: '', phone: '', email: '', note: '', ...(PAGE.contact || {}) },
   extras: [],
   agree: false,
@@ -309,7 +309,25 @@ const total = () => Math.max(0, subtotal() - discount());
 const unavailable = () => {
   const c = court();
   if (!c) return [];
-  return [...(S.availability.occupied[c.id] || []), ...(S.availability.blocked[`${c.id}:${S.date}`] || [])];
+  const blocked = S.availability.blocked[`${c.id}:${S.date}`] || [];
+
+  // Lấy thuộc tính sân đang được khách chọn (kích thước & không gian)
+  const currentFieldType = S.fieldType || (c.fieldTypes && c.fieldTypes[0]) || '';
+  const currentSpaceType = S.spaceType || 'outdoor';
+
+  const details = (S.availability.occupiedDetails && S.availability.occupiedDetails[c.id]) || [];
+  if (Array.isArray(details) && details.length > 0) {
+    const occSlots = details
+      .filter((item) => {
+        const matchField = !item.fieldType || !currentFieldType || item.fieldType === currentFieldType;
+        const matchSpace = !item.spaceType || !currentSpaceType || item.spaceType === currentSpaceType;
+        return matchField && matchSpace;
+      })
+      .map((item) => item.slot);
+    return Array.from(new Set([...occSlots, ...blocked]));
+  }
+
+  return [...(S.availability.occupied[c.id] || []), ...blocked];
 };
 
 // ======================= LỊCH TRỐNG & ĐỒNG BỘ REALTIME =======================
@@ -328,8 +346,13 @@ function setupBookingRealtime() {
   realtimeSub = subscribeSlots({
     date: S.date,
     courtId: c ? c.id : '',
-    onUpdate: ({ occupied, blocked, allTaken, justTaken, justFreed }) => {
-      S.availability = { occupied, blocked, loading: false };
+    onUpdate: ({ occupied, occupiedDetails, blocked, allTaken, justTaken, justFreed }) => {
+      S.availability = {
+        occupied: occupied || S.availability.occupied || {},
+        occupiedDetails: occupiedDetails || S.availability.occupiedDetails || {},
+        blocked: blocked || S.availability.blocked || {},
+        loading: false,
+      };
 
       // Khung giờ đang chọn bị người khác đặt hoặc khóa -> chỉ cảnh báo và hủy chọn khi đang ở Bước 1
       if (S.step === 1 && S.startSlot && slotState(S.startSlot) !== 'free') {
@@ -381,9 +404,14 @@ async function loadAvailability() {
   setupBookingRealtime();
   try {
     const data = await api('booking', 'availability', { date: S.date }, 'GET');
-    S.availability = { occupied: data.occupied || {}, blocked: data.blocked || {}, loading: false };
+    S.availability = {
+      occupied: data.occupied || {},
+      occupiedDetails: data.occupiedDetails || {},
+      blocked: data.blocked || {},
+      loading: false,
+    };
   } catch {
-    S.availability = { occupied: {}, blocked: {}, loading: false };
+    S.availability = { occupied: {}, occupiedDetails: {}, blocked: {}, loading: false };
   }
   // Khung đã chọn không còn hợp lệ → bỏ chọn
   if (S.startSlot && slotState(S.startSlot) !== 'free') {
@@ -2323,18 +2351,26 @@ app.addEventListener('click', async (event) => {
   }
   if (el('[data-opt-field-type]')) {
     S.fieldType = el('[data-opt-field-type]').dataset.optFieldType;
+    if (S.startSlot && slotState(S.startSlot) !== 'free') {
+      S.startSlot = '';
+    }
     saveDraft();
     renderCourtAttributes();
     renderSlots();
     renderSummary();
+    renderNav();
     return revalidatePromo();
   }
   if (el('[data-opt-space-type]')) {
     S.spaceType = el('[data-opt-space-type]').dataset.optSpaceType;
+    if (S.startSlot && slotState(S.startSlot) !== 'free') {
+      S.startSlot = '';
+    }
     saveDraft();
     renderCourtAttributes();
     renderSlots();
     renderSummary();
+    renderNav();
     return revalidatePromo();
   }
   if (el('[data-opt-booking-type]')) {
