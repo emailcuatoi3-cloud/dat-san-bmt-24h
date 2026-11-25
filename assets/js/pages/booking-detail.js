@@ -159,6 +159,21 @@ if (b) {
       <div class="rounded-md border border-background-200 bg-background-50 p-3.5"><p class="text-xs font-bold uppercase tracking-wide text-foreground-500">Thanh toán</p><div class="mt-2 space-y-2 text-sm">
         <div class="flex items-start justify-between gap-3 text-foreground-600"><span>Hình thức</span><span class="text-right font-medium text-foreground-900">${esc(b.payment)}</span></div>
         <div class="flex items-center justify-between gap-3 text-foreground-600"><span>Tiền sân (${b.slots.length} giờ)</span><span class="text-right text-foreground-900">${formatVnd(b.baseTotal || b.totalPrice)}</span></div>
+        ${Array.isArray(b.extras) && b.extras.length > 0 ? `
+          <div class="space-y-1 border-t border-dashed border-background-200 pt-2 text-xs">
+            <span class="font-semibold text-foreground-700">Dịch vụ & Tiện ích thêm:</span>
+            ${b.extras.map((x) => {
+              const q = Number(x.quantity) || 1;
+              const name = x.label || x.name || (typeof x === 'string' ? x : 'Dịch vụ');
+              const vName = x.variantName ? ` (${esc(x.variantName)})` : '';
+              const p = Number(x.price) || 0;
+              return `<div class="flex justify-between pl-2 text-foreground-600">
+                <span>• ${esc(name)}${vName}${q > 1 ? ` x${q}` : ''}</span>
+                <span class="font-medium">${formatVnd(p * q)}</span>
+              </div>`;
+            }).join('')}
+          </div>
+        ` : ''}
         ${b.discount ? `<div class="flex items-center justify-between gap-3 text-accent-700"><span class="flex items-center gap-1"><i class="ri-coupon-3-line" aria-hidden="true"></i>Mã ${esc(b.promoCode || '')}</span><span class="text-right font-semibold">-${formatVnd(b.discount)}</span></div>` : ''}
         <div class="flex items-center justify-between gap-3 border-t border-background-200 pt-2 text-foreground-800"><span class="font-semibold">Tổng tiền sân</span><span class="font-heading font-bold text-foreground-950">${formatVnd(b.totalPrice)}</span></div>
         <div class="flex items-center justify-between gap-3 rounded bg-accent-50/80 px-2.5 py-1.5 text-xs dark:bg-accent-950/40">

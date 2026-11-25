@@ -83,7 +83,11 @@ if (!headers_sent()) {
 while (ob_get_level() > 0) {
     ob_end_clean();
 }
+@ob_implicit_flush(1);
 ignore_user_abort(false);
+
+// Gửi 2KB đệm khởi đầu để vượt qua bộ đệm proxy / Apache Windows
+echo ":" . str_repeat(" ", 2048) . "\n\n";
 
 // Thông báo cho EventSource thời gian tự động kết nối lại nếu bị ngắt là 1.2 giây
 echo "retry: 1200\n\n";
