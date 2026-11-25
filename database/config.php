@@ -56,9 +56,9 @@ define('SEPAY_API_TOKEN', 'LANEZCK7GWTCZMDU1DJPMMB83LUVJLQLAUV2J9ARBYXM6C9VSPHYV
 // ---- Chế độ thanh toán (TEST MODE / PRODUCTION) ----
 /**
  * true  = Chế độ Test/Dev: Bấm "Tôi đã chuyển khoản" là tự động duyệt cọc mở vé ngay lập tức, không cần chuyển tiền thật
- * false = Chế độ Thật: Bắt buộc chuyển khoản MBBank thật và đối soát qua SePay Webhook
+ * false = Chế độ Thật: Bắt buộc chuyển khoản MBBank thật và đối soát qua SePay
  */
-define('PAYMENT_TEST_MODE', true);
+define('PAYMENT_TEST_MODE', false);
 
 // ---- Cấu hình gửi thư điện tử (SMTP Gmail) ----
 define('SMTP_HOST', getenv('SMTP_HOST') ?: 'smtp.gmail.com');
