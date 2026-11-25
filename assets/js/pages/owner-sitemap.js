@@ -16,7 +16,7 @@ import {
   S, PAGE, TODAY, main, actions, BTN, BTN_OUT, BTN_SM, BTN_SM_PRI, BTN_SM_DANGER, INPUT, LABEL, CARD,
   chip, statCard, sectionTitle, modal, slotText, dateText, money, isActive, courtById,
 } from './owner-shared.js';
-import { renderOverview, renderBookings, renderInvoices, renderCourts, renderSchedule, renderBlockedSlotsManager, openQuickBlockModal, renderReviews, openCounterBooking, openBookingDetail } from './owner-ops.js?v=20261123_02';
+import { renderOverview, renderBookings, renderInvoices, renderCourts, renderSchedule, renderBlockedSlotsManager, openQuickBlockModal, renderReviews, openCounterBooking, openBookingDetail } from './owner-ops.js?v=20261125_01';
 import { renderReports, renderCustomers, renderServices, renderPromotions, renderDeposits } from './owner-biz.js?v=20261123_02';
 
 const subState = {};
@@ -214,7 +214,7 @@ function renderBookingCalendar() {
       if (res.list) S.blockedList = res.list;
       if (res.courtBlocked) S.blocked[`${cId}:${d}`] = res.courtBlocked;
       toast(`Đã mở khóa khung ${h} ngày ${dateText(d)}.`);
-      renderBookingCalendar();
+      renderSitemapBookings();
     } catch (err) { toast(err.message, 'error'); }
   });
 }

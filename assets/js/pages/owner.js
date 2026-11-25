@@ -15,7 +15,7 @@ import {
   renderSitemapStaff,
   renderSitemapSettings,
   renderSitemapAccount,
-} from './owner-sitemap.js?v=20261123_02';
+} from './owner-sitemap.js?v=20261125_01';
 
 const RENDER = {
   overview: renderSitemapOverview,

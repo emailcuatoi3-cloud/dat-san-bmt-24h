@@ -764,7 +764,7 @@ export function renderOverview() {
       if (res.list) S.blockedList = res.list;
       if (res.courtBlocked) S.blocked[`${courtId}:${date}`] = res.courtBlocked;
       toast('Đã mở khóa khung giờ thành công.');
-      renderOverview();
+      rerender();
     } catch (err) { toast(err.message, 'error'); }
   });
 }
@@ -1388,17 +1388,17 @@ export function renderSchedule() {
 
   const root = main();
   bindBookingActions(root);
-  root.querySelector('#sc-court').addEventListener('change', (e) => { sf.court = e.target.value; sf.picked.clear(); renderSchedule(); });
-  root.querySelector('#sc-date').addEventListener('change', (e) => { sf.date = e.target.value || TODAY; sf.picked.clear(); renderSchedule(); });
-  on(root, 'click', '[data-day]', (e, el) => { sf.date = el.dataset.day; sf.picked.clear(); renderSchedule(); });
-  on(root, 'click', '[data-slot]', (e, el) => { const s = el.dataset.slot; sf.picked.has(s) ? sf.picked.delete(s) : sf.picked.add(s); renderSchedule(); });
+  root.querySelector('#sc-court').addEventListener('change', (e) => { sf.court = e.target.value; sf.picked.clear(); rerender(); });
+  root.querySelector('#sc-date').addEventListener('change', (e) => { sf.date = e.target.value || TODAY; sf.picked.clear(); rerender(); });
+  on(root, 'click', '[data-day]', (e, el) => { sf.date = el.dataset.day; sf.picked.clear(); rerender(); });
+  on(root, 'click', '[data-slot]', (e, el) => { const s = el.dataset.slot; sf.picked.has(s) ? sf.picked.delete(s) : sf.picked.add(s); rerender(); });
   on(root, 'click', '[data-pick-all]', () => {
     slots.filter((s) => !bookedBy[s] && !blocked.has(s)).forEach((s) => sf.picked.add(s));
-    renderSchedule();
+    rerender();
   });
   on(root, 'click', '[data-clear-pick]', () => {
     sf.picked.clear();
-    renderSchedule();
+    rerender();
   });
   on(root, 'click', '[data-edit-court]', () => openCourtForm(c));
   on(root, 'click', '[data-counter]', () => {
@@ -1415,7 +1415,7 @@ export function renderSchedule() {
       if (res.courtBlocked) S.blocked[`${c.id}:${sf.date}`] = res.courtBlocked;
       sf.picked.clear();
       toast(block ? 'Đã khóa khung giờ — khách sẽ không đặt được.' : 'Đã mở khóa khung giờ.');
-      renderSchedule();
+      rerender();
     } catch (err) { toast(err.message, 'error'); }
   });
   on(root, 'click', '[data-unblock-single]', async (e, el) => {
@@ -1426,7 +1426,7 @@ export function renderSchedule() {
       if (res.list) S.blockedList = res.list;
       if (res.courtBlocked) S.blocked[`${c.id}:${sf.date}`] = res.courtBlocked;
       toast(`Đã mở khóa khung ${s}.`);
-      renderSchedule();
+      rerender();
     } catch (err) { toast(err.message, 'error'); }
   });
   on(root, 'click', '[data-block-allday]', async (e, el) => {
@@ -1446,7 +1446,7 @@ export function renderSchedule() {
       if (res.courtBlocked) S.blocked[`${c.id}:${sf.date}`] = res.courtBlocked;
       sf.picked.clear();
       toast(isLock ? 'Đã khóa toàn bộ khung giờ ngày này.' : 'Đã mở khóa toàn bộ khung giờ ngày này.');
-      renderSchedule();
+      rerender();
     } catch (err) { toast(err.message, 'error'); }
   });
 }
@@ -1595,7 +1595,7 @@ export function renderBlockedSlotsManager() {
       if (res.list) S.blockedList = res.list;
       selectedKeys.delete(`${courtId}:${date}:${slot}`);
       toast(`Đã mở khóa khung ${slot} ngày ${dateText(date)}.`);
-      renderBlockedSlotsManager();
+      rerender();
     } catch (err) { toast(err.message, 'error'); }
   });
 
@@ -1626,7 +1626,7 @@ export function renderBlockedSlotsManager() {
       }
       selectedKeys.clear();
       toast('Đã mở khóa các khung giờ đã chọn thành công.');
-      renderBlockedSlotsManager();
+      rerender();
     } catch (err) { toast(err.message, 'error'); }
   });
 }
