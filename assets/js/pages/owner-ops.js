@@ -7,9 +7,9 @@ import { detectBookingConflicts, collectConflictIds } from '../lib/bookingConfli
 import { parseTicketPayload } from '../lib/checkin.js';
 import { TIME_OPTIONS, WEEKDAY_KEYS, WEEKDAY_LABELS, normalizeWeeklyHours, weekdaySummary, isWeeklyCustomized, hoursForDate, toMinutes, minutesToTime } from '../lib/openingHours.js';
 import {
-  S, PAGE, TODAY, main, actions, loadData, refreshBadges, BTN, BTN_OUT, BTN_SM, BTN_SM_PRI, BTN_SM_DANGER, INPUT, LABEL, CARD,
+  S, PAGE, TODAY, main, actions, loadData, refreshBadges, BTN, BTN_OUT, BTN_DANGER, BTN_SM, BTN_SM_PRI, BTN_SM_DANGER, INPUT, LABEL, CARD,
   chip, statCard, sectionTitle, modal, slotText, dateText, longDate, money, isActive, courtById, addDays, sourceBadge, courtOptions,
-} from './owner-shared.js';
+} from './owner-shared.js?v=20261125_02';
 
 const rerender = () => window.__ownerRender && window.__ownerRender();
 

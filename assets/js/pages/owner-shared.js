@@ -33,6 +33,7 @@ export const BTN_OUT = 'inline-flex cursor-pointer items-center justify-center g
 export const BTN_SM = 'inline-flex cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-md border border-background-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-foreground-800 transition-colors hover:border-primary-400 hover:text-primary-700 disabled:opacity-60';
 export const BTN_SM_PRI = 'inline-flex cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-md bg-primary-500 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-primary-600 disabled:opacity-60';
 export const BTN_SM_DANGER = 'inline-flex cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-md border border-accent-200 bg-accent-50 px-2.5 py-1.5 text-xs font-semibold text-accent-800 transition-colors hover:border-accent-400 disabled:opacity-60';
+export const BTN_DANGER = 'inline-flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-accent-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-700 disabled:cursor-not-allowed disabled:opacity-60';
 export const INPUT = 'w-full rounded-md border border-background-300 bg-white px-3 py-2.5 text-sm text-foreground-900 outline-none transition-colors focus:border-primary-500 focus:ring-2 focus:ring-primary-100';
 export const LABEL = 'mb-1.5 block text-xs font-semibold text-foreground-700';
 export const CARD = 'rounded-lg border border-background-200 bg-white';
