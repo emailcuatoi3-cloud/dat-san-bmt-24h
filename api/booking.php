@@ -685,16 +685,86 @@ run_api([
         return $b;
     },
 
-    // Kiểm tra trực tiếp biến động số dư SePay (Real-time Polling siêu nhanh dựa vào Webhook)
+    // Kiểm tra trực tiếp biến động số dư SePay (Real-time Polling siêu nhanh dựa vào Webhook + API Fallback)
     'check_sepay' => function () {
         $id = in_str('id') ?: trim((string)($_GET['id'] ?? ''));
         $code = strtoupper(trim(in_str('code') ?: (string)($_GET['code'] ?? '')));
         $b = $id ? q_one('SELECT * FROM bookings WHERE id = ?', [$id]) : ($code ? q_one('SELECT * FROM bookings WHERE code = ?', [$code]) : null);
         if (!$b) fail('Không tìm thấy đơn.');
 
-        // Kiểm tra tiền thật từ Webhook SePay (nếu tiền thật vào thì tự động mở vé ngay lập tức)
+        // 1. Kiểm tra tiền thật từ Webhook SePay (nếu đã lưu CSDL thì trả về ngay)
         if (in_array($b['payment_status'], ['paid', 'deposit_paid'], true)) {
             return ['confirmed' => true, 'booking' => booking_by_code($b['code'])];
+        }
+
+        // 2. Fallback: Nếu Webhook chưa tới (hoặc Tunnel mất kết nối), truy vấn thẳng SePay Transactions API
+        $now = time();
+        $sessKey = 'last_sepay_check_' . $b['id'];
+        $lastCheck = (int)($_SESSION[$sessKey] ?? 0);
+
+        if (($now - $lastCheck) >= 2) {
+            $_SESSION[$sessKey] = $now;
+            $token = defined('SEPAY_API_TOKEN') ? SEPAY_API_TOKEN : '';
+            if ($token) {
+                $cmd = 'curl.exe -s -m 3 -H "Authorization: Bearer ' . $token . '" -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" "https://my.sepay.vn/userapi/transactions/list?limit=5"';
+                $raw = shell_exec($cmd);
+                $json = json_decode((string)$raw, true);
+                $cleanCode = str_replace('-', '', $b['code']);
+
+                foreach ($json['transactions'] ?? [] as $tx) {
+                    $txContent = (string)($tx['transaction_content'] ?? '');
+                    if (stripos($txContent, $cleanCode) !== false || stripos($txContent, $b['code']) !== false) {
+                        $amountIn = (int)($tx['amount_in'] ?? 0);
+                        $isFull = ($amountIn >= (int)$b['total_price']) || ($b['payment_method'] === 'vietqr-full');
+                        $newStatus = $isFull ? 'paid' : 'deposit_paid';
+
+                        q("UPDATE bookings SET 
+                            payment_status = ?, 
+                            status = 'confirmed', 
+                            payment_method = 'vietqr-deposit',
+                            hold_expires_at = NULL, 
+                            approved_at = COALESCE(approved_at, NOW()) 
+                           WHERE id = ?", 
+                           [$newStatus, $b['id']]
+                        );
+
+                        $updatedBooking = q_one('SELECT * FROM bookings WHERE id = ?', [$b['id']]);
+
+                        // Gửi thông báo khách hàng
+                        $targetUserId = (int) ($updatedBooking['customer_id'] ?: 0);
+                        if (!$targetUserId && !empty($updatedBooking['customer_phone'])) {
+                            $targetUserId = (int) q_val('SELECT id FROM users WHERE phone = ?', [$updatedBooking['customer_phone']]);
+                        }
+                        if ($targetUserId > 0) {
+                            push_notification(
+                                $targetUserId,
+                                'Thanh toán đơn #' . $b['code'] . ' thành công!',
+                                'Hệ thống tự động nhận tiền qua chuyển khoản ngân hàng. Vé QR đặt sân của bạn đã sẵn sàng!',
+                                'payment',
+                                '/tai-khoan?tab=history'
+                            );
+                        }
+
+                        // Gửi thông báo chủ sân
+                        $court = q_one('SELECT owner_id FROM courts WHERE id = ?', [$updatedBooking['court_id']]);
+                        if (!empty($court['owner_id'])) {
+                            push_notification(
+                                (int) $court['owner_id'],
+                                'Đơn #' . $b['code'] . ' đã cọc qua Ngân hàng',
+                                'Khách ' . ($updatedBooking['customer_name'] ?: 'Khách') . ' đã chuyển khoản thành công.',
+                                'payment',
+                                '/chu-san?tab=bookings'
+                            );
+                        }
+
+                        // Gửi email vé điện tử
+                        require_once __DIR__ . '/../includes/mailer.php';
+                        send_booking_ticket_email($updatedBooking);
+
+                        return ['confirmed' => true, 'booking' => booking_by_code($b['code'])];
+                    }
+                }
+            }
         }
 
         return ['confirmed' => false, 'booking' => booking_by_code($b['code'])];
