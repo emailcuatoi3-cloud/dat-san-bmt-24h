@@ -248,6 +248,18 @@ document.addEventListener('keydown', (event) => {
 // Menu di động
 const mobileBtn = $('[data-mobile-toggle]');
 if (mobileBtn) {
+  const closeMobileMenuOnDesktop = () => {
+    if (window.innerWidth < 1240) return;
+    const menu = $('#mobile-menu');
+    if (menu && !menu.classList.contains('hidden')) {
+      menu.classList.add('hidden');
+      mobileBtn.setAttribute('aria-expanded', 'false');
+      const icon = mobileBtn.querySelector('i');
+      if (icon) icon.className = 'ri-menu-line text-2xl';
+      if (header && header.dataset.transparent === '1') setHeaderMode(window.scrollY > 24 ? 's' : 't');
+    }
+  };
+  window.addEventListener('resize', closeMobileMenuOnDesktop);
   mobileBtn.addEventListener('click', () => {
     const menu = $('#mobile-menu');
     const open = menu.classList.toggle('hidden') === false;
