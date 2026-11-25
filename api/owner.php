@@ -47,6 +47,36 @@ function clean_list($value): array
     return array_values(array_filter(array_map(fn($s) => trim((string) $s), is_array($value) ? $value : []), 'strlen'));
 }
 
+function owner_to_minutes(string $t): int
+{
+    $parts = explode(':', $t);
+    return ((int) ($parts[0] ?? 0)) * 60 + ((int) ($parts[1] ?? 0));
+}
+
+function owner_minutes_to_time(int $m): string
+{
+    return sprintf('%02d:%02d', intdiv($m, 60), $m % 60);
+}
+
+function owner_hours_for_date(array $cMapped, string $dStr): array
+{
+    $open = $cMapped['openTime'] ?: '05:00';
+    $close = $cMapped['closeTime'] ?: '23:00';
+    $weekly = $cMapped['weeklyHours'] ?? null;
+    if (is_array($weekly)) {
+        $wKey = date('N', strtotime($dStr));
+        if (isset($weekly[$wKey]) && is_array($weekly[$wKey])) {
+            $day = $weekly[$wKey];
+            return [
+                'closed' => !empty($day['closed']),
+                'open' => $day['open'] ?: $open,
+                'close' => $day['close'] ?: $close,
+            ];
+        }
+    }
+    return ['closed' => false, 'open' => $open, 'close' => $close];
+}
+
 run_api([
     // Toàn bộ dữ liệu cho bảng điều khiển
     'data' => function () {
@@ -403,11 +433,11 @@ run_api([
                 $cMapped = map_court($c);
                 $slotsToApply = $rawSlots;
                 if ($lockAllDay) {
-                    $h = hoursForDate($cMapped, $dStr);
+                    $h = owner_hours_for_date($cMapped, $dStr);
                     $slotsToApply = [];
                     if (!$h['closed']) {
-                        for ($t = toMinutes($h['open']); $t + 60 <= toMinutes($h['close']); $t += 60) {
-                            $slotsToApply[] = minutesToTime($t);
+                        for ($t = owner_to_minutes($h['open']); $t + 60 <= owner_to_minutes($h['close']); $t += 60) {
+                            $slotsToApply[] = owner_minutes_to_time($t);
                         }
                     }
                 }
