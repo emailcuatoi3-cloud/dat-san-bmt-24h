@@ -119,8 +119,62 @@ if (root && aiCfg.enabled !== false) {
     return `${day}/${month} ${timeStr}`;
   }
 
+  function migrateGuestSessions(userSessions) {
+    if (currentUserId === 'guest') return { sessions: userSessions, migratedActiveId: '' };
+    try {
+      const rawGuest = localStorage.getItem('bmt24h_chatbot_sessions_guest');
+      if (!rawGuest) return { sessions: userSessions, migratedActiveId: '' };
+      const parsedGuest = JSON.parse(rawGuest);
+      if (!Array.isArray(parsedGuest)) return { sessions: userSessions, migratedActiveId: '' };
+
+      const guestWithMsgs = parsedGuest.filter(
+        (s) => s && Array.isArray(s.messages) && s.messages.some((m) => m.from === 'user')
+      );
+      if (guestWithMsgs.length === 0) return { sessions: userSessions, migratedActiveId: '' };
+
+      const map = new Map();
+      userSessions.forEach((s) => {
+        if (s && s.id) map.set(s.id, s);
+      });
+      guestWithMsgs.forEach((gs) => {
+        if (gs && gs.id && !map.has(gs.id)) {
+          map.set(gs.id, gs);
+        }
+      });
+
+      const merged = Array.from(map.values())
+        .filter((s) => (s.messages || []).some((m) => m.from === 'user'))
+        .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+      const finalSessions = merged.length > 0 ? merged : userSessions;
+      saveSessionsToStorage(finalSessions);
+
+      const guestActiveId = localStorage.getItem('bmt24h_chatbot_active_guest') || '';
+      const targetActiveId = (guestActiveId && finalSessions.some((s) => s.id === guestActiveId))
+        ? guestActiveId
+        : (guestWithMsgs[0] ? guestWithMsgs[0].id : '');
+
+      if (targetActiveId) {
+        saveActiveSessionId(targetActiveId);
+      }
+
+      // Dọn dẹp bộ nhớ tạm của khách sau khi đã chuyển sang tài khoản đăng nhập
+      localStorage.removeItem('bmt24h_chatbot_sessions_guest');
+      localStorage.removeItem('bmt24h_chatbot_active_guest');
+      localStorage.removeItem('bmt24h_chatbot_open_guest');
+
+      return { sessions: finalSessions, migratedActiveId: targetActiveId, migratedIds: guestWithMsgs.map((s) => s.id) };
+    } catch (e) {
+      console.warn('Lỗi chuyển lịch sử chat từ khách sang tài khoản:', e);
+      return { sessions: userSessions, migratedActiveId: '', migratedIds: [] };
+    }
+  }
+
   let sessions = loadSessions();
-  let activeId = loadActiveSessionId(sessions);
+  const migration = migrateGuestSessions(sessions);
+  sessions = migration.sessions;
+  const migratedGuestIds = migration.migratedIds || [];
+  let activeId = migration.migratedActiveId || loadActiveSessionId(sessions);
 
   const getActiveSession = () => {
     let cur = sessions.find((s) => s.id === activeId);
@@ -649,6 +703,9 @@ if (root && aiCfg.enabled !== false) {
   async function syncServerHistory() {
     if (currentUserId === 'guest') return;
     try {
+      if (migratedGuestIds.length > 0) {
+        await api('chatbot', 'claim_guest_sessions', { session_ids: migratedGuestIds }).catch(() => {});
+      }
       const res = await api('chatbot', 'sync', {}, 'GET');
       if (res && Array.isArray(res.sessions) && res.sessions.length > 0) {
         const serverSessions = res.sessions.map((ss) => {

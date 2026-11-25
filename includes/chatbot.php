@@ -9,9 +9,12 @@
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/migrations.php';
+if (file_exists(__DIR__ . '/data.php')) {
+    require_once __DIR__ . '/data.php';
+}
 
 /**
- * Trích xuất ngữ cảnh kiến thức sân thể thao và chính sách từ CSDL thời gian thực
+ * Trích xuất ngữ cảnh kiến thức sân thể thao, khuyến mãi, dịch vụ và chính sách từ CSDL thời gian thực
  */
 function build_venue_context(): string
 {
@@ -27,7 +30,7 @@ function build_venue_context(): string
 
         $lines = [];
         $lines[] = "Bạn là Trợ lý AI tư vấn đặt sân thể thao chuyên nghiệp và thân thiện của nền tảng \"{$siteName}\".";
-        $lines[] = "THÔNG TIN NỀN TẢNG:";
+        $lines[] = "THÔNG TIN NỀN TẢNG & CHÍNH SÁCH (DỮ LIỆU CSDL THỜI GIAN THỰC - NGÀY " . date('d/m/Y') . "):";
         $lines[] = "- Hotline hỗ trợ 24/7: {$hotline}";
         $lines[] = "- Khu vực hoạt động: {$siteAddress}";
         $lines[] = "- Chính sách cọc giữ chỗ: {$depositRate}% tổng tiền sân qua chuyển khoản VietQR (thời gian giữ chỗ thanh toán: {$holdMinutes} phút).";
@@ -36,38 +39,183 @@ function build_venue_context(): string
             $lines[] = "- Lưu ý quy định: " . trim(preg_replace('/\s+/', ' ', $generalPolicy));
         }
 
+        // Các tính năng chính thức đang có trên website
+        $totalSpins = (int) q_val("SELECT COUNT(*) FROM wheel_spins");
         $lines[] = "";
-        $lines[] = "DANH SÁCH SÂN VÀ GIÁ TẠI BUÔN MA THUỘT:";
+        $lines[] = "CÁC TÍNH NĂNG ĐÃ TÍCH HỢP SẴN TRÊN WEBSITE (TUYỆT ĐỐI KHÔNG NÓI LÀ CHƯA CÓ):";
+        $lines[] = "• Vòng quay ưu đãi (/uu-dai#vong-quay): ĐÃ CÓ SẴN trên website! Khách hàng đã đăng nhập được quay miễn phí 1 lượt mỗi 48 giờ (hệ thống đã ghi nhận {$totalSpins} lượt quay). Các phần thưởng trên vòng quay gồm: QUAY10 (Giảm 10% đơn từ 100k), QUAY20K (Voucher 20.000đ), NUOCFREE (Tặng 2 chai nước suối), QUAY15 (Giảm 15% giờ vàng 05:00-16:00), QUAY50K (Voucher VIP 50.000đ đơn từ 300k), THEM30P (Tặng 30 phút chơi thêm). Mã trúng thưởng tự động lưu vào Tài khoản → Ví voucher (/tai-khoan?tab=vouchers), hiệu lực 48 giờ.";
+        $lines[] = "• Săn mã giảm giá & Khuyến mãi (/uu-dai): Xem, kiểm tra điều kiện và lưu mã về Ví voucher trước khi đặt sân.";
+        $lines[] = "• Đặt lịch cố định hàng tuần (/tai-khoan?tab=recurring): Đăng ký giữ sân dài hạn cố định theo thứ trong tuần.";
+        $lines[] = "• Ngẫu nhiên & Chia đội (/ngau-nhien): Chia đội hình cân bằng, ghép cặp và chọn sân may mắn.";
+        $lines[] = "• Bản đồ sân (/ban-do): Xem trực quan vị trí toàn bộ sân quanh Buôn Ma Thuột.";
+        $lines[] = "• Tìm sân (/tim-san), Sân yêu thích & Ví voucher (/tai-khoan).";
 
-        $courts = q_all("SELECT name, sport, sport_label, area, price_per_hour, peak_price 
-                         FROM courts 
-                         WHERE deleted_at IS NULL AND status = 'active' 
+        // 1. Đọc danh sách sân thể thao thực tế từ CSDL
+        $courts = q_all("SELECT id, name, sport, sport_label, area, address, price_per_hour, peak_price, open_time, close_time, field_types, rating, review_count
+                         FROM courts
+                         WHERE deleted_at IS NULL AND status = 'active'
                          ORDER BY sort_order ASC, name ASC");
+
+        $footballPrices = [];
+        $badmintonPrices = [];
+        $courtNamesById = [];
+
+        $lines[] = "";
+        $lines[] = "DANH SÁCH SÂN VÀ GIÁ TẠI BUÔN MA THUỘT (" . count($courts) . " cụm sân đang hoạt động):";
 
         if (!empty($courts)) {
             foreach ($courts as $c) {
-                $sport = $c['sport_label'] ?: ($c['sport'] === 'badminton' ? 'Cầu lông' : 'Bóng đá');
-                $priceStr = number_format((int)$c['price_per_hour'], 0, ',', '.') . 'đ/h';
-                if (!empty($c['peak_price']) && (int)$c['peak_price'] > (int)$c['price_per_hour']) {
-                    $priceStr .= ' (Cao điểm: ' . number_format((int)$c['peak_price'], 0, ',', '.') . 'đ/h)';
+                $courtNamesById[$c['id']] = $c['name'];
+                $isBadminton = ($c['sport'] === 'badminton');
+                $sport = $c['sport_label'] ?: ($isBadminton ? 'Cầu lông' : 'Bóng đá');
+                $pBase = (int) $c['price_per_hour'];
+                $pPeak = (int) $c['peak_price'];
+                if ($isBadminton) {
+                    $badmintonPrices[] = $pBase;
+                    if ($pPeak > 0) $badmintonPrices[] = $pPeak;
+                } else {
+                    $footballPrices[] = $pBase;
+                    if ($pPeak > 0) $footballPrices[] = $pPeak;
                 }
-                $lines[] = "• {$c['name']} ({$sport} - {$c['area']}): {$priceStr}";
+
+                $priceStr = number_format($pBase, 0, ',', '.') . 'đ/h';
+                if ($pPeak > $pBase) {
+                    $priceStr .= ' (Cao điểm: ' . number_format($pPeak, 0, ',', '.') . 'đ/h)';
+                }
+                $hours = ($c['open_time'] ?: '05:00') . '-' . ($c['close_time'] ?: '23:00');
+                $typesArr = json_decode((string)($c['field_types'] ?? '[]'), true);
+                $typeLabels = [];
+                if (is_array($typesArr)) {
+                    foreach ($typesArr as $ft) {
+                        if (!empty($ft['label'])) $typeLabels[] = $ft['label'];
+                    }
+                }
+                $typeInfo = !empty($typeLabels) ? (' | Loại: ' . implode(', ', array_slice($typeLabels, 0, 3))) : '';
+                $ratingInfo = ((float)$c['rating'] > 0) ? (" | Đánh giá: {$c['rating']}★ ({$c['review_count']})") : '';
+                $lines[] = "• {$c['name']} ({$sport} - {$c['area']}, {$c['address']}): {$priceStr} | Mở cửa: {$hours}{$typeInfo}{$ratingInfo}";
             }
         } else {
-            $lines[] = "• Hệ thống có các sân bóng đá mini và cầu lông tại BMT giá từ 65.000đ đến 400.000đ/h.";
+            $lines[] = "• Hệ thống đang cập nhật danh sách sân hoạt động tại Buôn Ma Thuột.";
+        }
+
+        if (!empty($footballPrices) || !empty($badmintonPrices)) {
+            $rangeParts = [];
+            if (!empty($footballPrices)) {
+                $rangeParts[] = 'Bóng đá: ' . number_format(min($footballPrices), 0, ',', '.') . 'đ - ' . number_format(max($footballPrices), 0, ',', '.') . 'đ/h';
+            }
+            if (!empty($badmintonPrices)) {
+                $rangeParts[] = 'Cầu lông: ' . number_format(min($badmintonPrices), 0, ',', '.') . 'đ - ' . number_format(max($badmintonPrices), 0, ',', '.') . 'đ/h';
+            }
+            $lines[] = "→ Khoảng giá thực tế trong CSDL: " . implode('; ', $rangeParts) . ".";
+        }
+
+        // 2. Đọc tình trạng đặt sân & khóa giờ hôm nay (khung giờ tối 17:00 trở đi)
+        $today = date('Y-m-d');
+        $todayBookings = q_all(
+            "SELECT court_id, slots FROM bookings WHERE booking_date = ? AND status <> 'cancelled'",
+            [$today]
+        );
+        $todayBlocked = q_all(
+            "SELECT court_id, slot FROM blocked_slots WHERE block_date = ?",
+            [$today]
+        );
+        $bookedEveningByCourt = [];
+        foreach ($todayBookings as $tb) {
+            $cid = $tb['court_id'];
+            $slots = json_decode((string)($tb['slots'] ?? '[]'), true);
+            if (!is_array($slots)) continue;
+            foreach ($slots as $sl) {
+                if (strcmp((string)$sl, '17:00') >= 0) {
+                    $bookedEveningByCourt[$cid][] = $sl;
+                }
+            }
+        }
+        foreach ($todayBlocked as $blk) {
+            $cid = $blk['court_id'];
+            $sl = (string)$blk['slot'];
+            if (strcmp($sl, '17:00') >= 0) {
+                $bookedEveningByCourt[$cid][] = $sl;
+            }
+        }
+        $lines[] = "";
+        $lines[] = "TÌNH TRẠNG ĐẶT SÂN HÔM NAY ({$today}):";
+        if (empty($bookedEveningByCourt)) {
+            $lines[] = "• Hầu hết các cụm sân vẫn còn rất nhiều khung giờ trống (kể cả buổi tối 17:00 - 22:00). Khách có thể vào trang Đặt sân để xem chi tiết từng sân con theo thời gian thực.";
+        } else {
+            $busyNotes = [];
+            foreach ($bookedEveningByCourt as $cid => $sls) {
+                $cname = $courtNamesById[$cid] ?? $cid;
+                $uniqueSls = array_values(array_unique($sls));
+                sort($uniqueSls);
+                $busyNotes[] = "{$cname} đã có lịch ở khung: " . implode(', ', array_slice($uniqueSls, 0, 5));
+            }
+            $lines[] = "• Một số khung giờ tối đã có đơn đặt: " . implode('; ', $busyNotes) . ". Các khung giờ khác và các sân còn lại vẫn đang mở đặt trực tiếp trên web.";
+        }
+
+        // 3. Đọc danh sách khuyến mãi / voucher đang chạy từ CSDL
+        $promos = q_all(
+            "SELECT code, title, description, discount_type, discount_value, max_discount, min_order, start_date, end_date, weekdays, start_time, end_time, usage_limit, owner_name
+             FROM promotions
+             WHERE status = 'active' AND (end_date IS NULL OR end_date >= CURDATE())
+             ORDER BY created_at DESC"
+        );
+        $lines[] = "";
+        $lines[] = "MÃ GIẢM GIÁ & KHUYẾN MÃI ĐANG HOẠT ĐỘNG TRONG CSDL:";
+        $hasPromo = false;
+        foreach ($promos as $p) {
+            // Bỏ qua mã kiểm thử nội bộ nếu có
+            if (stripos((string)$p['title'], 'test') !== false && stripos((string)$p['code'], 'LIMITCD') === 0) {
+                continue;
+            }
+            $hasPromo = true;
+            $discStr = $p['discount_type'] === 'percent'
+                ? ("Giảm {$p['discount_value']}%" . (!empty($p['max_discount']) ? " (tối đa " . number_format((int)$p['max_discount'], 0, ',', '.') . "đ)" : ""))
+                : ("Giảm " . number_format((int)$p['discount_value'], 0, ',', '.') . "đ");
+            $conds = [];
+            if ((int)$p['min_order'] > 0) {
+                $conds[] = "đơn từ " . number_format((int)$p['min_order'], 0, ',', '.') . "đ";
+            }
+            if (!empty($p['start_time']) && !empty($p['end_time'])) {
+                $conds[] = "khung {$p['start_time']}-{$p['end_time']}";
+            }
+            $remainStr = '';
+            if (!empty($p['usage_limit']) && function_exists('promo_claimed_count')) {
+                $rem = max(0, (int)$p['usage_limit'] - promo_claimed_count($p['code']));
+                $remainStr = " | Còn {$rem}/{$p['usage_limit']} lượt";
+            }
+            $scope = !empty($p['owner_name']) ? $p['owner_name'] : 'Toàn hệ thống';
+            $condText = !empty($conds) ? (' (' . implode(', ', $conds) . ')') : '';
+            $lines[] = "• Mã {$p['code']}: {$p['title']} — {$discStr}{$condText} | Áp dụng: {$scope} | HSD: {$p['end_date']}{$remainStr}";
+        }
+        if (!$hasPromo) {
+            $lines[] = "• Hiện chưa có mã khuyến mãi công khai mới, khách hàng có thể quay Vòng quay ưu đãi tại /uu-dai#vong-quay để nhận mã.";
+        }
+
+        // 4. Đọc dịch vụ & tiện ích đi kèm từ CSDL
+        $services = q_all("SELECT name, category, sport, unit, price, stock FROM owner_services WHERE active = 1 ORDER BY sort_order ASC, name ASC LIMIT 15");
+        if (!empty($services)) {
+            $svcList = [];
+            foreach ($services as $sv) {
+                $svcList[] = "{$sv['name']} (" . number_format((int)$sv['price'], 0, ',', '.') . "đ/{$sv['unit']})";
+            }
+            $lines[] = "";
+            $lines[] = "DỊCH VỤ & TIỆN ÍCH ĐI KÈM TẠI SÂN:";
+            $lines[] = "• " . implode(', ', $svcList) . ".";
         }
 
         $lines[] = "";
-        $lines[] = "QUY TẮC TƯ VẤN (BẮT BUỘC ĐỂ PHẢN HỒI NHANH VÀ CHÍNH XÁC):";
-        $lines[] = "1. Trả lời bằng tiếng Việt tự nhiên, NGẮN GỌN, SÚC TÍCH, đi thẳng vào câu hỏi của khách (dưới 120 từ).";
-        $lines[] = "2. Khi khách hỏi giá hoặc tìm sân nói chung: Tóm tắt khoảng giá theo từng môn (Bóng đá: 150k - 400k/h; Cầu lông: 65k - 130k/h), sau đó chỉ chọn nêu 3-4 sân tiêu biểu. TUYỆT ĐỐI KHÔNG liệt kê toàn bộ mọi sân trong hệ thống để câu trả lời được gửi đi tức thì và dễ đọc trên di động.";
-        $lines[] = "3. Khi khách hỏi cụ thể về 1 sân hoặc 1 khu vực: Cung cấp đầy đủ giá, địa chỉ và khung giờ của sân đó.";
-        $lines[] = "4. Luôn kết thúc câu trả lời hoàn chỉnh, chu đáo, không bao giờ ngắt câu dở dang. Mời khách đặt sân hoặc gọi Hotline {$hotline} khi cần hỗ trợ nhanh.";
+        $lines[] = "QUY TẮC TƯ VẤN (BẮT BUỘC):";
+        $lines[] = "1. CHỈ TRẢ LỜI DỰA TRÊN DỮ LIỆU THỰC TẾ Ở TRÊN. Tuyệt đối không bịa đặt hoặc phủ nhận những tính năng đã ghi ở mục TÍNH NĂNG ĐÃ TÍCH HỢP (như Vòng quay ưu đãi, Ví voucher, Lịch cố định, Ngẫu nhiên chia đội, Bản đồ sân).";
+        $lines[] = "2. TUYỆT ĐỐI KHÔNG tự bịa ra tên miền hay đường dẫn web dạng https://... (vì hệ thống không dùng tên miền cố định đó). Khi hướng dẫn khách mở trang, chỉ nêu tên mục trên website (ví dụ: mục Ưu đãi → Vòng quay ưu đãi, hoặc Tài khoản → Ví voucher) và nhắc khách bấm vào nút gợi ý bên dưới.";
+        $lines[] = "3. Trả lời bằng tiếng Việt tự nhiên, NGẮN GỌN, SÚC TÍCH, đúng trọng tâm câu hỏi (dưới 150 từ).";
+        $lines[] = "4. Khi khách hỏi giá hoặc tìm sân nói chung: nêu đúng khoảng giá thực tế từ CSDL theo từng môn và chọn gợi ý 3-4 sân tiêu biểu; nếu hỏi 1 sân/khu vực cụ thể thì nêu đầy đủ giá, địa chỉ, giờ mở cửa của sân đó.";
+        $lines[] = "5. Khi khách hỏi về Vòng quay ưu đãi hoặc mã giảm giá: khẳng định website đã có sẵn tính năng tại mục Ưu đãi → Vòng quay ưu đãi, nêu rõ thể lệ (mỗi 48h quay 1 lần khi đăng nhập), các phần thưởng (QUAY10, QUAY20K, QUAY50K, NUOCFREE, QUAY15, THEM30P) và giới thiệu ngắn 2-3 mã khuyến mãi đang chạy ở trên.";
+        $lines[] = "6. Luôn kết thúc câu trả lời hoàn chỉnh, mời khách đặt sân hoặc liên hệ Hotline {$hotline}.";
 
         return implode("\n", $lines);
     } catch (Throwable $e) {
         error_log('build_venue_context error: ' . $e->getMessage());
-        return "Bạn là Trợ lý AI tư vấn đặt sân thể thao Đặt Sân BMT 24H. Hotline: 0262 399 8888. Hỗ trợ đặt sân bóng đá và cầu lông tại Buôn Ma Thuột. Chính sách cọc 30% qua VietQR, hủy trước 4 giờ hoàn cọc 100%. Sân bóng BMT Arena giá 180.000đ/h.";
+        return "Bạn là Trợ lý AI tư vấn đặt sân thể thao Đặt Sân BMT 24H. Hotline: 0262 399 8888. Hỗ trợ đặt sân bóng đá và cầu lông tại Buôn Ma Thuột. Chính sách cọc 30% qua VietQR, hủy trước 4 giờ hoàn cọc 100%. Website có tính năng Vòng quay ưu đãi tại /uu-dai#vong-quay (quay mỗi 48h nhận voucher). Sân bóng BMT Arena giá 180.000đ/h.";
     }
 }
 
@@ -342,9 +490,21 @@ function chatbot_fallback_reply(string $message = ''): array
 
     $msgLower = mb_strtolower(trim($message), 'UTF-8');
 
-    // Tư vấn theo chủ đề câu hỏi nếu khách hỏi thông tin cơ bản
+    // Tư vấn theo chủ đề câu hỏi từ dữ liệu CSDL nếu kết nối AI bị gián đoạn
     $extraText = '';
-    if (str_contains($msgLower, 'giá') || str_contains($msgLower, 'bao nhiêu') || str_contains($msgLower, 'tiền') || str_contains($msgLower, 'phí')) {
+    if (str_contains($msgLower, 'vòng quay') || str_contains($msgLower, 'ưu đãi') || str_contains($msgLower, 'voucher') || str_contains($msgLower, 'mã giảm') || str_contains($msgLower, 'khuyến mãi')) {
+        $promoCodes = [];
+        try {
+            $activePromos = q_all("SELECT code, title FROM promotions WHERE status = 'active' AND (end_date IS NULL OR end_date >= CURDATE()) ORDER BY created_at DESC LIMIT 4");
+            foreach ($activePromos as $ap) {
+                if (stripos((string)$ap['title'], 'test') === false) {
+                    $promoCodes[] = $ap['code'];
+                }
+            }
+        } catch (Throwable $e) {}
+        $codesNote = !empty($promoCodes) ? (' Các mã nổi bật đang chạy: ' . implode(', ', $promoCodes) . '.') : '';
+        $extraText = " Website đã tích hợp Vòng quay ưu đãi tại mục Ưu đãi (/uu-dai#vong-quay): bạn có thể quay 1 lượt mỗi 48 giờ khi đăng nhập để nhận voucher giảm giá (QUAY10, QUAY20K, QUAY50K, NUOCFREE...) lưu thẳng vào Ví voucher.{$codesNote}";
+    } elseif (str_contains($msgLower, 'giá') || str_contains($msgLower, 'bao nhiêu') || str_contains($msgLower, 'tiền') || str_contains($msgLower, 'phí')) {
         $extraText = " Bảng giá tham khảo tại Buôn Ma Thuột: Sân bóng đá mini 5-7 người dao động 150.000đ - 400.000đ/giờ; Sân cầu lông tiêu chuẩn dao động 65.000đ - 130.000đ/giờ tùy khung giờ.";
     } elseif (str_contains($msgLower, 'giờ') || str_contains($msgLower, 'mở cửa') || str_contains($msgLower, 'đóng cửa')) {
         $extraText = " Đa số cụm sân mở cửa từ 05:00 sáng đến 23:00 tối các ngày trong tuần.";
@@ -354,16 +514,19 @@ function chatbot_fallback_reply(string $message = ''): array
 
     $fallbackIntro = "Chào bạn! Hiện tại Trợ lý AI đang hoạt động ở chế độ giải đáp cơ bản (bị kết nối gián đoạn).{$extraText} Bạn có thể tra cứu nhanh danh sách sân, bảng giá và đặt sân trực tiếp tại website, hoặc liên hệ Hotline {$hotline} để được hỗ trợ nhanh nhất 24/7 nhé!";
 
+    $links = [
+        ['Tìm sân bóng đá', '/tim-san?sport=football'],
+        ['Tìm sân cầu lông', '/tim-san?sport=badminton'],
+        ['Vòng quay & Ưu đãi', '/uu-dai#vong-quay'],
+        ['Chính sách đặt & hủy sân', '/chinh-sach'],
+        ['Hotline hỗ trợ: ' . $hotline, '/lien-he'],
+    ];
+
     return [
         'text' => $fallbackIntro,
         'provider' => 'offline',
         'fallback' => true,
-        'links' => [
-            ['Tìm sân bóng đá', '/tim-san?sport=football'],
-            ['Tìm sân cầu lông', '/tim-san?sport=badminton'],
-            ['Chính sách đặt & hủy sân', '/chinh-sach'],
-            ['Hotline hỗ trợ: ' . $hotline, '/lien-he'],
-        ]
+        'links' => $links,
     ];
 }
 
@@ -496,14 +659,19 @@ function chatbot_reply(string $message, array $history = []): array
         }
 
         if ($replyText !== null && trim($replyText) !== '') {
+            $msgLower = mb_strtolower($msg, 'UTF-8');
+            $links = [
+                ['Xem sân còn trống', '/tim-san'],
+                ['Đặt sân ngay', '/dat-san'],
+            ];
+            if (str_contains($msgLower, 'vòng quay') || str_contains($msgLower, 'ưu đãi') || str_contains($msgLower, 'voucher') || str_contains($msgLower, 'mã giảm') || str_contains($msgLower, 'khuyến mãi')) {
+                array_unshift($links, ['Mở Vòng quay ưu đãi', '/uu-dai#vong-quay']);
+            }
             return [
                 'text' => trim($replyText),
                 'provider' => $provider,
                 'fallback' => false,
-                'links' => [
-                    ['Xem sân còn trống', '/tim-san'],
-                    ['Đặt sân ngay', '/dat-san'],
-                ]
+                'links' => $links,
             ];
         }
 

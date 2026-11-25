@@ -103,6 +103,29 @@ run_api([
         return ['sessions' => $sessions];
     },
 
+    // Gán các phiên chat của khách (trước khi đăng nhập) vào tài khoản vừa đăng nhập
+    'claim_guest_sessions' => function () {
+        ensure_sitemap_schema();
+        $u = current_user();
+        if (!$u) {
+            return ['claimed' => 0];
+        }
+        $uid = (int)$u['id'];
+        $raw = json_decode(file_get_contents('php://input'), true) ?: [];
+        $sessionIds = $raw['session_ids'] ?? [];
+        if (!is_array($sessionIds) || empty($sessionIds)) {
+            return ['claimed' => 0];
+        }
+        $cleanIds = array_values(array_unique(array_filter(array_map(fn($id) => trim((string)$id), $sessionIds), fn($id) => $id !== '')));
+        if (empty($cleanIds)) {
+            return ['claimed' => 0];
+        }
+        $placeholders = implode(',', array_fill(0, count($cleanIds), '?'));
+        $params = array_merge([$uid], $cleanIds);
+        q("UPDATE chatbot_history SET user_id = ? WHERE user_id IS NULL AND session_id IN ($placeholders)", $params);
+        return ['claimed' => count($cleanIds)];
+    },
+
     // Lấy lịch sử trò chuyện đã lưu trên máy chủ (cho 1 session cụ thể hoặc gần nhất)
     'history' => function () {
         ensure_sitemap_schema();
