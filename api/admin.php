@@ -631,9 +631,8 @@ run_api([
 
         if ($status === 'confirmed') {
             $slots = jd($b['slots']);
-            $occ = occupied_slots($b['booking_date'], $b['id'])[$b['court_id']] ?? [];
-            $blocked = blocked_slots_map($b['booking_date'], [$b['court_id']])[$b['court_id'] . ':' . $b['booking_date']] ?? [];
-            $unavailable = array_intersect($slots, array_merge($occ, $blocked));
+            $bAttrs = extract_booking_attributes($b['court_name'] ?? '', $b['note'] ?? '');
+            $unavailable = array_intersect($slots, taken_slots($b['court_id'], $b['booking_date'], $b['id'], $bAttrs['fieldType'], $bAttrs['spaceType']));
             if (!empty($unavailable)) {
                 fail('Không thể duyệt đơn vì khung giờ ' . implode(', ', $unavailable) . ' ngày ' . $b['booking_date'] . ' đã bị trùng lịch với đơn khác hoặc đang bị khóa.');
             }

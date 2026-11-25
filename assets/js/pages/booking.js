@@ -5,15 +5,16 @@
  * - Điều khiển luồng duyệt đơn & đồng hồ giữ chỗ 5 phút, đối soát thanh toán VietQR và render vé QR
  */
 
-import { $, $$, PAGE, APP, api, esc, url, cx, formatVnd, copyText, openModal } from '../core/ui.js';
+import { $, $$, PAGE, APP, api, esc, url, cx, formatVnd, copyText, openModal, toast } from '../core/ui.js';
 import { ticketData, ticketQrUrl, downloadTicket, openShareSheet } from '../core/ticket.js';
-import { buildDaySlots, calcCourtPriceForRange, getPriceBands, lowestPrice, priceBandAt } from '../lib/courtPricing.js';
+import { buildDaySlots, calcCourtPriceForRange, getPriceBands, lowestPrice, priceBandAt, fieldPriceStep } from '../lib/courtPricing.js';
 import { DURATION_OPTIONS, calcDeposit, endTimeOf, extraServices, formatCountdown, formatTimeRange, remainingHoldSeconds, slotsInRange } from '../lib/booking.js';
-import { formatLongDate, getUpcomingDates, isPastSlot, isTodayIso, toIsoDate } from '../lib/format.js';
+import { formatLongDate, formatShortDate, getUpcomingDates, isPastSlot, isTodayIso, toIsoDate } from '../lib/format.js';
 import { describeDiscount, describeConditions, computeDiscount, checkPromotion, normalizePromoCode } from '../lib/promotions.js';
 import { rememberBookingCode } from '../lib/myBookings.js';
 import { bankAccount, buildVietQrUrl, AUTO_CONFIRM_SECONDS, HOTLINE, HOLD_MINUTES } from '../lib/payment.js';
 import { formatCancelDeadline, isBeforeCancelCutoff, CANCEL_CUTOFF_HOURS } from '../lib/cancelPolicy.js';
+import { subscribeSlots, createLivePulseBadge } from '../core/realtime.js';
 
 const courts = PAGE.courts || [];
 const preset = PAGE.preset || {};
@@ -27,8 +28,13 @@ const S = {
   date: presetDate,
   duration: 60,
   startSlot: preset.slot && !isPastSlot(presetDate, preset.slot) ? preset.slot : '',
+  fieldType: '', // Đa thuộc tính: 'Sân 5 người' | 'Sân 7 người'
+  spaceType: 'outdoor', // Đa thuộc tính: 'outdoor' (Ngoài trời) | 'indoor' (Có mái che)
+  bookingType: 'single', // Đa thuộc tính: 'single' (Đặt theo buổi) | 'recurring' (Lịch cố định)
+  recurringWeekdays: [1, 3, 5], // Đa thuộc tính: Mặc định Thứ 2, 4, 6 (1=T2..7=CN)
+  recurringWeeks: 4, // Đa thuộc tính: Thời hạn gói 1 tháng = 4 tuần
   filters: { keyword: '', sport: 'all', area: '', priceId: 'all', sort: 'popular' },
-  availability: { occupied: {}, blocked: {}, loading: true },
+  availability: { occupied: {}, occupiedDetails: {}, blocked: {}, loading: true },
   form: { name: '', phone: '', email: '', note: '', ...(PAGE.contact || {}) },
   extras: [],
   agree: false,
@@ -55,6 +61,11 @@ function saveDraft() {
         date: S.date,
         duration: S.duration,
         startSlot: S.startSlot,
+        fieldType: S.fieldType,
+        spaceType: S.spaceType,
+        bookingType: S.bookingType,
+        recurringWeekdays: S.recurringWeekdays,
+        recurringWeeks: S.recurringWeeks,
         form: S.form,
         extras: S.extras,
         agree: S.agree,
@@ -95,6 +106,11 @@ function restoreDraft() {
     if (draft.date && draft.date >= todayIso) S.date = draft.date;
     if (draft.duration && [60, 90, 120].includes(draft.duration)) S.duration = draft.duration;
     if (draft.startSlot) S.startSlot = draft.startSlot;
+    if (draft.fieldType) S.fieldType = draft.fieldType;
+    if (draft.spaceType) S.spaceType = draft.spaceType;
+    if (draft.bookingType) S.bookingType = draft.bookingType;
+    if (Array.isArray(draft.recurringWeekdays) && draft.recurringWeekdays.length > 0) S.recurringWeekdays = draft.recurringWeekdays;
+    if (draft.recurringWeeks && [4, 8, 12].includes(draft.recurringWeeks)) S.recurringWeeks = draft.recurringWeeks;
     if (Array.isArray(draft.extras)) S.extras = draft.extras;
     if (draft.agree !== undefined) S.agree = draft.agree;
     if (draft.promoCode) S.promoCode = draft.promoCode;
@@ -139,9 +155,11 @@ const currentServices = () => {
     : extraServices.map((x) => ({ id: x.id, name: x.label, price: x.price, unit: 'lượt', hasVariants: false, variants: [], sport: 'all' }));
   if (!c) return all;
 
-  // Lọc chỉ những dịch vụ thuộc đúng môn thể thao của sân đang chọn (hoặc dùng chung 'all'):
+  // Lọc chỉ những dịch vụ thuộc đúng môn thể thao của sân đang chọn (hoặc dùng chung 'all'), loại bỏ phần bóng thi đấu:
   const sport = c.sport; // 'football' hoặc 'badminton'
-  let list = all.filter((s) => !s.sport || s.sport === 'all' || s.sport === sport);
+  let list = all.filter(
+    (s) => (!s.sport || s.sport === 'all' || s.sport === sport) && s.id !== 'sv-ball' && !s.name?.toLowerCase().includes('bóng thi đấu')
+  );
 
   if (c.ownerId) {
     const ownerList = list.filter((s) => s.ownerId === c.ownerId);
@@ -207,25 +225,195 @@ const extrasTotal = () => {
     return sum + price * qty;
   }, 0);
 };
-const courtPrice = () => (court() && S.startSlot ? calcCourtPriceForRange(court(), S.startSlot, S.duration) : 0);
+/** Chuyển ISO date sang thứ trong tuần theo chuẩn hệ thống: 1=T2, 2=T3, ..., 7=CN */
+const getIsoWeekday = (iso) => {
+  if (!iso) return 1;
+  const d = new Date(iso + 'T00:00:00').getDay();
+  return d === 0 ? 7 : d;
+};
+
+const WEEKDAY_NAMES = {
+  1: 'Thứ 2', 2: 'Thứ 3', 3: 'Thứ 4', 4: 'Thứ 5', 5: 'Thứ 6', 6: 'Thứ 7', 7: 'Chủ Nhật'
+};
+
+const WEEKDAY_SHORT = {
+  1: 'T2', 2: 'T3', 3: 'T4', 4: 'T5', 5: 'T6', 6: 'T7', 7: 'CN'
+};
+
+const safeFormatShortDate = (iso) => {
+  if (typeof formatShortDate === 'function') return formatShortDate(iso);
+  if (!iso) return '';
+  const parts = iso.split('-');
+  return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : iso;
+};
+
+/** Tính ngày kết thúc của chu kỳ lịch cố định */
+const calcEndDate = (startDateIso, weeks) => {
+  try {
+    const d = new Date((startDateIso || todayIso) + 'T00:00:00');
+    d.setDate(d.getDate() + (weeks || 4) * 7);
+    return d.toISOString().slice(0, 10);
+  } catch (e) {
+    return startDateIso;
+  }
+};
+
+/** Tính tổng số buổi chơi của gói lịch cố định */
+const recurringSessionCount = () => {
+  if (S.bookingType !== 'recurring') return 1;
+  const daysCount = Array.isArray(S.recurringWeekdays) && S.recurringWeekdays.length > 0 ? S.recurringWeekdays.length : 1;
+  const weeks = S.recurringWeeks || 4;
+  return daysCount * weeks;
+};
+
+/** Lấy phân loại kích thước sân hiện tại (Sân 5 người / Sân 7 người) */
+const currentFieldType = () => {
+  const c = court();
+  if (!c) return 'Sân tiêu chuẩn';
+  const types = (c.fieldTypes && c.fieldTypes.length > 0) ? c.fieldTypes : (c.sport === 'football' ? ['Sân 5 người', 'Sân 7 người'] : ['Sân tiêu chuẩn', 'Sân VIP']);
+  if (!S.fieldType || !types.includes(S.fieldType)) {
+    S.fieldType = types[0];
+  }
+  return S.fieldType;
+};
+
+/** Tính giá theo slot có áp dụng ma trận đa thuộc tính Đắk Lắk (Kích thước, Mái che, Cố định) */
+const slotPrice = (c, slot) => {
+  if (!c || !slot) return 0;
+  let base = calcCourtPriceForRange(c, slot, S.duration);
+  // 1. Kích thước sân (Sân 5 / Sân 7)
+  const types = (c.fieldTypes && c.fieldTypes.length > 0) ? c.fieldTypes : (c.sport === 'football' ? ['Sân 5 người', 'Sân 7 người'] : ['Sân tiêu chuẩn', 'Sân VIP']);
+  const fType = currentFieldType();
+  const fIdx = types.indexOf(fType);
+  if (fIdx > 0) {
+    const step = typeof fieldPriceStep === 'function' ? fieldPriceStep(c) : (c.sport === 'football' ? 140000 : 30000);
+    base += (step * (S.duration / 60)) * fIdx;
+  }
+  // 2. Không gian sân (Có mái che: +30k/h tránh mưa dông Đắk Lắk)
+  if (S.spaceType === 'indoor') {
+    base += 30000 * (S.duration / 60);
+  }
+  // 3. Hình thức đặt (Lịch cố định: giảm 10% tiền sân mỗi buổi)
+  if (S.bookingType === 'recurring') {
+    base = Math.round((base * 0.9) / 1000) * 1000;
+  }
+  return Math.round(base / 1000) * 1000;
+};
+
+const courtPrice = () => {
+  if (!court() || !S.startSlot) return 0;
+  const perSession = slotPrice(court(), S.startSlot);
+  return perSession * recurringSessionCount();
+};
 const subtotal = () => courtPrice() + extrasTotal();
 const discount = () => (S.applied ? S.applied.discount : 0);
 const total = () => Math.max(0, subtotal() - discount());
 const unavailable = () => {
   const c = court();
   if (!c) return [];
-  return [...(S.availability.occupied[c.id] || []), ...(S.availability.blocked[`${c.id}:${S.date}`] || [])];
+  const blocked = S.availability.blocked[`${c.id}:${S.date}`] || [];
+
+  // Lấy thuộc tính sân đang được khách chọn (kích thước & không gian)
+  const currentFieldType = S.fieldType || (c.fieldTypes && c.fieldTypes[0]) || '';
+  const currentSpaceType = S.spaceType || 'outdoor';
+
+  const details = (S.availability.occupiedDetails && S.availability.occupiedDetails[c.id]) || [];
+  if (Array.isArray(details) && details.length > 0) {
+    const occSlots = details
+      .filter((item) => {
+        const matchField = !item.fieldType || !currentFieldType || item.fieldType === currentFieldType;
+        const matchSpace = !item.spaceType || !currentSpaceType || item.spaceType === currentSpaceType;
+        return matchField && matchSpace;
+      })
+      .map((item) => item.slot);
+    return Array.from(new Set([...occSlots, ...blocked]));
+  }
+
+  return [...(S.availability.occupied[c.id] || []), ...blocked];
 };
 
-// ======================= LỊCH TRỐNG =======================
+// ======================= LỊCH TRỐNG & ĐỒNG BỘ REALTIME =======================
+let realtimeSub = null;
+const recentTakenSlots = new Set();
+const recentFreedSlots = new Set();
+
+function setupBookingRealtime() {
+  const c = court();
+  if (realtimeSub) {
+    realtimeSub.setDate(S.date);
+    realtimeSub.setCourt(c ? c.id : '');
+    return;
+  }
+
+  realtimeSub = subscribeSlots({
+    date: S.date,
+    courtId: c ? c.id : '',
+    onUpdate: ({ occupied, occupiedDetails, blocked, allTaken, justTaken, justFreed }) => {
+      S.availability = {
+        occupied: occupied || S.availability.occupied || {},
+        occupiedDetails: occupiedDetails || S.availability.occupiedDetails || {},
+        blocked: blocked || S.availability.blocked || {},
+        loading: false,
+      };
+
+      // Khung giờ đang chọn bị người khác đặt hoặc khóa -> chỉ cảnh báo và hủy chọn khi đang ở Bước 1
+      if (S.step === 1 && S.startSlot && slotState(S.startSlot) !== 'free') {
+        const stolen = S.startSlot;
+        S.startSlot = '';
+        S.error = `Khung giờ ${stolen} vừa được khách khác đặt giữ chỗ trước! Vui lòng chọn khung giờ khác.`;
+        toast(`⚠️ Khung giờ ${stolen} vừa có người đặt giữ chỗ trước!`, 'error');
+        saveDraft();
+        renderError();
+        renderSummary();
+        renderNav();
+      }
+
+      if (justTaken && justTaken.length > 0) {
+        justTaken.forEach((s) => recentTakenSlots.add(s));
+        setTimeout(() => {
+          justTaken.forEach((s) => recentTakenSlots.delete(s));
+          if (S.step === 1) renderSlots();
+        }, 4000);
+      }
+
+      if (justFreed && justFreed.length > 0) {
+        justFreed.forEach((s) => recentFreedSlots.add(s));
+        setTimeout(() => {
+          justFreed.forEach((s) => recentFreedSlots.delete(s));
+          if (S.step === 1) renderSlots();
+        }, 4000);
+        toast(`Khung giờ ${justFreed.join(', ')} vừa được mở lại còn trống!`, 'success');
+      }
+
+      if (S.step === 1) {
+        renderSlots();
+        renderSummary();
+      }
+    },
+    onStatusChange: (status) => {
+      const badge = $('#booking-realtime-badge [data-live-text]');
+      if (badge) {
+        if (status === 'connected') badge.textContent = 'Trực tiếp';
+        else if (status === 'reconnecting') badge.textContent = 'Đang đồng bộ...';
+      }
+    },
+  });
+}
+
 async function loadAvailability() {
   S.availability.loading = true;
   renderSlots();
+  setupBookingRealtime();
   try {
     const data = await api('booking', 'availability', { date: S.date }, 'GET');
-    S.availability = { occupied: data.occupied || {}, blocked: data.blocked || {}, loading: false };
+    S.availability = {
+      occupied: data.occupied || {},
+      occupiedDetails: data.occupiedDetails || {},
+      blocked: data.blocked || {},
+      loading: false,
+    };
   } catch {
-    S.availability = { occupied: {}, blocked: {}, loading: false };
+    S.availability = { occupied: {}, occupiedDetails: {}, blocked: {}, loading: false };
   }
   // Khung đã chọn không còn hợp lệ → bỏ chọn
   if (S.startSlot && slotState(S.startSlot) !== 'free') {
@@ -308,6 +496,15 @@ function renderSummary() {
       ${row('Ngày chơi', formatLongDate(S.date))}
       ${row('Khung giờ', S.startSlot ? formatTimeRange(S.startSlot, S.duration) : 'Chưa chọn')}
       ${row('Thời lượng', `${S.duration} phút`)}
+      ${row('Kích thước sân', esc(currentFieldType()))}
+      ${row('Không gian', S.spaceType === 'indoor' ? 'Có mái che (+30k/h)' : 'Ngoài trời (Tiêu chuẩn)')}
+      ${row('Hình thức đặt', S.bookingType === 'recurring' ? 'Lịch cố định (Giảm 10%)' : 'Theo buổi')}
+      ${S.bookingType === 'recurring' ? `
+        ${row('Lịch đá cố định', (S.recurringWeekdays || []).map((d) => WEEKDAY_NAMES[d] || `T${d}`).join(', '))}
+        ${row('Thời hạn gói', `${(S.recurringWeeks || 4) / 4} tháng (${recurringSessionCount()} buổi)`)}
+        ${row('Chu kỳ', `${safeFormatShortDate(S.date)} – ${safeFormatShortDate(calcEndDate(S.date, S.recurringWeeks))}`)}
+        ${S.startSlot ? row('Giá mỗi buổi', `${formatVnd(slotPrice(c, S.startSlot))}/buổi`, 'text-primary-700 font-semibold') : ''}
+      ` : ''}
       ${band ? `${row('Khung giá', `${esc(band.shortLabel)}<span class="block text-[11px] font-normal text-foreground-500">${band.start} - ${band.end} · ${formatVnd(band.price)}/giờ</span>`)}` : row('Khung giá', 'Chưa chọn giờ')}
       ${extrasTotal() > 0 ? `
         <div class="space-y-1.5 border-t border-dashed border-background-200 pt-2 text-xs">
@@ -332,7 +529,7 @@ function renderSummary() {
     </dl>
     <div class="mt-4 rounded-lg border border-background-200 bg-background-50 p-4">
       <div class="flex items-center justify-between text-sm">
-        <span class="font-medium text-foreground-600">Tổng tiền sân:</span>
+        <span class="font-medium text-foreground-600">${S.bookingType === 'recurring' ? `Tổng tiền gói (${recurringSessionCount()} buổi):` : 'Tổng tiền sân:'}</span>
         <span class="font-heading text-base font-bold text-foreground-950">${S.startSlot ? formatVnd(tPrice) : '—'}</span>
       </div>
       <div class="mt-2.5 flex items-center justify-between border-t border-background-200 pt-2.5 text-sm">
@@ -384,13 +581,17 @@ function renderStep1() {
       </div>
     </div>
     <div id="court-list"></div>
+    <div id="court-attributes"></div>
     <div class="mt-6"><p class="mb-2 text-sm font-semibold text-foreground-900">Ngày chơi</p><div class="grid grid-cols-4 gap-2 sm:grid-cols-5 lg:grid-cols-7" id="dates"></div></div>
     <div class="mt-6 flex flex-wrap items-center justify-between gap-3"><p class="text-sm font-semibold text-foreground-900">Thời lượng</p><div class="inline-flex items-center gap-1 rounded-full bg-background-100 p-1" id="durations"></div></div>
-    <div class="mt-4 flex flex-wrap items-center gap-3 text-[11px] text-foreground-500">
-      <span class="flex items-center gap-1.5"><span class="h-3 w-3 rounded-sm border border-primary-300 bg-primary-50"></span> Còn trống</span>
-      <span class="flex items-center gap-1.5"><span class="h-3 w-3 rounded-sm bg-accent-500"></span> Đang chọn</span>
-      <span class="flex items-center gap-1.5"><span class="h-3 w-3 rounded-sm bg-background-300"></span> Đã có người đặt</span>
-      <span class="flex items-center gap-1.5"><span class="h-3 w-3 rounded-sm bg-secondary-500"></span> Đã qua</span>
+    <div class="mt-4 flex flex-wrap items-center justify-between gap-2">
+      <div class="flex flex-wrap items-center gap-3 text-[11px] text-foreground-500">
+        <span class="flex items-center gap-1.5"><span class="h-3 w-3 rounded-sm border border-primary-300 bg-primary-50"></span> Còn trống</span>
+        <span class="flex items-center gap-1.5"><span class="h-3 w-3 rounded-sm bg-accent-500"></span> Đang chọn</span>
+        <span class="flex items-center gap-1.5"><span class="h-3 w-3 rounded-sm bg-background-300"></span> Đã có người đặt</span>
+        <span class="flex items-center gap-1.5"><span class="h-3 w-3 rounded-sm bg-secondary-500"></span> Đã qua</span>
+      </div>
+      <div id="booking-realtime-badge"></div>
     </div>
     <div id="today-note"></div>
     <div class="mt-4" id="slots"></div>
@@ -398,6 +599,11 @@ function renderStep1() {
   renderCourtList();
   renderDates();
   renderSlots();
+  renderCourtAttributes();
+  const liveBadge = $('#booking-realtime-badge');
+  if (liveBadge && !liveBadge.firstChild) {
+    liveBadge.appendChild(createLivePulseBadge('Trực tiếp'));
+  }
 }
 
 function filteredCourts() {
@@ -443,6 +649,207 @@ function renderCourtList() {
     : `<div class="mt-3 rounded-lg border border-dashed border-background-300 bg-background-50 px-4 py-10 text-center"><div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-background-100 text-foreground-400"><i class="ri-search-eye-line text-xl" aria-hidden="true"></i></div><p class="mt-3 text-sm font-semibold text-foreground-900">Không tìm thấy sân phù hợp</p><p class="mt-1 text-xs text-foreground-500">Thử từ khóa khác, hoặc bỏ bớt điều kiện lọc để xem toàn bộ sân.</p><button type="button" data-reset-filters class="mt-4 inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border border-primary-300 bg-primary-50 px-3.5 py-2 text-xs font-semibold text-primary-700 transition-colors hover:bg-primary-100"><i class="ri-refresh-line text-sm" aria-hidden="true"></i>Xóa bộ lọc</button></div>`;
 }
 
+function renderCourtAttributes() {
+  const el = $('#court-attributes');
+  if (!el) return;
+  const c = court();
+  if (!c) {
+    el.innerHTML = '';
+    return;
+  }
+  const types = (c.fieldTypes && c.fieldTypes.length > 0) ? c.fieldTypes : (c.sport === 'football' ? ['Sân 5 người', 'Sân 7 người'] : ['Sân tiêu chuẩn', 'Sân VIP']);
+  const curType = currentFieldType();
+  const step = typeof fieldPriceStep === 'function' ? fieldPriceStep(c) : (c.sport === 'football' ? 140000 : 30000);
+
+  // So sánh mảng các thứ
+  const eqArr = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+  const sortedWd = [...(S.recurringWeekdays || [])].sort((x, y) => x - y);
+  const is246 = eqArr(sortedWd, [1, 3, 5]);
+  const is357 = eqArr(sortedWd, [2, 4, 6]);
+  const isWeekend = eqArr(sortedWd, [6, 7]);
+  const curIsoWd = getIsoWeekday(S.date);
+  const isCurrent = eqArr(sortedWd, [curIsoWd]);
+
+  const totalSessions = recurringSessionCount();
+  const testSlot = S.startSlot || '18:00';
+  const perSessionPrice = slotPrice(c, testSlot);
+  // Giá buổi lẻ gốc trước khi giảm 10%
+  let singleBase = calcCourtPriceForRange(c, testSlot, S.duration);
+  const fIdx = types.indexOf(curType);
+  if (fIdx > 0) singleBase += (step * (S.duration / 60)) * fIdx;
+  if (S.spaceType === 'indoor') singleBase += 30000 * (S.duration / 60);
+  const singleBaseFee = Math.round(singleBase / 1000) * 1000;
+
+  el.innerHTML = `
+    <div class="mt-4 rounded-lg border border-primary-200 bg-primary-50/40 p-4 transition-all">
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-primary-200/60 pb-2.5 mb-3">
+        <p class="text-xs font-bold uppercase tracking-wider text-primary-950 flex items-center gap-1.5">
+          <i class="ri-equalizer-line text-primary-600 text-sm"></i>Tùy chọn loại sân &amp; Gói đặt
+        </p>
+        <span class="inline-flex items-center gap-1 rounded bg-primary-100 text-primary-800 px-2 py-0.5 text-[10px] font-bold">
+          <i class="ri-sparkling-fill text-amber-500"></i>Tùy biến đa thuộc tính
+        </span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <!-- 1. Kích thước sân -->
+        <div class="rounded-md bg-white p-3 border border-background-200 shadow-2xs">
+          <div class="flex items-center justify-between gap-1 mb-2">
+            <span class="text-xs font-bold text-foreground-900 flex items-center gap-1">
+              <i class="ri-ruler-line text-primary-600"></i>Kích thước:
+            </span>
+            <span class="text-[10px] text-foreground-500">Sân 5 vs Sân 7</span>
+          </div>
+          <div class="flex flex-wrap gap-1.5">
+            ${types.map((t, idx) => {
+              const on = curType === t;
+              const extraLabel = idx > 0 ? ` (+${formatVnd(step)}/h)` : '';
+              return `<button type="button" data-opt-field-type="${esc(t)}" class="cursor-pointer rounded-md px-2.5 py-1.5 text-xs font-semibold transition-all ${on ? 'bg-primary-600 text-white shadow-xs' : 'bg-background-100 text-foreground-700 hover:bg-background-200 border border-background-200'}">
+                ${esc(t)}${extraLabel}
+              </button>`;
+            }).join('')}
+          </div>
+        </div>
+
+        <!-- 2. Không gian sân -->
+        <div class="rounded-md bg-white p-3 border border-background-200 shadow-2xs">
+          <div class="flex items-center justify-between gap-1 mb-2">
+            <span class="text-xs font-bold text-foreground-900 flex items-center gap-1">
+              <i class="ri-sun-cloudy-line text-primary-600"></i>Không gian sân:
+            </span>
+            <span class="text-[10px] text-foreground-500">Tránh mưa dông</span>
+          </div>
+          <div class="flex flex-wrap gap-1.5">
+            <button type="button" data-opt-space-type="outdoor" class="cursor-pointer rounded-md px-2.5 py-1.5 text-xs font-semibold transition-all ${S.spaceType !== 'indoor' ? 'bg-primary-600 text-white shadow-xs' : 'bg-background-100 text-foreground-700 hover:bg-background-200 border border-background-200'}">
+              Ngoài trời (Tiêu chuẩn)
+            </button>
+            <button type="button" data-opt-space-type="indoor" class="cursor-pointer rounded-md px-2.5 py-1.5 text-xs font-semibold transition-all ${S.spaceType === 'indoor' ? 'bg-primary-600 text-white shadow-xs' : 'bg-background-100 text-foreground-700 hover:bg-background-200 border border-background-200'}">
+              <i class="ri-home-wifi-line mr-0.5"></i>Có mái che (+30k/h)
+            </button>
+          </div>
+        </div>
+
+        <!-- 3. Hình thức đặt sân -->
+        <div class="rounded-md bg-white p-3 border border-background-200 shadow-2xs">
+          <div class="flex items-center justify-between gap-1 mb-2">
+            <span class="text-xs font-bold text-foreground-900 flex items-center gap-1">
+              <i class="ri-calendar-check-line text-primary-600"></i>Hình thức đặt:
+            </span>
+            <span class="text-[10px] text-foreground-500">Ưu đãi cố định</span>
+          </div>
+          <div class="flex flex-wrap gap-1.5">
+            <button type="button" data-opt-booking-type="single" class="cursor-pointer rounded-md px-2.5 py-1.5 text-xs font-semibold transition-all ${S.bookingType !== 'recurring' ? 'bg-primary-600 text-white shadow-xs' : 'bg-background-100 text-foreground-700 hover:bg-background-200 border border-background-200'}">
+              Theo buổi
+            </button>
+            <button type="button" data-opt-booking-type="recurring" class="cursor-pointer rounded-md px-2.5 py-1.5 text-xs font-semibold transition-all ${S.bookingType === 'recurring' ? 'bg-primary-600 text-white shadow-xs' : 'bg-background-100 text-foreground-700 hover:bg-background-200 border border-background-200'}">
+              <i class="ri-repeat-line mr-0.5"></i>Lịch cố định (Giảm 10%)
+            </button>
+          </div>
+        </div>
+      </div>
+
+      ${S.bookingType === 'recurring' ? `
+        <!-- KHỐI THIẾT LẬP LỊCH CỐ ĐỊNH THỰC TẾ (2-4-6, 3-5-7, CHỌN THỨ, GÓI THÁNG) -->
+        <div class="mt-3.5 rounded-lg border border-primary-200 bg-white p-4 shadow-2xs">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-background-200 pb-2.5 mb-3">
+            <div class="flex items-center gap-2">
+              <span class="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100 text-primary-700 text-xs font-bold">
+                <i class="ri-repeat-2-line"></i>
+              </span>
+              <h4 class="font-heading text-xs font-bold text-foreground-950 uppercase tracking-wide">
+                Thiết lập lịch đá cố định hằng tuần (Ưu đãi giảm 10% tiền sân)
+              </h4>
+            </div>
+            <span class="inline-flex items-center gap-1 rounded-full bg-primary-50 px-2.5 py-0.5 text-[11px] font-bold text-primary-700 border border-primary-200">
+              <i class="ri-discount-percent-fill text-amber-500"></i>Giảm 10% mỗi buổi
+            </span>
+          </div>
+
+          <!-- Mẫu lịch phổ biến -->
+          <div class="mb-3.5">
+            <label class="block text-xs font-bold text-foreground-900 mb-1.5">
+              1. Chọn nhanh mẫu lịch cố định theo tuần:
+            </label>
+            <div class="flex flex-wrap gap-2">
+              <button type="button" data-rec-preset="2-4-6" class="cursor-pointer rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${is246 ? 'bg-primary-50 text-primary-800 border-2 border-primary-600 font-bold' : 'bg-background-100 text-foreground-700 hover:bg-background-200 border border-background-200'}">
+                <i class="ri-calendar-check-line mr-1 text-primary-600"></i>Thứ 2 - 4 - 6
+              </button>
+              <button type="button" data-rec-preset="3-5-7" class="cursor-pointer rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${is357 ? 'bg-primary-50 text-primary-800 border-2 border-primary-600 font-bold' : 'bg-background-100 text-foreground-700 hover:bg-background-200 border border-background-200'}">
+                <i class="ri-calendar-check-line mr-1 text-primary-600"></i>Thứ 3 - 5 - 7
+              </button>
+              <button type="button" data-rec-preset="weekend" class="cursor-pointer rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${isWeekend ? 'bg-primary-50 text-primary-800 border-2 border-primary-600 font-bold' : 'bg-background-100 text-foreground-700 hover:bg-background-200 border border-background-200'}">
+                <i class="ri-cup-line mr-1 text-primary-600"></i>Cuối tuần (T7 - CN)
+              </button>
+              <button type="button" data-rec-preset="current" class="cursor-pointer rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${isCurrent ? 'bg-primary-50 text-primary-800 border-2 border-primary-600 font-bold' : 'bg-background-100 text-foreground-700 hover:bg-background-200 border border-background-200'}">
+                <i class="ri-time-line mr-1 text-primary-600"></i>Cố định ${WEEKDAY_NAMES[curIsoWd]} hằng tuần
+              </button>
+            </div>
+          </div>
+
+          <!-- Bấm chọn từng ngày -->
+          <div class="mb-3.5">
+            <label class="block text-xs font-bold text-foreground-900 mb-1.5">
+              2. Hoặc tùy chỉnh các ngày trong tuần:
+            </label>
+            <div class="flex flex-wrap gap-1.5">
+              ${[1, 2, 3, 4, 5, 6, 7].map((d) => {
+                const on = S.recurringWeekdays.includes(d);
+                return `<button type="button" data-rec-toggle-day="${d}" class="cursor-pointer rounded-md px-3 py-1.5 text-xs font-bold transition-all ${on ? 'bg-primary-600 text-white shadow-xs' : 'bg-background-100 text-foreground-700 hover:bg-background-200 border border-background-200'}">
+                  ${on ? '<i class="ri-check-line mr-1"></i>' : ''}${WEEKDAY_NAMES[d]}
+                </button>`;
+              }).join('')}
+            </div>
+          </div>
+
+          <!-- Thời hạn gói cố định -->
+          <div class="mb-3.5">
+            <label class="block text-xs font-bold text-foreground-900 mb-1.5">
+              3. Thời hạn gói cố định:
+            </label>
+            <div class="flex flex-wrap gap-2">
+              ${[
+                [4, '1 tháng (4 tuần)'],
+                [8, '2 tháng (8 tuần)'],
+                [12, '3 tháng (12 tuần)'],
+              ].map(([w, lbl]) => {
+                const on = S.recurringWeeks === w;
+                return `<button type="button" data-rec-weeks="${w}" class="cursor-pointer rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${on ? 'bg-primary-600 text-white shadow-xs' : 'bg-background-100 text-foreground-700 hover:bg-background-200 border border-background-200'}">
+                  ${lbl}
+                </button>`;
+              }).join('')}
+            </div>
+          </div>
+
+          <!-- Bảng tóm tắt gói cố định -->
+          <div class="rounded-lg border border-primary-200 bg-primary-50/60 p-3.5 text-xs">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-primary-200/60 pb-2.5">
+              <div>
+                <span class="font-bold text-foreground-950 text-sm">
+                  Lịch cố định: ${S.recurringWeekdays.map((d) => WEEKDAY_NAMES[d]).join(', ')} (${S.recurringWeekdays.length} buổi/tuần)
+                </span>
+                <p class="text-[11px] text-foreground-600 mt-0.5">
+                  Chu kỳ: Từ <b>${safeFormatShortDate(S.date)}</b> đến <b>${safeFormatShortDate(calcEndDate(S.date, S.recurringWeeks))}</b> (${totalSessions} buổi)
+                </p>
+              </div>
+              <div class="text-left sm:text-right shrink-0">
+                <span class="text-[11px] text-foreground-500">Đơn giá mỗi buổi:</span>
+                <div>
+                  <span class="text-xs text-foreground-400 line-through mr-1">${formatVnd(singleBaseFee)}</span>
+                  <span class="font-heading font-bold text-primary-700 text-sm">${formatVnd(perSessionPrice)}/buổi</span>
+                </div>
+              </div>
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-2 pt-2.5 text-xs text-foreground-700">
+              <span>Được giảm 10% trọn gói: <b class="text-primary-700">-${formatVnd((singleBaseFee - perSessionPrice) * totalSessions)}</b></span>
+              <span class="font-bold text-foreground-950">Tổng tiền sân: <span class="font-heading text-base font-bold text-primary-600">${formatVnd(perSessionPrice * totalSessions)}</span> (Cọc 30%: ${formatVnd(Math.round((perSessionPrice * totalSessions) * 0.3 / 1000) * 1000)})</span>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
 function renderDates() {
   $('#dates').innerHTML = dateOptions
     .map((o) => {
@@ -472,9 +879,23 @@ function renderSlots() {
       <div class="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">${buildDaySlots(c)
         .map((slot) => {
           const st = slotState(slot);
-          if (st !== 'free') return `<span title="${st === 'past' ? 'Khung giờ đã qua' : 'Khung giờ đã kín'}" class="cursor-not-allowed rounded-md bg-background-100 px-2 py-2.5 text-center text-xs font-medium text-foreground-400"><span class="block line-through">${slot}</span><span class="mt-0.5 block text-[10px]">${st === 'past' ? 'Đã qua' : 'Đã kín'}</span></span>`;
+          const isJustTaken = recentTakenSlots.has(slot);
+          const isJustFreed = recentFreedSlots.has(slot);
+
+          if (st !== 'free') {
+            const pulseCls = isJustTaken ? 'ring-2 ring-accent-500 bg-accent-100 text-accent-800 animate-pulse' : 'bg-background-100 text-foreground-400';
+            return `<span title="${st === 'past' ? 'Khung giờ đã qua' : 'Khung giờ đã kín'}" class="cursor-not-allowed rounded-md px-2 py-2.5 text-center text-xs font-medium transition-all ${pulseCls}">
+              <span class="block line-through">${slot}</span>
+              <span class="mt-0.5 block text-[10px]">${isJustTaken ? 'Vừa kín!' : st === 'past' ? 'Đã qua' : 'Đã kín'}</span>
+            </span>`;
+          }
+
           const on = S.startSlot === slot;
-          return `<button type="button" data-slot="${slot}" class="cursor-pointer rounded-md border px-2 py-2.5 text-center text-xs font-semibold transition-colors ${on ? 'border-accent-500 bg-accent-500 text-background-950' : 'border-primary-200 bg-primary-50 text-primary-800 hover:border-primary-400'}"><span class="block">${slot}</span><span class="mt-0.5 block text-[10px] ${on ? 'text-background-950/80' : 'text-primary-600'}">${formatVnd(calcCourtPriceForRange(c, slot, S.duration))}</span></button>`;
+          const pulseFreeCls = isJustFreed ? 'ring-2 ring-emerald-500 bg-emerald-100 text-emerald-800 animate-bounce' : on ? 'border-accent-500 bg-accent-500 text-background-950' : 'border-primary-200 bg-primary-50 text-primary-800 hover:border-primary-400';
+          return `<button type="button" data-slot="${slot}" class="cursor-pointer rounded-md border px-2 py-2.5 text-center text-xs font-semibold transition-all ${pulseFreeCls}">
+            <span class="block">${slot}</span>
+            <span class="mt-0.5 block text-[10px] ${on ? 'text-background-950/80' : 'text-primary-600'}">${formatVnd(slotPrice(c, slot))}</span>
+          </button>`;
         })
         .join('')}</div>`;
   }
@@ -799,6 +1220,25 @@ function renderPromo() {
     ${S.promoError ? `<p class="mt-1.5 flex items-start gap-1 text-xs text-accent-700"><i class="ri-error-warning-line mt-0.5" aria-hidden="true"></i>${esc(S.promoError)}</p>` : ''}`;
 }
 
+function formatVoucherCountdown(expiresAt) {
+  if (!expiresAt) return '';
+  const exp = new Date(expiresAt).getTime();
+  const now = Date.now();
+  const diff = exp - now;
+  if (isNaN(exp) || diff <= 0) return 'Đã hết hạn';
+  const totalSecs = Math.floor(diff / 1000);
+  const hours = Math.floor(totalSecs / 3600);
+  const mins = Math.floor((totalSecs % 3600) / 60);
+  const secs = totalSecs % 60;
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24);
+    const remH = hours % 24;
+    return `${days} ngày ${remH}h ${mins}m`;
+  }
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(hours)}:${pad(mins)}:${pad(secs)}`;
+}
+
 let voucherModalTab = 'all';
 
 async function openVoucherModal() {
@@ -857,6 +1297,11 @@ async function openVoucherModal() {
       }
     }
 
+    if (eligible && !p.isUserVoucher && p.usageLimit && p.remainingCount !== null && p.remainingCount !== undefined && p.remainingCount <= 0) {
+      eligible = false;
+      reason = 'Mã ưu đãi này đã hết số lượng phát hành.';
+    }
+
     return {
       ...p,
       eligible,
@@ -899,16 +1344,24 @@ async function openVoucherModal() {
                 <h4 class="mt-1 font-heading text-sm font-bold text-foreground-950 truncate">${esc(item.title)}</h4>
                 <p class="text-xs text-foreground-600 line-clamp-1">${esc(describeDiscount(item))} &bull; ${esc(describeConditions(item))}</p>
                 <div class="mt-1 flex flex-wrap items-center gap-3 text-[11px]">
-                  <span class="text-foreground-400 flex items-center gap-1"><i class="ri-time-line"></i>HSD: ${esc(endFormatted)}</span>
+                  ${item.isUserVoucher && item.expiresAt ? `
+                    <span class="flex items-center gap-1 font-bold text-accent-700 bg-accent-50 px-2 py-0.5 rounded border border-accent-200">
+                      <i class="ri-timer-flash-line animate-pulse"></i>
+                      Còn <span data-voucher-countdown="${item.expiresAt}">${formatVoucherCountdown(item.expiresAt)}</span>
+                    </span>
+                  ` : `
+                    <span class="text-foreground-400 flex items-center gap-1"><i class="ri-time-line"></i>HSD: ${esc(endFormatted)}</span>
+                  `}
                   ${item.discountAmount > 0 ? `<span class="font-bold text-emerald-700 flex items-center gap-0.5"><i class="ri-checkbox-circle-fill"></i>Tiết kiệm: -${formatVnd(item.discountAmount)}</span>` : ''}
+                  ${item.usageLimit ? `<span class="text-foreground-500 font-mono text-[10px] flex items-center gap-0.5"><i class="ri-numbers-line"></i>Còn ${item.remainingCount !== undefined && item.remainingCount !== null ? item.remainingCount : item.usageLimit}/${item.usageLimit}</span>` : ''}
                 </div>
               </div>
             </div>
             <div class="shrink-0 flex sm:flex-col justify-end items-center gap-2">
               ${isSelected
-                ? `<button type="button" data-modal-select="${esc(item.code)}" class="w-full sm:w-auto inline-flex items-center justify-center gap-1 rounded-lg border border-primary-500 bg-primary-500 px-3.5 py-2 text-xs font-bold text-white shadow-xs transition-colors cursor-pointer"><i class="ri-check-line"></i>Đang dùng</button>`
-                : `<button type="button" data-modal-select="${esc(item.code)}" class="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary-500 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-primary-600 transition-all cursor-pointer"><i class="ri-coupon-3-line"></i>Áp dụng</button>`
-              }
+            ? `<button type="button" data-modal-select="${esc(item.code)}" class="w-full sm:w-auto inline-flex items-center justify-center gap-1 rounded-lg border border-primary-500 bg-primary-500 px-3.5 py-2 text-xs font-bold text-white shadow-xs transition-colors cursor-pointer"><i class="ri-check-line"></i>Đang dùng</button>`
+            : `<button type="button" data-modal-select="${esc(item.code)}" class="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary-500 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-primary-600 transition-all cursor-pointer"><i class="ri-coupon-3-line"></i>Áp dụng</button>`
+          }
             </div>
           </div>
         `;
@@ -927,6 +1380,12 @@ async function openVoucherModal() {
                 </div>
                 <h4 class="mt-1 font-heading text-sm font-semibold text-foreground-800 truncate">${esc(item.title)}</h4>
                 <p class="text-xs text-foreground-500 line-clamp-1">${esc(describeDiscount(item))} &bull; ${esc(describeConditions(item))}</p>
+                ${item.isUserVoucher && item.expiresAt ? `
+                  <div class="mt-1.5 flex items-center gap-1 text-[11px] font-bold text-accent-700">
+                    <i class="ri-timer-line"></i>
+                    Còn <span data-voucher-countdown="${item.expiresAt}">${formatVoucherCountdown(item.expiresAt)}</span>
+                  </div>
+                ` : ''}
                 <div class="mt-2 flex items-start gap-1.5 rounded-md border border-amber-200/80 bg-amber-50/90 px-2.5 py-1.5 text-xs font-medium text-amber-800">
                   <i class="ri-error-warning-line shrink-0 text-amber-600 mt-0.5"></i>
                   <span>${esc(item.reason)}</span>
@@ -1053,6 +1512,17 @@ async function openVoucherModal() {
 
   const modalEl = modalInstance.el;
 
+  const cdTimer = setInterval(() => {
+    if (!modalEl || !document.body.contains(modalEl)) {
+      clearInterval(cdTimer);
+      return;
+    }
+    modalEl.querySelectorAll('[data-voucher-countdown]').forEach((el) => {
+      const exp = el.getAttribute('data-voucher-countdown');
+      if (exp) el.textContent = formatVoucherCountdown(exp);
+    });
+  }, 1000);
+
   modalEl.addEventListener('click', async (e) => {
     const tabBtn = e.target.closest('[data-vtab]');
     if (tabBtn) {
@@ -1123,7 +1593,20 @@ async function applyPromo(silent = false) {
     btn.innerHTML = '<i class="ri-loader-4-line animate-spin" aria-hidden="true"></i>Đang kiểm tra...';
   }
   try {
-    const data = await api('booking', 'check_promo', { code, courtSlug: S.courtSlug, date: S.date, startSlot: S.startSlot, duration: S.duration, extras: S.extras });
+    const data = await api('booking', 'check_promo', {
+      code,
+      courtSlug: S.courtSlug,
+      date: S.date,
+      startSlot: S.startSlot,
+      duration: S.duration,
+      fieldType: S.fieldType,
+      spaceType: S.spaceType,
+      bookingType: S.bookingType,
+      recurringWeekdays: S.recurringWeekdays,
+      recurringWeeks: S.recurringWeeks,
+      recurringSessions: recurringSessionCount(),
+      extras: S.extras,
+    });
     S.applied = data;
     S.promoCode = data.promotion.code;
     S.promoError = '';
@@ -1158,6 +1641,7 @@ function startWaitingApprovalPoll() {
           renderStep3();
         } else if (latest.paymentStatus === 'unpaid') {
           // Chủ sân đã duyệt, mở cổng nhận cọc và đếm ngược 5 phút
+          toast('🎉 Chủ sân đã duyệt đơn đặt sân! Mời bạn chuyển cọc giữ chỗ.', 'success');
           renderStep3();
           startHoldTimer();
         } else {
@@ -1165,7 +1649,7 @@ function startWaitingApprovalPoll() {
         }
       }
     } catch (e) { }
-  }, 3000);
+  }, 2000);
 }
 
 function renderStep3() {
@@ -1358,16 +1842,49 @@ function renderStep3() {
             </div>
           ` : ''}
         </div>
-        <div class="mt-3 rounded-md bg-secondary-50 px-3.5 py-3 text-[11px] leading-relaxed text-secondary-900">Sau khi chuyển khoản, bạn bấm <b>“Tôi đã chuyển khoản”</b>. Hệ thống tự động xác nhận và mở vé QR check-in ngay.</div>
+        ${(window.APP?.paymentTestMode || window.__APP_CONFIG__?.paymentTestMode) ? `
+          <div class="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-xs text-amber-900 flex items-center justify-between gap-2 shadow-xs">
+            <span><i class="ri-flask-line mr-1 text-amber-600 font-bold"></i><b>Đang bật Chế độ Test:</b> Bấm nút bên dưới để mở vé ngay mà không cần chuyển khoản thật!</span>
+          </div>
+        ` : `
+          <div class="mt-3 rounded-md bg-secondary-50 px-3.5 py-3 text-[11px] leading-relaxed text-secondary-900">Sau khi chuyển khoản, bạn bấm <b>“Tôi đã chuyển khoản”</b>. Hệ thống tự động xác nhận và mở vé QR check-in ngay.</div>
+        `}
       </div>
     </div>
     <div class="mt-5 flex flex-col gap-2.5 border-t border-background-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
       <button type="button" data-cancel-hold class="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-background-300 px-4 py-2.5 text-sm font-semibold text-foreground-800 transition-colors hover:border-accent-400 hover:text-accent-700"><i class="ri-close-line" aria-hidden="true"></i>Hủy giữ sân</button>
-      <button type="button" data-confirm ${expired || S.busy ? 'disabled' : ''} class="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md bg-accent-500 px-5 py-3 text-sm font-bold text-background-950 transition-colors hover:bg-accent-600 disabled:cursor-not-allowed disabled:opacity-50"><i class="${S.busy ? 'ri-loader-4-line animate-spin' : 'ri-check-double-line'} text-base" aria-hidden="true"></i>${expired ? 'Đã hết thời gian chuyển cọc' : S.busy ? 'Đang xác nhận tiền cọc…' : 'Tôi đã chuyển khoản'}</button>
+      <button type="button" data-confirm ${expired || S.busy ? 'disabled' : ''} class="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md bg-accent-500 px-5 py-3 text-sm font-bold text-background-950 transition-colors hover:bg-accent-600 disabled:cursor-not-allowed disabled:opacity-50"><i class="${S.busy ? 'ri-loader-4-line animate-spin' : 'ri-check-double-line'} text-base" aria-hidden="true"></i>${expired ? 'Đã hết thời gian chuyển cọc' : S.busy ? 'Đang xác nhận tiền cọc…' : ((window.APP?.paymentTestMode || window.__APP_CONFIG__?.paymentTestMode) ? '⚡ Tôi đã chuyển khoản (Mở vé test ngay)' : 'Tôi đã chuyển khoản')}</button>
     </div>
     <p class="mt-3 text-center text-xs text-foreground-500">Cần hỗ trợ? Gọi <a href="tel:${HOTLINE.replace(/\D/g, '')}" class="font-semibold text-primary-600 hover:text-primary-700">${HOTLINE}</a></p>`;
 
   startHoldTimer();
+  startSepayRealtimeCheck(b.id);
+}
+
+let sepayPollingInterval = null;
+function startSepayRealtimeCheck(bookingId) {
+  if (sepayPollingInterval) clearInterval(sepayPollingInterval);
+  sepayPollingInterval = setInterval(async () => {
+    if (S.step !== 3 || !S.booking || S.booking.id !== bookingId) {
+      clearInterval(sepayPollingInterval);
+      return;
+    }
+    // Chỉ dừng khi ĐÃ CỌC hoặc ĐÃ THANH TOÁN XONG (không dùng status vì chủ sân duyệt đã là confirmed)
+    if (['paid', 'deposit_paid'].includes(S.booking.paymentStatus)) {
+      clearInterval(sepayPollingInterval);
+      return;
+    }
+    try {
+      const res = await api('booking', 'check_sepay', { id: bookingId });
+      if (res && res.confirmed) {
+        clearInterval(sepayPollingInterval);
+        clearInterval(holdTimer);
+        S.booking = res.booking;
+        toast('Đã nhận tiền chuyển khoản SePay thành công! Đang kích hoạt vé QR...');
+        showTicket(res.booking);
+      }
+    } catch { }
+  }, 1500);
 }
 
 function startHoldTimer() {
@@ -1379,28 +1896,123 @@ function startHoldTimer() {
     if (badge) badge.innerHTML = `<i class="ri-time-line" aria-hidden="true"></i>${left <= 0 ? 'Đã hết giờ chuyển cọc' : `Thời gian cọc còn lại: ${formatCountdown(left)}`}`;
     if (left <= 0) {
       clearInterval(holdTimer);
+      clearInterval(sepayPollingInterval);
       renderStep3();
     }
   }, 1000);
 }
 
-function showVerifyOverlay() {
+function showVerifyOverlay(onCancel) {
   const overlay = document.createElement('div');
-  overlay.className = 'fixed inset-0 z-[95] flex items-center justify-center bg-foreground-950/70 p-4';
-  overlay.innerHTML = `<div class="w-full max-w-sm rounded-lg border border-background-200 bg-white p-6 text-center">
-    <span class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary-50 text-primary-600"><i class="ri-loader-4-line animate-spin text-3xl" aria-hidden="true"></i></span>
-    <p class="mt-4 font-heading text-base font-bold text-foreground-950">Đang kiểm tra giao dịch chuyển khoản</p>
-    <p class="mt-1.5 text-sm text-foreground-600">Hệ thống tự động đối soát và xác nhận tiền cọc. Bạn không cần làm gì thêm.</p>
-    <div class="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-background-200"><div data-bar class="h-full rounded-full bg-primary-500 transition-all duration-1000 ease-linear" style="width:0%"></div></div>
-    <p data-left class="mt-2 text-xs font-semibold text-foreground-500"></p></div>`;
+  overlay.className = 'fixed inset-0 z-[95] flex items-center justify-center bg-foreground-950/70 p-4 animate-fade-in backdrop-blur-[2px]';
+  overlay.innerHTML = `<div class="w-full max-w-sm rounded-2xl border border-background-200 bg-white p-6 text-center shadow-2xl">
+    <div class="relative mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary-50 text-primary-600 ring-8 ring-primary-50/60">
+      <i class="ri-loader-4-line animate-spin text-3xl" aria-hidden="true"></i>
+    </div>
+    <h3 class="mt-4 font-heading text-base font-bold text-foreground-950">Đang đối soát giao dịch MBBank</h3>
+    <p class="mt-1.5 text-xs text-foreground-600 leading-relaxed">Hệ thống đang kiểm tra biến động số dư qua SePay...</p>
+    <div class="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-background-200">
+      <div data-bar class="h-full rounded-full bg-primary-500 transition-all duration-1000 ease-linear" style="width:0%"></div>
+    </div>
+    <div class="mt-2.5 flex items-center justify-between text-[11px] text-foreground-500 font-medium">
+      <span>Đang kết nối ngân hàng</span>
+      <span data-left>Còn 6 giây</span>
+    </div>
+    <button type="button" data-close-overlay class="mt-4 text-xs font-semibold text-foreground-500 hover:text-foreground-800 transition-colors cursor-pointer">
+      Đóng và chờ tự động mở vé
+    </button>
+  </div>`;
   document.body.appendChild(overlay);
+
+  overlay.querySelector('[data-close-overlay]')?.addEventListener('click', () => {
+    overlay.remove();
+    if (typeof onCancel === 'function') onCancel();
+  });
+
   return {
-    set(sec) {
-      overlay.querySelector('[data-bar]').style.width = `${Math.min(100, ((AUTO_CONFIRM_SECONDS - sec + 1) / AUTO_CONFIRM_SECONDS) * 100)}%`;
-      overlay.querySelector('[data-left]').textContent = `Còn khoảng ${Math.max(1, sec)} giây`;
+    set(sec, total = 6) {
+      const pct = Math.min(100, Math.max(0, ((total - sec + 1) / total) * 100));
+      const bar = overlay.querySelector('[data-bar]');
+      const left = overlay.querySelector('[data-left]');
+      if (bar) bar.style.width = `${pct}%`;
+      if (left) left.textContent = `Còn khoảng ${Math.max(1, sec)}s`;
     },
     close: () => overlay.remove(),
   };
+}
+
+function showPaymentPendingModal(b) {
+  const isFull = b.paymentMethod === 'vietqr-full';
+  const payAmount = isFull ? b.totalPrice : (b.depositAmount || calcDeposit(b.totalPrice));
+
+  const modal = openModal({
+    size: 'max-w-md',
+    dismissible: true,
+    html: `
+      <div class="p-5 sm:p-6 text-center">
+        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-amber-50 text-amber-500 ring-8 ring-amber-50/60">
+          <i class="ri-time-line text-3xl" aria-hidden="true"></i>
+        </div>
+        <h3 class="mt-4 font-heading text-lg font-bold text-foreground-950">Chưa nhận được tiền chuyển khoản</h3>
+        <p class="mt-1.5 text-xs text-foreground-600 leading-relaxed">
+          Tài khoản ngân hàng chưa ghi nhận biến động số dư cho mã đơn <span class="font-mono font-bold text-primary-700">${esc(b.code)}</span>.
+        </p>
+
+        <div class="mt-4 rounded-xl border border-background-200 bg-background-50/90 p-3.5 text-left text-xs space-y-2">
+          <div class="flex items-center justify-between text-foreground-600">
+            <span>Ngân hàng thụ hưởng:</span>
+            <span class="font-bold text-foreground-900">${esc(bankAccount.bankName)}</span>
+          </div>
+          <div class="flex items-center justify-between text-foreground-600">
+            <span>Số tài khoản:</span>
+            <span class="font-mono font-bold text-foreground-900">${esc(bankAccount.accountNumber)}</span>
+          </div>
+          <div class="flex items-center justify-between text-foreground-600">
+            <span>Chủ tài khoản:</span>
+            <span class="font-bold text-foreground-900">${esc(bankAccount.accountName)}</span>
+          </div>
+          <div class="flex items-center justify-between text-foreground-600">
+            <span>Số tiền cần chuyển:</span>
+            <span class="font-bold text-primary-600">${formatVnd(payAmount)}</span>
+          </div>
+          <div class="flex items-center justify-between text-foreground-600 border-t border-background-200 pt-2">
+            <span>Nội dung chuyển khoản:</span>
+            <span class="font-mono font-bold text-primary-700">${esc(b.code)}</span>
+          </div>
+        </div>
+
+        <div class="mt-3.5 rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-left text-xs leading-relaxed text-amber-900">
+          <div class="flex items-start gap-2">
+            <i class="ri-lightbulb-line mt-0.5 text-base text-amber-600 shrink-0"></i>
+            <div>
+              <p class="font-bold text-amber-950">Lưu ý đối soát:</p>
+              <ul class="mt-1 list-disc pl-3.5 space-y-1 text-[11px] text-amber-900/90">
+                <li><b>Nếu bạn vừa chuyển tiền:</b> Ngân hàng có thể mất 10 - 30 giây để gửi thông báo. Bạn chỉ cần chờ tại màn hình, hệ thống sẽ <b>tự động mở vé QR</b> ngay khi nhận được tiền.</li>
+                <li><b>Nếu bạn chưa chuyển:</b> Quét lại mã VietQR trên màn hình để chuyển khoản chính xác số tiền và nội dung.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-5 flex flex-col-reverse sm:flex-row items-center gap-2.5">
+          <button type="button" data-close data-modal-close class="w-full sm:flex-1 cursor-pointer rounded-lg border border-background-300 bg-white py-2.5 text-xs font-semibold text-foreground-700 hover:bg-background-50 transition-colors">
+            Đóng, tôi sẽ chờ
+          </button>
+          <button type="button" data-recheck class="w-full sm:flex-1 cursor-pointer rounded-lg bg-accent-500 py-2.5 text-xs font-bold text-background-950 hover:bg-accent-600 transition-colors">
+            <i class="ri-refresh-line mr-1" aria-hidden="true"></i>Kiểm tra lại
+          </button>
+        </div>
+      </div>
+    `,
+  });
+
+  modal.el.querySelector('[data-modal-close], [data-close]')?.addEventListener('click', () => {
+    modal.close();
+  });
+  modal.el.querySelector('[data-recheck]')?.addEventListener('click', () => {
+    modal.close();
+    confirmDeposit();
+  });
 }
 
 async function confirmDeposit() {
@@ -1409,20 +2021,63 @@ async function confirmDeposit() {
   renderStep3();
   let overlay = null;
   try {
-    await api('booking', 'claim', { id: S.booking.id });
-    overlay = showVerifyOverlay();
-    for (let sec = AUTO_CONFIRM_SECONDS; sec > 0; sec -= 1) {
-      overlay.set(sec);
-      await new Promise((r) => setTimeout(r, 1000));
+    // 0. Nếu đang ở Chế độ Test và khách bấm nút: Kích hoạt duyệt test ngay lập tức
+    if (window.APP?.paymentTestMode || window.__APP_CONFIG__?.paymentTestMode) {
+      const resTest = await api('booking', 'confirm_test', { id: S.booking.id });
+      if (resTest && resTest.confirmed) {
+        clearInterval(sepayPollingInterval);
+        clearInterval(holdTimer);
+        S.busy = false;
+        toast('⚡ [Chế độ Test] Đã kích hoạt vé điện tử thành công!');
+        return showTicket(resTest.booking);
+      }
     }
-    const confirmed = await api('booking', 'auto_confirm', { id: S.booking.id });
-    overlay.close();
+
+    // 1. Kiểm tra ngay xem SePay Webhook đã ghi nhận chưa (Chế độ thật)
+    const check1 = await api('booking', 'check_sepay', { id: S.booking.id });
+    if (check1 && check1.confirmed) {
+      clearInterval(sepayPollingInterval);
+      clearInterval(holdTimer);
+      S.busy = false;
+      toast('Đã ghi nhận tiền chuyển khoản qua MBBank thành công!');
+      return showTicket(check1.booking);
+    }
+
+    // 2. Hiển thị popup đối soát SePay trong 6 giây, kiểm tra mỗi 1 giây
+    let cancelled = false;
+    overlay = showVerifyOverlay(() => {
+      cancelled = true;
+    });
+
+    const waitSeconds = 6;
+    for (let sec = waitSeconds; sec > 0; sec -= 1) {
+      if (cancelled) break;
+      overlay.set(sec, waitSeconds);
+      await new Promise((r) => setTimeout(r, 1000));
+      if (cancelled) break;
+
+      const midCheck = await api('booking', 'check_sepay', { id: S.booking.id });
+      if (midCheck && midCheck.confirmed) {
+        clearInterval(sepayPollingInterval);
+        overlay.close();
+        S.busy = false;
+        toast('Đã ghi nhận tiền chuyển khoản qua MBBank thành công!');
+        return showTicket(midCheck.booking);
+      }
+    }
+
+    if (overlay) overlay.close();
     S.busy = false;
-    showTicket(confirmed);
+    renderStep3();
+
+    if (!cancelled) {
+      toast('Chưa nhận được tiền chuyển khoản cho mã đơn ' + S.booking.code, 'warning');
+      showPaymentPendingModal(S.booking);
+    }
   } catch (error) {
     if (overlay) overlay.close();
     S.busy = false;
-    S.error = error.message;
+    S.error = error.message || 'Lỗi kiểm tra thanh toán';
     renderStep3();
   }
 }
@@ -1433,7 +2088,13 @@ let ticketPollInterval = 0;
 function showTicket(b) {
   clearDraft();
   clearInterval(holdTimer);
+  clearInterval(sepayPollingInterval);
   clearInterval(ticketPollInterval);
+  document.querySelectorAll('.modal-wrapper').forEach((m) => {
+    if (typeof m._closeModal === 'function') m._closeModal();
+    else m.remove();
+  });
+  document.body.style.overflow = '';
   const confirmed = b.status === 'confirmed' || b.status === 'completed';
   const isPending = b.status === 'pending';
   const deposit = b.paymentStatus === 'paid' ? b.totalPrice : b.depositAmount;
@@ -1613,6 +2274,12 @@ async function goNext() {
       date: S.date,
       startSlot: S.startSlot,
       duration: S.duration,
+      fieldType: S.fieldType,
+      spaceType: S.spaceType,
+      bookingType: S.bookingType,
+      recurringWeekdays: S.recurringWeekdays,
+      recurringWeeks: S.recurringWeeks,
+      recurringSessions: recurringSessionCount(),
       name,
       phone,
       email: f.email.trim(),
@@ -1663,16 +2330,92 @@ app.addEventListener('click', async (event) => {
     if (nextSlug !== S.courtSlug) {
       S.courtSlug = nextSlug;
       S.startSlot = '';
+      S.fieldType = '';
       S.error = '';
+      setupBookingRealtime();
       // Lọc bỏ các dịch vụ đã chọn nếu không thuộc môn thể thao của sân mới:
       const validSids = new Set(currentServices().map((s) => s.id));
       S.extras = S.extras.filter((x) => validSids.has(typeof x === 'string' ? x : x?.id));
       renderError();
       renderCourtList();
+      renderCourtAttributes();
       renderSlots();
       return renderSummary();
     }
     return;
+  }
+  if (el('[data-opt-field-type]')) {
+    S.fieldType = el('[data-opt-field-type]').dataset.optFieldType;
+    if (S.startSlot && slotState(S.startSlot) !== 'free') {
+      S.startSlot = '';
+    }
+    saveDraft();
+    renderCourtAttributes();
+    renderSlots();
+    renderSummary();
+    renderNav();
+    return revalidatePromo();
+  }
+  if (el('[data-opt-space-type]')) {
+    S.spaceType = el('[data-opt-space-type]').dataset.optSpaceType;
+    if (S.startSlot && slotState(S.startSlot) !== 'free') {
+      S.startSlot = '';
+    }
+    saveDraft();
+    renderCourtAttributes();
+    renderSlots();
+    renderSummary();
+    renderNav();
+    return revalidatePromo();
+  }
+  if (el('[data-opt-booking-type]')) {
+    S.bookingType = el('[data-opt-booking-type]').dataset.optBookingType;
+    if (S.bookingType === 'recurring' && (!Array.isArray(S.recurringWeekdays) || S.recurringWeekdays.length === 0)) {
+      S.recurringWeekdays = [1, 3, 5];
+    }
+    saveDraft();
+    renderCourtAttributes();
+    renderSlots();
+    renderSummary();
+    return revalidatePromo();
+  }
+  if (el('[data-rec-preset]')) {
+    const p = el('[data-rec-preset]').dataset.recPreset;
+    if (p === '2-4-6') S.recurringWeekdays = [1, 3, 5];
+    else if (p === '3-5-7') S.recurringWeekdays = [2, 4, 6];
+    else if (p === 'weekend') S.recurringWeekdays = [6, 7];
+    else if (p === 'current') S.recurringWeekdays = [getIsoWeekday(S.date)];
+    saveDraft();
+    renderCourtAttributes();
+    renderSlots();
+    renderSummary();
+    return revalidatePromo();
+  }
+  if (el('[data-rec-toggle-day]')) {
+    const day = Number(el('[data-rec-toggle-day]').dataset.recToggleDay);
+    if (!Array.isArray(S.recurringWeekdays)) S.recurringWeekdays = [];
+    if (S.recurringWeekdays.includes(day)) {
+      if (S.recurringWeekdays.length > 1) {
+        S.recurringWeekdays = S.recurringWeekdays.filter((d) => d !== day);
+      } else {
+        toast('Cần giữ lại ít nhất 1 ngày chơi trong tuần.', 'info');
+      }
+    } else {
+      S.recurringWeekdays = [...S.recurringWeekdays, day].sort((a, b) => a - b);
+    }
+    saveDraft();
+    renderCourtAttributes();
+    renderSlots();
+    renderSummary();
+    return revalidatePromo();
+  }
+  if (el('[data-rec-weeks]')) {
+    S.recurringWeeks = Number(el('[data-rec-weeks]').dataset.recWeeks);
+    saveDraft();
+    renderCourtAttributes();
+    renderSlots();
+    renderSummary();
+    return revalidatePromo();
   }
   if (el('[data-sport]')) {
     S.filters.sport = el('[data-sport]').dataset.sport;
@@ -1688,6 +2431,7 @@ app.addEventListener('click', async (event) => {
     S.error = '';
     renderError();
     renderDates();
+    renderCourtAttributes();
     renderSummary();
     return loadAvailability();
   }
@@ -1944,6 +2688,17 @@ document.addEventListener('click', (e) => {
 
 // Cứ 30 giây vẽ lại lưới giờ để khóa các khung vừa trôi qua
 setInterval(() => S.step === 1 && renderSlots(), 30000);
+
+// Cảnh báo rời trang (BeforeUnload Confirmation) chỉ áp dụng riêng cho Bước 2 (Nhập thông tin đặt sân)
+const handleBeforeUnload = (event) => {
+  if (S.step === 2) {
+    event.preventDefault();
+    event.returnValue = 'Dữ liệu đặt sân đang nhập có thể không được lưu.';
+    return 'Dữ liệu đặt sân đang nhập có thể không được lưu.';
+  }
+};
+window.addEventListener('beforeunload', handleBeforeUnload);
+window.onbeforeunload = handleBeforeUnload;
 
 const restored = restoreDraft();
 renderAll();

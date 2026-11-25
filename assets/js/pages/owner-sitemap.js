@@ -17,7 +17,7 @@ import {
   chip, statCard, sectionTitle, modal, slotText, dateText, money, isActive,
 } from './owner-shared.js?v=20261123_04';
 import { renderOverview, renderBookings, renderInvoices, renderCourts, renderSchedule, renderReviews, openCounterBooking, openBookingDetail } from './owner-ops.js?v=20261123_04';
-import { renderReports, renderCustomers, renderServices, renderPromotions, renderDeposits } from './owner-biz.js?v=20261123_04';
+import { renderReports, renderCustomers, renderServices, renderPromotions, renderDeposits } from './owner-biz.js?v=20261124_01';
 
 const subState = {};
 const getSub = (tab, def) => {

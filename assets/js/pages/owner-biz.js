@@ -311,7 +311,8 @@ function serviceForm(item = null) {
       toast('Vui lòng thêm ít nhất một biến thể hoặc tắt đa thuộc tính.', 'error');
       return;
     }
-    setBusy(e.currentTarget, true, 'Đang lưu...');
+    const btn = e.currentTarget;
+    setBusy(btn, true, 'Đang lưu...');
     try {
       await api('owner', 'service_save', {
         ...f,
@@ -326,7 +327,7 @@ function serviceForm(item = null) {
       m.close();
       toast('Đã lưu dịch vụ và các biến thể thành công.');
       renderServices();
-    } catch (err) { setBusy(e.currentTarget, false); toast(err.message, 'error'); }
+    } catch (err) { setBusy(btn, false); toast(err.message, 'error'); }
   });
 }
 
@@ -470,6 +471,7 @@ function promoForm(p = null) {
       <div><label class="${LABEL}">Đến giờ</label><input type="time" name="endTime" value="${x.endTime}" class="${INPUT}"></div>
       <div class="sm:col-span-2"><label class="${LABEL}">Ngày trong tuần (không chọn = mọi ngày)</label><div class="flex flex-wrap gap-1.5">${[1, 2, 3, 4, 5, 6, 7].map((d) => `<label class="cursor-pointer"><input type="checkbox" name="wd" value="${d}" ${x.weekdays.includes(d) ? 'checked' : ''} class="peer sr-only"><span class="block rounded-md border border-background-300 px-3 py-1.5 text-xs font-semibold peer-checked:border-primary-500 peer-checked:bg-primary-500 peer-checked:text-white">${WEEKDAY_SHORT[d]}</span></label>`).join('')}</div></div>
       <div><label class="${LABEL}">Giới hạn lượt dùng (để trống = không giới hạn)</label><input type="number" name="usageLimit" min="0" value="${x.usageLimit || ''}" class="${INPUT}"></div>
+      <div><label class="${LABEL}">Thời hạn đếm ngược sau khi khách lưu mã (giờ) *</label><input type="number" name="countdownHours" min="1" max="720" value="${x.countdownHours || 24}" class="${INPUT}" placeholder="Mặc định: 24 giờ"></div>
       <div><label class="${LABEL}">Trạng thái</label><select name="status" class="${INPUT}"><option value="active">Đang chạy</option><option value="paused" ${x.status === 'paused' ? 'selected' : ''}>Tạm dừng</option></select></div>
     </form>`,
     `<button type="button" data-close class="${BTN_OUT}">Hủy</button><button type="button" data-ok class="${BTN}">${p ? 'Lưu thay đổi' : 'Tạo mã'}</button>`,
@@ -508,6 +510,7 @@ function promoForm(p = null) {
     }
     if (maxBox) {
       maxBox.classList.toggle('hidden', isAmount);
+      maxBox.style.display = isAmount ? 'none' : '';
     }
   };
 
@@ -515,8 +518,18 @@ function promoForm(p = null) {
   syncDiscountType();
 
   m.el.querySelector('[data-ok]').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
     const form = m.el.querySelector('form');
     const f = formData(form);
+    const code = (f.code || '').trim().toUpperCase();
+    if (!code || code.length < 3 || code.length > 16 || !/^[A-Z0-9]+$/.test(code)) {
+      toast('Mã giảm giá cần 3–16 ký tự chữ hoặc số.', 'error');
+      return;
+    }
+    if (!(f.title || '').trim()) {
+      toast('Vui lòng nhập tên chương trình.', 'error');
+      return;
+    }
     const isAmount = f.discountType === 'amount';
     const discountVal = Number(f.discountValue) || 0;
     if (discountVal <= 0) {
@@ -529,14 +542,14 @@ function promoForm(p = null) {
     }
     const maxDiscount = isAmount ? 0 : (Number(f.maxDiscount) || 0);
     const weekdays = [...form.querySelectorAll('[name=wd]:checked')].map((i) => Number(i.value));
-    setBusy(e.currentTarget, true, 'Đang lưu...');
+    setBusy(btn, true, 'Đang lưu...');
     try {
-      await api('owner', 'promotion_save', { ...f, id: p ? p.id : '', weekdays, discountValue: discountVal, maxDiscount, minOrder: Number(f.minOrder) || 0, usageLimit: Number(f.usageLimit) || 0 });
+      await api('owner', 'promotion_save', { ...f, code, id: p ? p.id : '', weekdays, discountValue: discountVal, maxDiscount, minOrder: Number(f.minOrder) || 0, usageLimit: Number(f.usageLimit) || 0, countdownHours: Number(f.countdownHours) || 24 });
       pm.data = null;
       m.close();
       toast(p ? 'Đã cập nhật mã.' : 'Đã tạo mã khuyến mãi.');
       renderPromotions();
-    } catch (err) { setBusy(e.currentTarget, false); toast(err.message, 'error'); }
+    } catch (err) { setBusy(btn, false); toast(err.message, 'error'); }
   });
 }
 
@@ -550,7 +563,11 @@ export async function renderPromotions() {
   const { promotions, redemptions } = pm.data;
   const valid = redemptions.filter((r) => r.status !== 'cancelled');
   const stat = (code) => { const l = valid.filter((r) => r.code === code); return { uses: l.length, discount: l.reduce((s, r) => s + r.discount, 0), revenue: l.reduce((s, r) => s + r.paidTotal, 0) }; };
-  const list = promotions.filter((p) => pm.filter === 'all' || promotionState(p, TODAY) === pm.filter);
+  const list = promotions.filter((p) => {
+    if (pm.filter === 'all') return true;
+    if (pm.filter === 'used') return stat(p.code).uses > 0;
+    return promotionState(p, TODAY) === pm.filter;
+  });
 
   main().innerHTML = `
   <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -559,18 +576,72 @@ export async function renderPromotions() {
     ${statCard('ri-price-tag-3-line', 'Tổng tiền đã giảm', money(valid.reduce((s, r) => s + r.discount, 0)), '', 'accent')}
     ${statCard('ri-money-dollar-circle-line', 'Doanh thu từ mã', money(valid.reduce((s, r) => s + r.paidTotal, 0)), '', 'neutral')}
   </div>
-  <div class="mt-5 mb-3 flex flex-wrap gap-2">${[['all', 'Tất cả'], ['active', 'Đang chạy'], ['upcoming', 'Sắp diễn ra'], ['paused', 'Tạm dừng'], ['expired', 'Hết hạn']].map(([k, l]) => `<button type="button" data-pf="${k}" class="${chip(pm.filter === k)}">${l}</button>`).join('')}</div>
+  <div class="mt-5 mb-3 flex flex-wrap gap-2">${[['all', 'Tất cả'], ['active', 'Đang chạy'], ['upcoming', 'Sắp diễn ra'], ['paused', 'Tạm dừng'], ['expired', 'Hết hạn'], ['used', 'Đã được sử dụng']].map(([k, l]) => `<button type="button" data-pf="${k}" class="${chip(pm.filter === k)}">${l}</button>`).join('')}</div>
   ${list.length ? `<div class="grid grid-cols-1 gap-4 md:grid-cols-2">${list.map((p) => {
-    const st = promotionState(p, TODAY); const s = stat(p.code); return `
+    const st = promotionState(p, TODAY);
+    const s = stat(p.code);
+    const claimed = p.claimedCount !== undefined && p.claimedCount !== null ? p.claimedCount : ((p.savedCount || 0) + s.uses);
+    const remaining = p.usageLimit ? (p.remainingCount !== undefined && p.remainingCount !== null ? p.remainingCount : Math.max(0, p.usageLimit - claimed)) : null;
+    const isExhausted = remaining !== null && remaining <= 0;
+    return `
     <article class="${CARD} p-4">
-      <div class="flex items-start justify-between gap-3"><div><p class="font-mono text-lg font-extrabold text-primary-700">${esc(p.code)}</p><p class="text-sm font-semibold text-foreground-950">${esc(p.title)}</p></div><span class="rounded-full px-2.5 py-1 text-[11px] font-semibold ${STATE[st][1]}">${STATE[st][0]}</span></div>
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <p class="font-mono text-lg font-extrabold text-primary-700">${esc(p.code)}</p>
+          <p class="text-sm font-semibold text-foreground-950">${esc(p.title)}</p>
+        </div>
+        <span class="rounded-full px-2.5 py-1 text-[11px] font-semibold ${STATE[st][1]}">${STATE[st][0]}</span>
+      </div>
       <p class="mt-2 text-sm font-semibold text-accent-700">${esc(describeDiscount(p))}${p.minOrder ? ` · đơn từ ${money(p.minOrder)}` : ''}</p>
       <p class="mt-1 text-xs text-foreground-500">${esc(describeConditions(p))}</p>
-      <div class="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div class="rounded-md bg-background-100 py-2"><p class="font-bold">${s.uses}${p.usageLimit ? `/${p.usageLimit}` : ''}</p>Lượt dùng</div><div class="rounded-md bg-background-100 py-2"><p class="font-bold">${money(s.discount)}</p>Đã giảm</div><div class="rounded-md bg-background-100 py-2"><p class="font-bold">${money(s.revenue)}</p>Doanh thu</div></div>
+      <div class="mt-2.5 rounded-md border ${isExhausted ? 'border-accent-200 bg-accent-50/70' : 'border-background-200 bg-background-50'} p-2.5 text-xs">
+        ${p.usageLimit ? `
+          <div class="mb-2">
+            <div class="flex items-center justify-between text-xs font-semibold">
+              <span class="flex items-center gap-1.5 ${isExhausted ? 'text-accent-700' : 'text-primary-800'}">
+                <i class="ri-numbers-line ${isExhausted ? 'text-accent-600' : 'text-primary-600'}"></i>
+                Đang đếm ngược số lượng:
+                <b class="font-mono text-sm ${isExhausted ? 'text-accent-700' : 'text-primary-700'}">Còn ${remaining}/${p.usageLimit}</b>
+                ${isExhausted ? '<span class="rounded bg-accent-100 px-1.5 py-0.2 text-[10px] font-bold text-accent-800">Đã hết số lượng</span>' : ''}
+              </span>
+              <span class="text-[11px] text-foreground-500">Đã nhận: <b>${claimed}/${p.usageLimit}</b></span>
+            </div>
+            <div class="mt-1.5 h-2 w-full rounded-full bg-background-200 overflow-hidden">
+              <div class="h-full rounded-full ${isExhausted ? 'bg-accent-600' : (remaining <= 5 ? 'bg-gradient-to-r from-amber-500 to-accent-600' : 'bg-gradient-to-r from-primary-500 to-primary-600')} transition-all duration-500" style="width: ${Math.min(100, Math.round((claimed / p.usageLimit) * 100))}%"></div>
+            </div>
+          </div>
+        ` : `
+          <div class="mb-1 text-[11px] text-foreground-500 flex items-center gap-1">
+            <i class="ri-infinity-line text-foreground-400"></i>Không giới hạn số lượng phát hành
+          </div>
+        `}
+        <div class="border-t border-background-200 pt-1.5 flex items-center justify-between text-[11px]">
+          <span class="text-foreground-600 flex items-center gap-1">
+            <i class="ri-user-shared-line text-primary-600"></i>Khách đã lưu ví: <b class="text-foreground-900">${p.savedCount || 0}</b>
+          </span>
+          <span class="text-foreground-600 flex items-center gap-1">
+            <i class="ri-checkbox-circle-line text-emerald-600"></i>Đã được sử dụng: <b class="text-foreground-900">${s.uses} đơn</b>
+          </span>
+        </div>
+      </div>
+      <div class="mt-3 grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-4">
+        <div class="rounded-md ${isExhausted ? 'bg-accent-50 border border-accent-200 text-accent-900' : 'bg-background-100'} py-2">
+          <p class="font-bold text-sm ${p.usageLimit ? (isExhausted ? 'text-accent-700' : 'text-primary-700') : ''}">
+            ${p.usageLimit ? `${remaining}/${p.usageLimit}` : `${p.savedCount || 0} lượt`}
+          </p>
+          <span class="text-[11px] font-medium text-foreground-600">${p.usageLimit ? 'Số lượng còn lại' : 'Đã phát hành'}</span>
+        </div>
+        <div class="rounded-md bg-background-100 py-2">
+          <p class="font-bold text-sm text-foreground-950">${s.uses} lượt</p>
+          <span class="text-[11px] font-medium text-foreground-600">Đã được sử dụng</span>
+        </div>
+        <div class="rounded-md bg-background-100 py-2"><p class="font-bold text-sm">${money(s.discount)}</p><span class="text-[11px] font-medium text-foreground-600">Đã giảm</span></div>
+        <div class="rounded-md bg-background-100 py-2"><p class="font-bold text-sm">${money(s.revenue)}</p><span class="text-[11px] font-medium text-foreground-600">Doanh thu</span></div>
+      </div>
       <div class="mt-3 flex flex-wrap gap-1.5"><button type="button" data-edit="${p.id}" class="${BTN_SM}"><i class="ri-edit-line"></i>Sửa</button><button type="button" data-pause="${p.id}" class="${BTN_SM}">${p.status === 'paused' ? '<i class="ri-play-line"></i>Chạy lại' : '<i class="ri-pause-line"></i>Tạm dừng'}</button><button type="button" data-del="${p.id}" class="${BTN_SM_DANGER}"><i class="ri-delete-bin-line"></i>Xóa</button></div>
     </article>`;
-  }).join('')}</div>` : emptyState('ri-coupon-3-line', 'Chưa có mã khuyến mãi', 'Tạo mã giảm giá để thu hút khách vào khung giờ vắng.')}
-  <section class="${CARD} mt-6 overflow-hidden">${sectionTitle('Lượt dùng mã gần đây')}${redemptions.length ? table(['Mã', 'Đơn', 'Khách', 'Sân · ngày', '>Đã giảm', '>Khách trả', 'Trạng thái'], redemptions.slice(0, 20).map((r) => `<tr><td class="px-4 py-3 font-mono text-xs font-bold text-primary-700">${esc(r.code)}</td><td class="px-4 py-3 font-mono text-xs">${esc(r.bookingCode)}</td><td class="px-4 py-3">${esc(r.customerName)}</td><td class="px-4 py-3 text-xs">${esc(r.courtName)}<br>${dateText(r.bookingDate)}</td><td class="px-4 py-3 text-right text-accent-700">-${money(r.discount)}</td><td class="px-4 py-3 text-right font-semibold">${money(r.paidTotal)}</td><td class="px-4 py-3">${statusBadge(r.status)}</td></tr>`).join(''), 820) : '<p class="px-4 py-5 text-sm text-foreground-500">Chưa có khách nào dùng mã của bạn.</p>'}</section>`;
+  }).join('')}</div>` : emptyState('ri-coupon-3-line', pm.filter === 'used' ? 'Chưa có mã nào được sử dụng' : 'Chưa có mã khuyến mãi', pm.filter === 'used' ? 'Khi khách hàng đặt sân và áp dụng mã thành công, các mã đã sử dụng sẽ hiển thị tại đây.' : 'Tạo mã giảm giá để thu hút khách vào khung giờ vắng.')}
+  <section class="${CARD} mt-6 overflow-hidden">${sectionTitle('Mục mã đã được sử dụng gần đây')}${redemptions.length ? table(['Mã', 'Đơn', 'Khách', 'Sân · ngày', '>Đã giảm', '>Khách trả', 'Trạng thái'], redemptions.slice(0, 20).map((r) => `<tr><td class="px-4 py-3 font-mono text-xs font-bold text-primary-700">${esc(r.code)}</td><td class="px-4 py-3 font-mono text-xs">${esc(r.bookingCode)}</td><td class="px-4 py-3">${esc(r.customerName)}</td><td class="px-4 py-3 text-xs">${esc(r.courtName)}<br>${dateText(r.bookingDate)}</td><td class="px-4 py-3 text-right text-accent-700">-${money(r.discount)}</td><td class="px-4 py-3 text-right font-semibold">${money(r.paidTotal)}</td><td class="px-4 py-3">${statusBadge(r.status)}</td></tr>`).join(''), 820) : '<p class="px-4 py-5 text-sm text-foreground-500">Chưa có khách nào dùng mã của bạn.</p>'}</section>`;
 
   const root = main();
   const find = (id) => promotions.find((p) => p.id === id);

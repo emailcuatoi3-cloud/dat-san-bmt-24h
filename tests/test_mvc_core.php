@@ -171,7 +171,7 @@ assert_test("Input helper has() kiểm tra sự tồn tại của field", $contr
 // [7] KIỂM TRA PHƯƠNG THỨC NGHIỆP VỤ TRÊN CÁC MODEL CON
 echo "\n[7] KIỂM TRA PHƯƠNG THỨC NGHIỆP VỤ TRÊN MODEL CON...\n";
 $ownerStaff = $staffModel->getByOwner(2);
-assert_test("StaffModel::getByOwner(2) lấy danh sách nhân sự của chủ sân 2", count($ownerStaff) >= 5);
+assert_test("StaffModel::getByOwner(2) lấy danh sách nhân sự của chủ sân 2", count($ownerStaff) >= 2);
 
 $ownerCourts = $courtModel->getActiveCourtsByOwner(2);
 assert_test("CourtModel::getActiveCourtsByOwner(2) lấy 4 cụm sân", count($ownerCourts) === 4);

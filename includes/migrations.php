@@ -97,6 +97,35 @@ function ensure_sitemap_schema(): void
         }
     } catch (Throwable $e) {}
 
+    // Bổ sung bảng lưu lịch sử hội thoại chatbot
+    try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `chatbot_history` (
+            `id` VARCHAR(50) PRIMARY KEY,
+            `user_id` INT NULL,
+            `session_id` VARCHAR(100) NOT NULL,
+            `user_message` TEXT NOT NULL,
+            `bot_reply` TEXT NOT NULL,
+            `provider` VARCHAR(50) DEFAULT 'gemini',
+            `is_fallback` TINYINT(1) DEFAULT 0,
+            `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX `idx_user` (`user_id`),
+            INDEX `idx_session` (`session_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    } catch (Throwable $e) {}
+
+    // Bổ sung countdown_hours cho promotions (thời gian đếm ngược sau khi khách lưu mã)
+    try {
+        $hasCountdown = $pdo->query("SHOW COLUMNS FROM promotions LIKE 'countdown_hours'")->fetchColumn();
+        if (!$hasCountdown) {
+            $pdo->exec("ALTER TABLE promotions ADD COLUMN countdown_hours INT NOT NULL DEFAULT 24 AFTER usage_limit");
+        }
+    } catch (Throwable $e) {}
+
+    // Cập nhật expires_at trong user_vouchers sang DATETIME để hỗ trợ đếm ngược chính xác đến từng giây
+    try {
+        $pdo->exec("ALTER TABLE user_vouchers MODIFY COLUMN expires_at DATETIME NULL");
+    } catch (Throwable $e) {}
+
     // Kiểm tra nhanh nếu cột sport trong owner_services đã tồn tại thì bỏ qua DDL nặng
     try {
         $hasSport = $pdo->query("SHOW COLUMNS FROM owner_services LIKE 'sport'")->fetchColumn();

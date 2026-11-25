@@ -1,7 +1,16 @@
 <?php
 /** ƯU ĐÃI & MÃ GIẢM GIÁ — /uu-dai */
 $today = date('Y-m-d');
-$promos = array_map('map_promotion', q_all("SELECT * FROM promotions WHERE status = 'active' AND end_date >= CURDATE() ORDER BY updated_at DESC"));
+$promos = array_map(function ($r) {
+    $p = map_promotion($r);
+    $c = strtoupper($p['code']);
+    $claimed = promo_claimed_count($c);
+    $saved = (int) q_val("SELECT COUNT(*) FROM user_vouchers WHERE UPPER(code) = ?", [$c]);
+    $p['savedCount'] = $saved;
+    $p['claimedCount'] = $claimed;
+    $p['remainingCount'] = $p['usageLimit'] ? max(0, $p['usageLimit'] - $claimed) : null;
+    return $p;
+}, q_all("SELECT * FROM promotions WHERE status = 'active' AND end_date >= CURDATE() ORDER BY updated_at DESC"));
 $active = count(array_filter($promos, fn($p) => $p['startDate'] <= $today));
 $upcoming = count($promos) - $active;
 $best = array_reduce($promos, fn($m, $p) => $p['discountType'] === 'percent' ? max($m, $p['discountValue']) : $m, 0);

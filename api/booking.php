@@ -10,6 +10,7 @@
  * Giá tiền luôn được TÍNH LẠI ở máy chủ, không tin số tiền trình duyệt gửi lên.
  */
 require_once __DIR__ . '/../includes/bootstrap.php';
+require_once __DIR__ . '/../includes/mailer.php';
 
 const EXTRA_SERVICES = [
     'bong' => ['Thuê bóng thi đấu', 30000],
@@ -94,6 +95,24 @@ function resolve_booking_extras(array $rawExtras): array
     return ['items' => $items, 'total' => $total];
 } 
 
+/** Hoàn lại số lượng tồn kho của các dịch vụ / biến thể khi đơn bị hủy */
+function restore_booking_extras_stock(string $bookingId): void
+{
+    $b = q_one('SELECT extras FROM bookings WHERE id = ?', [$bookingId]);
+    if (!$b || empty($b['extras'])) return;
+    $items = jd($b['extras']);
+    if (!is_array($items)) return;
+    foreach ($items as $it) {
+        $qty = (int) ($it['quantity'] ?? 1);
+        if (!empty($it['variantId'])) {
+            q('UPDATE service_variants SET stock = stock + ? WHERE id = ?', [$qty, $it['variantId']]);
+            q('UPDATE owner_services SET stock = stock + ? WHERE id = ?', [$qty, $it['id']]);
+        } elseif (!empty($it['id'])) {
+            q('UPDATE owner_services SET stock = stock + ? WHERE id = ?', [$qty, $it['id']]);
+        }
+    }
+} 
+
 function t2m(string $t): int
 {
     [$h, $m] = array_map('intval', explode(':', $t) + [0, 0]);
@@ -123,8 +142,8 @@ function price_at(array $court, string $slot): int
     return $court['pricePerHour'];
 }
 
-/** Tiền sân cho một lượt chơi (tính từng giờ, làm tròn nghìn) — giống calcCourtPriceForRange. */
-function court_price(array $court, string $start, int $duration): int
+/** Tiền sân cho một lượt chơi (tính từng giờ, cộng/trừ theo ma trận đa thuộc tính Đắk Lắk, làm tròn nghìn) — đồng bộ client slotPrice */
+function court_price(array $court, string $start, int $duration, string $fieldType = '', string $spaceType = 'outdoor', string $bookingType = 'single', int $sessions = 1): int
 {
     $total = 0;
     $remain = $duration;
@@ -135,7 +154,33 @@ function court_price(array $court, string $start, int $duration): int
         $remain -= $chunk;
         $cursor += $chunk;
     }
-    return (int) (round($total / 1000) * 1000);
+
+    // 1. Kích thước sân (Sân 5 người vs Sân 7 người)
+    $types = (isset($court['fieldTypes']) && is_array($court['fieldTypes']) && count($court['fieldTypes']) > 0)
+        ? $court['fieldTypes']
+        : ($court['sport'] === 'football' ? ['Sân 5 người', 'Sân 7 người'] : ['Sân tiêu chuẩn', 'Sân VIP']);
+    if ($fieldType && in_array($fieldType, $types, true)) {
+        $idx = array_search($fieldType, $types, true);
+        if ($idx > 0) {
+            $step = isset($court['fieldPriceStep']) && is_numeric($court['fieldPriceStep'])
+                ? (int) $court['fieldPriceStep']
+                : ($court['sport'] === 'football' ? 140000 : 30000);
+            $total += (int) (($step * ($duration / 60)) * $idx);
+        }
+    }
+
+    // 2. Không gian sân (Có mái che: +30k/h tránh mưa dông Đắk Lắk)
+    if ($spaceType === 'indoor') {
+        $total += (int) (30000 * ($duration / 60));
+    }
+
+    // 3. Hình thức đặt (Lịch cố định: giảm 10% tiền sân mỗi buổi)
+    if ($bookingType === 'recurring') {
+        $total = (int) (round(($total * 0.9) / 1000) * 1000);
+    }
+
+    $sessionPrice = (int) (round($total / 1000) * 1000);
+    return $sessionPrice * max(1, $sessions);
 }
 
 function calc_deposit(int $total): int
@@ -143,18 +188,63 @@ function calc_deposit(int $total): int
     return (int) (round($total * DEPOSIT_RATE / 1000) * 1000);
 }
 
-/** Các khung giờ đang bận của 1 sân trong 1 ngày (đơn + khóa của chủ sân). */
-function taken_slots(string $courtId, string $date, string $excludeId = ''): array
-{
-    $occ = occupied_slots($date, $excludeId)[$courtId] ?? [];
-    $blk = blocked_slots_map($date, [$courtId])[$courtId . ':' . $date] ?? [];
-    return array_values(array_unique(array_merge($occ, $blk)));
+if (!function_exists('taken_slots')) {
+    /** Các khung giờ đang bận của 1 sân trong 1 ngày (đơn + khóa của chủ sân), có hỗ trợ lọc theo thuộc tính phân loại sân. */
+    function taken_slots(string $courtId, string $date, string $excludeId = '', string $fieldType = '', string $spaceType = ''): array
+    {
+        $details = occupied_slots_details($date, $excludeId)[$courtId] ?? [];
+        $occ = [];
+        if (!empty($details)) {
+            foreach ($details as $item) {
+                $matchField = empty($item['fieldType']) || empty($fieldType) || $item['fieldType'] === $fieldType;
+                $matchSpace = empty($item['spaceType']) || empty($spaceType) || $item['spaceType'] === $spaceType;
+                if ($matchField && $matchSpace) {
+                    $occ[] = $item['slot'];
+                }
+            }
+            $occ = array_values(array_unique($occ));
+        } else {
+            $occ = occupied_slots($date, $excludeId)[$courtId] ?? [];
+        }
+
+        $blk = blocked_slots_map($date, [$courtId])[$courtId . ':' . $date] ?? [];
+        return array_values(array_unique(array_merge($occ, $blk)));
+    }
 }
 
 function find_active_promo(string $code): ?array
 {
     $row = q_one("SELECT * FROM promotions WHERE code = ? AND status = 'active'", [strtoupper($code)]);
-    return $row ? map_promotion($row) : null;
+    if ($row) return map_promotion($row);
+
+    $u = current_user();
+    if ($u) {
+        $uv = q_one("SELECT * FROM user_vouchers WHERE user_id = ? AND UPPER(code) = ? AND status = 'available' AND (expires_at IS NULL OR expires_at >= NOW())", [$u['id'], strtoupper($code)]);
+        if ($uv) {
+            return [
+                'id' => $uv['id'],
+                'ownerId' => null,
+                'ownerName' => 'Ví cá nhân',
+                'code' => strtoupper($uv['code']),
+                'title' => $uv['title'],
+                'description' => $uv['description'],
+                'discountType' => $uv['discount_type'],
+                'discountValue' => (int) $uv['discount_value'],
+                'maxDiscount' => null,
+                'minOrder' => (int) $uv['min_order'],
+                'startDate' => substr($uv['created_at'], 0, 10),
+                'endDate' => $uv['expires_at'] ? substr($uv['expires_at'], 0, 10) : '2099-12-31',
+                'expiresAt' => $uv['expires_at'] ? iso($uv['expires_at']) : null,
+                'weekdays' => [],
+                'startTime' => '',
+                'endTime' => '',
+                'usageLimit' => 1,
+                'status' => 'active',
+                'isUserVoucher' => true,
+            ];
+        }
+    }
+    return null;
 }
 
 function booking_by_code(string $code): ?array
@@ -164,11 +254,15 @@ function booking_by_code(string $code): ?array
 }
 
 run_api([
-    // Khung giờ đã bị chiếm + khung giờ chủ sân khóa trong 1 ngày
+    // Khung giờ đã bị chiếm + khung giờ chủ sân khóa trong 1 ngày (bao gồm phân loại thuộc tính sân)
     'availability' => function () {
         $date = $_GET['date'] ?? date('Y-m-d');
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) fail('Ngày không hợp lệ.');
-        return ['occupied' => (object) occupied_slots($date), 'blocked' => (object) blocked_slots_map($date)];
+        return [
+            'occupied' => (object) occupied_slots($date),
+            'occupiedDetails' => (object) occupied_slots_details($date),
+            'blocked' => (object) blocked_slots_map($date),
+        ];
     },
 
     // Sân đang hoạt động + khung giờ tối nay còn trống (dùng cho trợ lý chat)
@@ -187,10 +281,19 @@ run_api([
 
     // Danh sách toàn bộ mã giảm giá đang hoạt động trên hệ thống (và ví cá nhân nếu đăng nhập)
     'promotions' => function () {
-        $promos = array_map('map_promotion', q_all("SELECT * FROM promotions WHERE status = 'active' AND end_date >= CURDATE() ORDER BY discount_value DESC, updated_at DESC"));
+        $promos = array_map(function ($r) {
+            $p = map_promotion($r);
+            $c = strtoupper($p['code']);
+            $claimed = promo_claimed_count($c);
+            $saved = (int) q_val("SELECT COUNT(*) FROM user_vouchers WHERE UPPER(code) = ?", [$c]);
+            $p['savedCount'] = $saved;
+            $p['claimedCount'] = $claimed;
+            $p['remainingCount'] = $p['usageLimit'] ? max(0, $p['usageLimit'] - $claimed) : null;
+            return $p;
+        }, q_all("SELECT * FROM promotions WHERE status = 'active' AND end_date >= CURDATE() ORDER BY discount_value DESC, updated_at DESC"));
         $u = current_user();
         if ($u) {
-            $uvs = q_all("SELECT * FROM user_vouchers WHERE user_id = ? AND status = 'available' AND (expires_at IS NULL OR expires_at >= CURDATE())", [$u['id']]);
+            $uvs = q_all("SELECT * FROM user_vouchers WHERE user_id = ? AND status = 'available' AND (expires_at IS NULL OR expires_at >= NOW())", [$u['id']]);
             $existingCodes = array_map(fn($p) => strtoupper($p['code']), $promos);
             foreach ($uvs as $uv) {
                 $c = strtoupper($uv['code']);
@@ -207,7 +310,8 @@ run_api([
                         'maxDiscount' => null,
                         'minOrder' => (int) $uv['min_order'],
                         'startDate' => substr($uv['created_at'], 0, 10),
-                        'endDate' => $uv['expires_at'] ?: '2099-12-31',
+                        'endDate' => $uv['expires_at'] ? substr($uv['expires_at'], 0, 10) : '2099-12-31',
+                        'expiresAt' => $uv['expires_at'] ? iso($uv['expires_at']) : null,
                         'weekdays' => [],
                         'startTime' => '',
                         'endTime' => '',
@@ -229,13 +333,25 @@ run_api([
         $date = in_str('date');
         $start = in_str('startSlot');
         $duration = in_int('duration', 60);
+        $fieldType = in_str('fieldType');
+        $spaceType = in_str('spaceType') === 'indoor' ? 'indoor' : 'outdoor';
+        $bookingType = in_str('bookingType') === 'recurring' ? 'recurring' : 'single';
+        $recurringWeekdays = array_values(array_unique(array_filter(array_map('intval', in_arr('recurringWeekdays')), fn($d) => $d >= 1 && $d <= 7)));
+        if ($bookingType === 'recurring' && empty($recurringWeekdays)) {
+            $recurringWeekdays = [(int) date('N', strtotime($date))];
+        }
+        $recurringWeeks = in_int('recurringWeeks', 4);
+        if (!in_array($recurringWeeks, [4, 8, 12], true)) $recurringWeeks = 4;
+        $sessions = ($bookingType === 'recurring') ? (count($recurringWeekdays) * $recurringWeeks) : 1;
+
         if (!$code) fail('Vui lòng nhập mã giảm giá.');
         if (!$court || !$start) fail('Hãy chọn sân và khung giờ trước khi áp dụng mã.');
         $promo = find_active_promo($code);
         if (!$promo) fail('Mã không tồn tại hoặc đã ngừng áp dụng.');
         if ($promo['ownerId'] && $court['ownerId'] && $promo['ownerId'] !== $court['ownerId']) fail('Mã này chỉ áp dụng cho sân của ' . $promo['ownerName'] . '.');
         $parsedExtras = resolve_booking_extras(in_arr('extras'));
-        $subtotal = court_price($court, $start, $duration) + $parsedExtras['total'];
+        $courtFee = court_price($court, $start, $duration, $fieldType, $spaceType, $bookingType, $sessions);
+        $subtotal = $courtFee + $parsedExtras['total'];
         $err = promo_check($promo, $date, $start, $subtotal);
         if ($err) fail($err);
         return ['promotion' => $promo, 'discount' => promo_discount($promo, $subtotal)];
@@ -253,15 +369,19 @@ run_api([
         $row = q_one('SELECT * FROM promotions WHERE UPPER(code) = ?', [$code]);
         if ($row) {
             $p = map_promotion($row);
-            $usedCount = promo_used_count($row['code']);
-            $isLimitReached = $p['usageLimit'] && $p['usageLimit'] > 0 && $usedCount >= $p['usageLimit'];
+            $claimedCount = promo_claimed_count($row['code']);
+            $savedCount = (int) q_val("SELECT COUNT(*) FROM user_vouchers WHERE UPPER(code) = ?", [strtoupper($row['code'])]);
+            $p['savedCount'] = $savedCount;
+            $p['claimedCount'] = $claimedCount;
+            $p['remainingCount'] = $p['usageLimit'] ? max(0, $p['usageLimit'] - $claimedCount) : null;
+            $isLimitReached = $p['usageLimit'] && $p['usageLimit'] > 0 && $claimedCount >= $p['usageLimit'];
 
             if ($isLimitReached) {
                 return [
                     'found' => true,
                     'promotion' => $p,
                     'state' => 'exhausted',
-                    'message' => 'Mã ưu đãi này đã hết lượt sử dụng.',
+                    'message' => 'Mã ưu đãi này đã hết số lượng phát hành (tối đa ' . $p['usageLimit'] . ' lượt).',
                 ];
             }
 
@@ -329,7 +449,7 @@ run_api([
         if ($u) {
             $uv = q_one('SELECT * FROM user_vouchers WHERE user_id = ? AND UPPER(code) = ?', [$u['id'], $code]);
             if ($uv) {
-                $isExpired = $uv['expires_at'] && $uv['expires_at'] < $today;
+                $isExpired = $uv['expires_at'] && strtotime($uv['expires_at']) < time();
                 $isUsed = $uv['status'] === 'used';
                 $promo = [
                     'id' => $uv['id'],
@@ -343,7 +463,8 @@ run_api([
                     'maxDiscount' => null,
                     'minOrder' => (int) $uv['min_order'],
                     'startDate' => substr($uv['created_at'], 0, 10),
-                    'endDate' => $uv['expires_at'] ?: date('Y-m-d', strtotime('+30 days')),
+                    'endDate' => $uv['expires_at'] ? substr($uv['expires_at'], 0, 10) : date('Y-m-d', strtotime('+30 days')),
+                    'expiresAt' => $uv['expires_at'] ? iso($uv['expires_at']) : null,
                     'weekdays' => [],
                     'startTime' => '',
                     'endTime' => '',
@@ -377,6 +498,9 @@ run_api([
         $date = in_str('date');
         $start = in_str('startSlot');
         $duration = in_int('duration', 60);
+        $fieldType = in_str('fieldType');
+        $spaceType = in_str('spaceType') === 'indoor' ? 'indoor' : 'outdoor';
+        $bookingType = in_str('bookingType') === 'recurring' ? 'recurring' : 'single';
         $name = in_str('name');
         $phone = preg_replace('/\s/', '', in_str('phone'));
         $email = in_str('email');
@@ -394,13 +518,55 @@ run_api([
         if (!preg_match('/^0\d{9}$/', $phone)) fail('Số điện thoại phải gồm 10 số và bắt đầu bằng 0.');
         if ($email && !filter_var($email, FILTER_VALIDATE_EMAIL)) fail('Email chưa đúng định dạng.');
 
+        $types = (isset($court['fieldTypes']) && is_array($court['fieldTypes']) && count($court['fieldTypes']) > 0)
+            ? $court['fieldTypes']
+            : ($court['sport'] === 'football' ? ['Sân 5 người', 'Sân 7 người'] : ['Sân tiêu chuẩn', 'Sân VIP']);
+        $actualFieldType = ($fieldType && in_array($fieldType, $types, true)) ? $fieldType : $types[0];
+        $spaceLabel = $spaceType === 'indoor' ? 'Có mái che' : 'Ngoài trời';
+
         $slots = slots_in_range($start, $duration);
-        $clash = array_values(array_intersect($slots, taken_slots($court['id'], $date)));
+        $clash = array_values(array_intersect($slots, taken_slots($court['id'], $date, '', $actualFieldType, $spaceType)));
         if ($clash) fail('Khung giờ ' . implode(', ', $clash) . ' vừa có người đặt. Vui lòng chọn khung giờ khác.');
+
+        $recurringWeekdays = array_values(array_unique(array_filter(array_map('intval', in_arr('recurringWeekdays')), fn($d) => $d >= 1 && $d <= 7)));
+        if ($bookingType === 'recurring' && empty($recurringWeekdays)) {
+            $recurringWeekdays = [(int) date('N', strtotime($date))];
+        }
+        sort($recurringWeekdays);
+        $recurringWeeks = in_int('recurringWeeks', 4);
+        if (!in_array($recurringWeeks, [4, 8, 12], true)) $recurringWeeks = 4;
+        $sessions = ($bookingType === 'recurring') ? (count($recurringWeekdays) * $recurringWeeks) : 1;
+
+        if ($bookingType === 'recurring') {
+            $curTs = strtotime($date);
+            $endTs = strtotime("$date + " . ($recurringWeeks * 7) . " days");
+            $clashedDays = [];
+            while ($curTs < $endTs) {
+                $checkDate = date('Y-m-d', $curTs);
+                $checkIsoDay = (int) date('N', $curTs);
+                if (in_array($checkIsoDay, $recurringWeekdays, true)) {
+                    $taken = taken_slots($court['id'], $checkDate, '', $actualFieldType, $spaceType);
+                    $dayClash = array_intersect($slots, $taken);
+                    if (!empty($dayClash)) {
+                        $clashedDays[] = date('d/m/Y', $curTs) . " (" . implode(', ', $dayClash) . ")";
+                        if (count($clashedDays) >= 3) break;
+                    }
+                }
+                $curTs = strtotime('+1 day', $curTs);
+            }
+            if (!empty($clashedDays)) {
+                fail('Lịch cố định bị trùng khung giờ vào ngày: ' . implode(', ', $clashedDays) . '. Vui lòng chọn khung giờ hoặc thứ khác.');
+            }
+        }
+
+        $daysMap = [1 => 'Thứ 2', 2 => 'Thứ 3', 3 => 'Thứ 4', 4 => 'Thứ 5', 5 => 'Thứ 6', 6 => 'Thứ 7', 7 => 'Chủ Nhật'];
+        $daysLabel = implode(', ', array_map(fn($d) => $daysMap[$d] ?? "T$d", $recurringWeekdays));
+        $bookingLabel = $bookingType === 'recurring' ? "Cố định {$daysLabel} ({$sessions} buổi)" : 'Theo buổi';
+        $courtNameWithAttrs = "{$court['name']} ({$actualFieldType} - {$spaceLabel} - {$bookingLabel})";
 
         $parsedExtras = resolve_booking_extras(in_arr('extras'));
         $extrasTotal = $parsedExtras['total'];
-        $courtFee = court_price($court, $start, $duration);
+        $courtFee = court_price($court, $start, $duration, $fieldType, $spaceType, $bookingType, $sessions);
         $subtotal = $courtFee + $extrasTotal;
         $discount = 0;
         $promoCode = null;
@@ -419,15 +585,34 @@ run_api([
         $bookingCode = 'BMT' . date('Ymd') . '-' . random_int(1000, 9999);
         while (q_val('SELECT id FROM bookings WHERE code = ?', [$bookingCode])) $bookingCode = 'BMT' . date('Ymd') . '-' . random_int(1000, 9999);
 
+        $bookingNote = $note ?: '';
+        if ($bookingType === 'recurring') {
+            $endDate = date('Y-m-d', strtotime("$date + " . ($recurringWeeks * 7) . " days"));
+            $recTag = "[Lịch cố định: {$daysLabel} ({$sessions} buổi / {$recurringWeeks} tuần) từ {$date} đến {$endDate} | {$actualFieldType} - {$spaceLabel}]";
+            $bookingNote = trim(($bookingNote ? $bookingNote . ' | ' : '') . $recTag);
+        }
+
         q('INSERT INTO bookings (id, code, source, court_id, court_name, sport, area, image, customer_id, customer_name, customer_phone, customer_email,
              booking_date, start_slot, duration_minutes, slots, unit_price, base_total, discount_amount, promo_code, total_price, deposit_amount, extras,
              payment_method, payment_status, status, approved_at, hold_expires_at, note)
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [
-            $id, $bookingCode, 'online', $court['id'], $court['name'], $court['sport'], $court['area'], $court['image'], $u['id'] ?? null,
+            $id, $bookingCode, 'online', $court['id'], $courtNameWithAttrs, $court['sport'], $court['area'], $court['image'], $u['id'] ?? null,
             $name, $phone, $email ?: null, $date, $start, $duration, j($slots), $court['pricePerHour'], $subtotal, $discount, $promoCode,
             $total, $deposit, j($parsedExtras['items']),
-            $mode === 'full' ? 'vietqr-full' : 'vietqr-deposit', 'unpaid', 'pending', null, null, $note ?: null,
+            $mode === 'full' ? 'vietqr-full' : 'vietqr-deposit', 'unpaid', 'pending', null, null, $bookingNote ?: null,
         ]);
+
+        if ($bookingType === 'recurring') {
+            $recId = uid('rec-');
+            $endDate = date('Y-m-d', strtotime("$date + " . ($recurringWeeks * 7) . " days"));
+            $perSession = (int) round($courtFee / max(1, $sessions));
+            $recNote = "Lịch cố định: {$daysLabel} ({$sessions} buổi / {$recurringWeeks} tuần) - Sân: {$actualFieldType} ({$spaceLabel}) - Đơn gốc: {$bookingCode}";
+            q('INSERT INTO recurring_bookings (id, court_id, court_name, owner_id, customer_id, customer_name, customer_phone, weekdays, start_slot, duration_minutes, start_date, end_date, price_per_session, status, note)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+                $recId, $court['id'], $courtNameWithAttrs, $court['ownerId'] ?? null, $u['id'] ?? null,
+                $name, $phone, j($recurringWeekdays), $start, $duration, $date, $endDate, $perSession, 'active', $recNote,
+            ]);
+        }
 
         // Cập nhật tồn kho dịch vụ / biến thể đã chọn
         foreach ($parsedExtras['items'] as $it) {
@@ -462,7 +647,8 @@ run_api([
         if ($b['payment_status'] === 'unpaid' && $b['hold_expires_at'] && strtotime($b['hold_expires_at']) <= time()) {
             fail('Đã hết thời gian 5 phút chuyển cọc. Đơn đã tự động hủy.');
         }
-        $clash = array_values(array_intersect(jd($b['slots']), taken_slots($b['court_id'], $b['booking_date'], $b['id'])));
+        $bAttrs = extract_booking_attributes($b['court_name'] ?? '', $b['note'] ?? '');
+        $clash = array_values(array_intersect(jd($b['slots']), taken_slots($b['court_id'], $b['booking_date'], $b['id'], $bAttrs['fieldType'], $bAttrs['spaceType'])));
         if ($clash) fail('Khung giờ ' . implode(', ', $clash) . ' vừa được người khác đặt. Vui lòng chọn khung giờ khác.');
         $u = current_user();
         if (!$b['customer_id'] && $u) {
@@ -473,40 +659,21 @@ run_api([
         return ['autoConfirmSeconds' => AUTO_CONFIRM_SECONDS];
     },
 
-    // Sau thời gian đối soát, hệ thống ghi nhận cọc thành công, hoàn tất giữ sân và kích hoạt vé
+    // Xác nhận tiền cọc: chỉ xác nhận khi đơn đã được đối soát qua SePay/Webhook thành công
     'auto_confirm' => function () {
         $b = q_one('SELECT * FROM bookings WHERE id = ?', [in_str('id')]);
-        if (!$b || $b['payment_status'] === 'unpaid') fail('Không tìm thấy đơn để xác nhận tiền cọc. Vui lòng tải lại trang và thử lại.');
-        if ($b['payment_status'] === 'deposit_claimed') {
-            $full = $b['payment_method'] === 'vietqr-full' || (int) $b['deposit_amount'] >= (int) $b['total_price'];
-            $u = current_user();
-            // Đã nhận cọc và chủ sân đã duyệt trước đó -> Hoàn tất giữ sân chính thức (status = 'confirmed')
-            if (!$b['customer_id'] && $u) {
-                q("UPDATE bookings SET customer_id = ?, payment_status = ?, status = 'confirmed' WHERE id = ?", [$u['id'], $full ? 'paid' : 'deposit_paid', $b['id']]);
-            } else {
-                q("UPDATE bookings SET payment_status = ?, status = 'confirmed' WHERE id = ?", [$full ? 'paid' : 'deposit_paid', $b['id']]);
-            }
-
-            $targetUserId = (int) ($b['customer_id'] ?: ($u['id'] ?? 0));
-            if (!$targetUserId && !empty($b['customer_phone'])) {
-                $targetUserId = (int) q_val('SELECT id FROM users WHERE phone = ?', [$b['customer_phone']]);
-            }
-            if ($targetUserId > 0) {
-                $payText = $full ? 'toàn bộ tiền sân' : 'tiền cọc ' . number_format((int) $b['deposit_amount'], 0, ',', '.') . 'đ';
-                push_notification($targetUserId, 'Xác nhận thanh toán đơn #' . $b['code'] . ' thành công!', 'Hệ thống đã nhận ' . $payText . ' cho đơn đặt sân tại ' . ($b['court_name'] ?: 'sân thể thao') . '. Vé đặt sân của bạn đã chính thức được kích hoạt!', 'payment', '/tai-khoan?tab=history');
-            }
-
-            $court = q_one('SELECT owner_id FROM courts WHERE id = ?', [$b['court_id']]);
-            if (!empty($court['owner_id'])) {
-                push_notification((int) $court['owner_id'], 'Đơn #' . $b['code'] . ' đã hoàn tất cọc', 'Khách hàng ' . ($b['customer_name'] ?: 'Khách') . ' đã chuyển cọc cho lịch đặt ngày ' . date('d/m/Y', strtotime($b['booking_date'])) . '.', 'payment', '/chu-san?tab=bookings');
-            }
+        if (!$b) fail('Không tìm thấy đơn.');
+        if (in_array($b['payment_status'], ['paid', 'deposit_paid'], true)) {
+            return booking_by_code($b['code']);
         }
-        return booking_by_code($b['code']);
+        fail('Hệ thống chưa nhận được tiền chuyển khoản từ tài khoản MBBank. Vui lòng chuyển tiền đúng nội dung đơn hàng rồi kiểm tra lại.');
     },
 
     // Khách hủy lượt giữ sân khi chưa chuyển khoản
     'cancel_hold' => function () {
-        q("UPDATE bookings SET status = 'cancelled', cancel_reason = 'Khách hủy giữ sân' WHERE id = ? AND payment_status = 'unpaid' AND status = 'pending'", [in_str('id')]);
+        $id = in_str('id');
+        restore_booking_extras_stock($id);
+        q("UPDATE bookings SET status = 'cancelled', cancel_reason = 'Khách hủy giữ sân' WHERE id = ? AND payment_status = 'unpaid' AND status = 'pending'", [$id]);
         return true;
     },
 
@@ -516,5 +683,36 @@ run_api([
         $b = booking_by_code(strtoupper(trim($_GET['code'] ?? in_str('code'))));
         if (!$b) fail('Không tìm thấy đơn với mã này.');
         return $b;
+    },
+
+    // Kiểm tra trực tiếp biến động số dư SePay (Real-time Polling siêu nhanh dựa vào Webhook)
+    'check_sepay' => function () {
+        $id = in_str('id') ?: trim((string)($_GET['id'] ?? ''));
+        $code = strtoupper(trim(in_str('code') ?: (string)($_GET['code'] ?? '')));
+        $b = $id ? q_one('SELECT * FROM bookings WHERE id = ?', [$id]) : ($code ? q_one('SELECT * FROM bookings WHERE code = ?', [$code]) : null);
+        if (!$b) fail('Không tìm thấy đơn.');
+
+        // Kiểm tra tiền thật từ Webhook SePay (nếu tiền thật vào thì tự động mở vé ngay lập tức)
+        if (in_array($b['payment_status'], ['paid', 'deposit_paid'], true)) {
+            return ['confirmed' => true, 'booking' => booking_by_code($b['code'])];
+        }
+
+        return ['confirmed' => false, 'booking' => booking_by_code($b['code'])];
+    },
+
+    // Giả lập duyệt cọc nhanh khi bấm nút (Chỉ hoạt động khi PAYMENT_TEST_MODE = true)
+    'confirm_test' => function () {
+        if (!defined('PAYMENT_TEST_MODE') || !PAYMENT_TEST_MODE) {
+            fail('Chế độ Test không được bật trên máy chủ.');
+        }
+        $id = in_str('id') ?: trim((string)($_GET['id'] ?? ''));
+        $code = strtoupper(trim(in_str('code') ?: (string)($_GET['code'] ?? '')));
+        $b = $id ? q_one('SELECT * FROM bookings WHERE id = ?', [$id]) : ($code ? q_one('SELECT * FROM bookings WHERE code = ?', [$code]) : null);
+        if (!$b) fail('Không tìm thấy đơn.');
+
+        if (!in_array($b['payment_status'], ['paid', 'deposit_paid'], true)) {
+            q("UPDATE bookings SET payment_status = 'deposit_paid', status = 'confirmed' WHERE id = ?", [$b['id']]);
+        }
+        return ['confirmed' => true, 'booking' => booking_by_code($b['code'])];
     },
 ]);

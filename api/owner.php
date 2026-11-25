@@ -91,9 +91,8 @@ run_api([
         $now = date('Y-m-d H:i:s');
         if ($status === 'confirmed') {
             $slots = jd($b['slots']);
-            $occ = occupied_slots($b['booking_date'], $b['id'])[$b['court_id']] ?? [];
-            $blocked = blocked_slots_map($b['booking_date'], [$b['court_id']])[$b['court_id'] . ':' . $b['booking_date']] ?? [];
-            $unavailable = array_intersect($slots, array_merge($occ, $blocked));
+            $bAttrs = extract_booking_attributes($b['court_name'] ?? '', $b['note'] ?? '');
+            $unavailable = array_intersect($slots, taken_slots($b['court_id'], $b['booking_date'], $b['id'], $bAttrs['fieldType'], $bAttrs['spaceType']));
             if (!empty($unavailable)) {
                 fail('Không thể xác nhận đơn vì khung giờ ' . implode(', ', $unavailable) . ' ngày ' . $b['booking_date'] . ' đã bị trùng lịch với đơn khác hoặc đang bị khóa.');
             }
@@ -136,7 +135,8 @@ run_api([
         sort($slots);
         if (!$slots) fail('Vui lòng chọn ít nhất 1 khung giờ.');
 
-        $occ = array_merge(occupied_slots($newDate, $b['id'])[$court['id']] ?? [], blocked_slots_map($newDate, [$court['id']])[$court['id'] . ':' . $newDate] ?? []);
+        $bAttrs = extract_booking_attributes($b['court_name'] ?? '', $b['note'] ?? '');
+        $occ = taken_slots($court['id'], $newDate, $b['id'], $bAttrs['fieldType'], $bAttrs['spaceType']);
         if ($clash = array_values(array_intersect($slots, $occ))) fail('Khung giờ ' . implode(', ', $clash) . ' đã có người đặt hoặc đang khóa.');
 
         $total = 0;
@@ -172,7 +172,9 @@ run_api([
         $name = in_str('customerName');
         $phone = preg_replace('/[^\d+]/', '', in_str('customerPhone'));
         if (mb_strlen($name) < 2) fail('Vui lòng nhập tên khách.');
-        $occ = array_merge(occupied_slots($date)[$court['id']] ?? [], blocked_slots_map($date, [$court['id']])[$court['id'] . ':' . $date] ?? []);
+        $fieldType = in_str('fieldType');
+        $spaceType = in_str('spaceType') === 'indoor' ? 'indoor' : (in_str('spaceType') ?: '');
+        $occ = taken_slots($court['id'], $date, '', $fieldType, $spaceType);
         if ($clash = array_values(array_intersect($slots, $occ))) fail('Khung giờ ' . implode(', ', $clash) . ' đã có người đặt hoặc đang khóa.');
         $total = 0;
         foreach ($slots as $s) {
@@ -505,7 +507,39 @@ run_api([
     // ---------------- Khuyến mãi ----------------
     'promotions' => function () {
         global $OWNER;
-        $list = array_map('map_promotion', q_all('SELECT * FROM promotions WHERE owner_id = ? ORDER BY updated_at DESC', [$OWNER['id']]));
+        ensure_sitemap_schema();
+        $promos = q_all('SELECT * FROM promotions WHERE owner_id = ? ORDER BY updated_at DESC', [$OWNER['id']]);
+        $list = array_map('map_promotion', $promos);
+
+        // Thống kê số lượng khách hàng đã lưu từng mã và trạng thái đếm ngược
+        $savedStats = q_all("SELECT UPPER(code) as code, COUNT(*) as saved_count,
+                                    SUM(CASE WHEN expires_at >= NOW() AND status = 'available' THEN 1 ELSE 0 END) as active_saved_count,
+                                    MIN(CASE WHEN expires_at >= NOW() AND status = 'available' THEN expires_at ELSE NULL END) as next_expiry,
+                                    MAX(created_at) as last_saved_at
+                             FROM user_vouchers GROUP BY UPPER(code)");
+        $savedMap = [];
+        foreach ($savedStats as $st) {
+            $savedMap[$st['code']] = [
+                'savedCount' => (int) $st['saved_count'],
+                'activeSavedCount' => (int) $st['active_saved_count'],
+                'nextExpiry' => $st['next_expiry'] ? iso($st['next_expiry']) : null,
+                'lastSavedAt' => $st['last_saved_at'] ? iso($st['last_saved_at']) : null,
+            ];
+        }
+
+        foreach ($list as &$item) {
+            $c = strtoupper($item['code']);
+            $s = $savedMap[$c] ?? ['savedCount' => 0, 'activeSavedCount' => 0, 'nextExpiry' => null, 'lastSavedAt' => null];
+            $item['savedCount'] = $s['savedCount'];
+            $item['activeSavedCount'] = $s['activeSavedCount'];
+            $item['nextExpiry'] = $s['nextExpiry'];
+            $item['lastSavedAt'] = $s['lastSavedAt'];
+            $claimed = promo_claimed_count($c);
+            $item['claimedCount'] = $claimed;
+            $item['remainingCount'] = $item['usageLimit'] ? max(0, $item['usageLimit'] - $claimed) : null;
+        }
+        unset($item);
+
         $ids = my_court_ids();
         $uses = $ids ? q_all("SELECT b.code, b.promo_code, b.discount_amount, b.total_price, b.base_total, b.customer_name, b.court_name, b.booking_date, b.status, b.created_at
                               FROM bookings b WHERE b.promo_code IS NOT NULL AND b.court_id IN (" . in_list($ids) . ') ORDER BY b.created_at DESC', $ids) : [];
@@ -519,6 +553,7 @@ run_api([
     'promotion_save' => function () {
         global $OWNER;
         staff_need('promotions');
+        ensure_sitemap_schema();
         $code = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', in_str('code')));
         if (strlen($code) < 3 || strlen($code) > 16) fail('Mã giảm giá cần 3–16 ký tự chữ hoặc số.');
         $title = in_str('title');
@@ -534,14 +569,15 @@ run_api([
         if ($dup) fail('Mã ' . $code . ' đã tồn tại, vui lòng chọn mã khác.');
         $weekdays = array_values(array_unique(array_filter(array_map('intval', in_arr('weekdays')), fn($d) => $d >= 1 && $d <= 7)));
         sort($weekdays);
+        $countdownHours = max(1, in_int('countdownHours') ?: 24);
         $vals = [$OWNER['business_name'] ?: $OWNER['full_name'], $code, $title, in_str('description'), $type, $value,
             ($m = in_int('maxDiscount')) > 0 ? $m : null, max(0, in_int('minOrder')), $start, $end, j($weekdays),
-            in_str('startTime'), in_str('endTime'), ($l = in_int('usageLimit')) > 0 ? $l : null, in_str('status') === 'paused' ? 'paused' : 'active'];
+            in_str('startTime'), in_str('endTime'), ($l = in_int('usageLimit')) > 0 ? $l : null, $countdownHours, in_str('status') === 'paused' ? 'paused' : 'active'];
         if ($id) {
             if (!q_val('SELECT id FROM promotions WHERE id = ? AND owner_id = ?', [$id, $OWNER['id']])) fail('Không tìm thấy mã của bạn.');
-            q('UPDATE promotions SET owner_name=?, code=?, title=?, description=?, discount_type=?, discount_value=?, max_discount=?, min_order=?, start_date=?, end_date=?, weekdays=?, start_time=?, end_time=?, usage_limit=?, status=? WHERE id = ?', array_merge($vals, [$id]));
+            q('UPDATE promotions SET owner_name=?, code=?, title=?, description=?, discount_type=?, discount_value=?, max_discount=?, min_order=?, start_date=?, end_date=?, weekdays=?, start_time=?, end_time=?, usage_limit=?, countdown_hours=?, status=? WHERE id = ?', array_merge($vals, [$id]));
         } else {
-            q('INSERT INTO promotions (owner_name, code, title, description, discount_type, discount_value, max_discount, min_order, start_date, end_date, weekdays, start_time, end_time, usage_limit, status, id, owner_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', array_merge($vals, [uid('promo-'), $OWNER['id']]));
+            q('INSERT INTO promotions (owner_name, code, title, description, discount_type, discount_value, max_discount, min_order, start_date, end_date, weekdays, start_time, end_time, usage_limit, countdown_hours, status, id, owner_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', array_merge($vals, [uid('promo-'), $OWNER['id']]));
         }
         return true;
     },

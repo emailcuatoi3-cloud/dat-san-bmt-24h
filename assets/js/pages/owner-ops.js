@@ -483,7 +483,12 @@ export function renderBookings() {
   <section class="${CARD} mb-5 p-4">
     <div class="flex flex-col gap-3 md:flex-row md:items-end">
       <div class="flex-1"><label class="${LABEL}"><i class="ri-qr-scan-2-line text-primary-600"></i> Check-in nhanh bằng mã vé</label>
-        <form id="quick-checkin" class="flex gap-2"><input name="code" class="${INPUT} font-mono uppercase placeholder:font-sans placeholder:normal-case" placeholder="Nhập mã vé hoặc dán nội dung QR (VD: BMT20261109-1234)"><button class="${BTN}">Nhận sân</button></form></div>
+        <form id="quick-checkin" class="flex flex-wrap gap-2">
+          <input name="code" class="${INPUT} flex-1 min-w-[200px] font-mono uppercase placeholder:font-sans placeholder:normal-case" placeholder="Nhập mã vé hoặc dán nội dung QR (VD: BMT20261109-1234)">
+          <button class="${BTN}">Nhận sân</button>
+          <button type="button" id="btn-scan-qr" class="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md bg-primary-600 px-3.5 py-2 text-xs font-bold text-white transition-colors hover:bg-primary-700 shadow-sm"><i class="ri-camera-lens-line text-base"></i> Quét QR Camera</button>
+        </form>
+      </div>
       <p class="text-xs text-foreground-500 md:w-56">Đơn hôm nay chưa nhận sân: <b class="text-foreground-900">${waiting.length}</b></p>
     </div>
     ${waiting.length ? `<div class="mt-3 flex flex-wrap gap-2">${waiting.map((b) => `<button type="button" data-checkin="${b.id}" class="${BTN_SM}"><i class="ri-login-circle-line"></i>${b.startSlot} · ${esc(b.customerName)} · ${esc(b.courtName)}</button>`).join('')}</div>` : ''}
@@ -533,6 +538,86 @@ export function renderBookings() {
     if (!code) return toast('Vui lòng nhập mã vé.', 'error');
     await checkIn(null, code);
   });
+  root.querySelector('#btn-scan-qr')?.addEventListener('click', () => {
+    openCameraScanner((scannedText) => {
+      const parsed = parseTicketPayload(scannedText);
+      const code = parsed.code || scannedText.trim();
+      if (code) {
+        toast(`Đã nhận diện vé: ${code}`);
+        checkIn(null, code);
+      } else {
+        toast('Không tìm thấy mã vé trong QR.', 'error');
+      }
+    });
+  });
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) return resolve();
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+function openCameraScanner(onScanned) {
+  const m = modal(
+    '<span class="flex items-center gap-2"><i class="ri-qr-scan-2-line text-primary-600"></i> Quét camera vé QR Check-in</span>',
+    `
+      <div class="p-1 text-center">
+        <p class="text-xs text-foreground-600 mb-3">Hướng camera về phía mã QR trên vé điện tử của khách hàng</p>
+        <div id="qr-camera-box" class="overflow-hidden rounded-lg border-2 border-dashed border-primary-300 bg-background-950 min-h-[260px] flex items-center justify-center text-white text-xs">
+          <div class="p-4 text-center">
+            <i class="ri-camera-lens-line text-3xl text-primary-400 animate-pulse block mb-2"></i>
+            <span class="text-foreground-300 font-medium">Đang khởi động camera...</span>
+          </div>
+        </div>
+        <p class="mt-3 text-[11px] text-foreground-500">Camera sẽ tự động nhận diện và hoàn tất check-in ngay khi thấy mã QR.</p>
+      </div>
+    `,
+    '<button type="button" data-close class="rounded-md border border-background-300 px-4 py-2 text-xs font-semibold text-foreground-800 hover:bg-background-100">Đóng</button>',
+    'max-w-md'
+  );
+
+  let scanner = null;
+  const stop = () => {
+    if (scanner) {
+      try { scanner.stop().catch(() => {}); } catch {}
+      scanner = null;
+    }
+  };
+  m.el.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', stop));
+
+  loadScript('https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js')
+    .then(() => {
+      if (!window.Html5Qrcode) throw new Error('Không tải được thư viện camera.');
+      scanner = new window.Html5Qrcode('qr-camera-box');
+      return scanner.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 220, height: 220 } },
+        (decodedText) => {
+          stop();
+          m.close();
+          if (onScanned) onScanned(decodedText);
+        },
+        () => {}
+      );
+    })
+    .catch(() => {
+      const box = m.el.querySelector('#qr-camera-box');
+      if (box) {
+        box.innerHTML = `
+          <div class="p-4 text-accent-400 text-xs text-center">
+            <i class="ri-error-warning-line text-2xl mb-1 block"></i>
+            <p class="font-bold">Không thể mở camera</p>
+            <p class="mt-1 text-foreground-300">Vui lòng cấp quyền camera trong trình duyệt hoặc sử dụng ô nhập mã vé thủ công.</p>
+          </div>
+        `;
+      }
+    });
 }
 
 // =====================================================================

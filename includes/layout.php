@@ -37,6 +37,7 @@ function app_config(): array
         'holdMinutes' => max(1, (int) ($cfg['hold_minutes'] ?: HOLD_MINUTES)),
         'autoConfirmSeconds' => AUTO_CONFIRM_SECONDS,
         'cancelCutoffHours' => max(1, (int) ($cfg['cancel_cutoff_hours'] ?: CANCEL_CUTOFF_HOURS)),
+        'paymentTestMode' => defined('PAYMENT_TEST_MODE') && PAYMENT_TEST_MODE,
         'today' => date('Y-m-d'),
         'ai' => [
             'enabled' => ($cfg['ai_enabled'] ?? '1') === '1',
@@ -159,6 +160,15 @@ function render_ghost_login_banner(): void
         </a>
       </div>
     </aside>
+    <script>
+      (function(){
+        var b = document.getElementById('ghost-login-banner');
+        if (b) {
+          var h = b.offsetHeight || 44;
+          document.documentElement.style.setProperty('--ghost-banner-height', h + 'px');
+        }
+      })();
+    </script>
     <?php
 }
 
@@ -184,7 +194,7 @@ function render_page(array $opt, callable $content): void
   <div class="site-backdrop pointer-events-none fixed inset-0 z-0" aria-hidden="true"></div>
   <div class="relative z-10 flex min-h-screen flex-col">
     <?php render_site_header($transparent); ?>
-    <?php if (!$transparent): ?><div class="<?= $imp ? 'h-[118px]' : 'h-[72px]' ?> shrink-0" aria-hidden="true"></div><?php endif; ?>
+    <?php if (!$transparent): ?><div style="<?= $imp ? 'height: calc(72px + var(--ghost-banner-height, 44px));' : 'height: 72px;' ?>" class="shrink-0" aria-hidden="true"></div><?php endif; ?>
     <main class="flex-1"><?php $content(); ?></main>
     <?php render_site_footer(); ?>
   </div>
@@ -193,7 +203,7 @@ function render_page(array $opt, callable $content): void
 </div>
 <?php render_toast_root(); ?>
 <?php render_scripts($opt); ?>
-  <script type="module" src="<?= asset('js/core/chatbot.js') ?>"></script>
+  <script type="module" src="<?= asset('js/core/chatbot.js') ?>&t=<?= filemtime(__DIR__ . '/../assets/js/core/chatbot.js') ?>"></script>
 </body>
 </html>
 <?php
@@ -348,20 +358,20 @@ function render_site_header(bool $tr): void
       <?php render_theme_toggle($tr); ?>
       <?php if ($u): ?>
         <div class="relative" data-dropdown>
-          <button type="button" data-dropdown-toggle aria-expanded="false" aria-haspopup="menu" title="<?= e($u['full_name'] ?: $short) ?>" <?= tcls($tr, 'text-white hover:bg-white/15', 'text-foreground-800 hover:bg-background-100', 'flex cursor-pointer items-center gap-1 rounded-md py-1 px-1.5 transition-colors') ?>>
+          <a href="<?= url('/tai-khoan') ?>" data-dropdown-toggle aria-expanded="false" aria-haspopup="menu" title="<?= e($u['full_name'] ?: $short) ?>" <?= tcls($tr, 'text-white hover:bg-white/15', 'text-foreground-800 hover:bg-background-100', 'flex cursor-pointer items-center gap-1 rounded-md py-1 px-1.5 transition-colors') ?>>
             <span class="flex h-7 w-7 items-center justify-center rounded-full bg-primary-500 text-xs font-bold text-white"><?= e($initials) ?></span>
             <span class="hdr-wide-only max-w-[96px] truncate whitespace-nowrap text-sm font-semibold"><?= e($short) ?></span>
             <i class="ri-arrow-down-s-line text-base" aria-hidden="true"></i>
-          </button>
+          </a>
           <div data-dropdown-menu role="menu" class="absolute right-0 top-[calc(100%+10px)] hidden w-[272px] overflow-hidden rounded-xl border border-background-200 bg-background-50 shadow-xl">
-            <div class="flex items-center gap-2.5 border-b border-background-200 bg-background-100 px-3.5 py-3.5">
-              <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-500 text-xs font-bold text-white"><?= e($initials) ?></span>
+            <a href="<?= url('/tai-khoan') ?>" role="menuitem" class="flex items-center gap-2.5 border-b border-background-200 bg-background-100 px-3.5 py-3.5 transition-colors hover:bg-background-200/70 group" title="Xem thông tin tài khoản">
+              <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-500 text-xs font-bold text-white transition-transform group-hover:scale-105"><?= e($initials) ?></span>
               <span class="min-w-0">
-                <span class="block truncate text-sm font-semibold text-foreground-950"><?= e($u['full_name'] ?: $short) ?></span>
+                <span class="block truncate text-sm font-semibold text-foreground-950 transition-colors group-hover:text-primary-600"><?= e($u['full_name'] ?: $short) ?></span>
                 <span class="mt-0.5 block truncate text-xs text-foreground-500"><?= e($u['email']) ?></span>
               </span>
               <span class="ml-auto shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-bold <?= $isAdmin ? 'bg-accent-100 text-accent-800' : ($isOwner ? 'bg-primary-100 text-primary-800' : 'bg-secondary-200 text-secondary-900') ?>"><?= $isAdmin ? 'Quản trị' : ($isOwner ? 'Chủ sân' : 'Khách hàng') ?></span>
-            </div>
+            </a>
             <div class="flex flex-col p-1.5">
               <p class="px-2.5 pb-1 pt-1 text-xs font-bold uppercase tracking-[0.14em] text-foreground-400">Tài khoản của tôi</p>
               <a href="<?= url('/tai-khoan?tab=profile') ?>" role="menuitem" class="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-sm font-medium text-foreground-800 transition-colors hover:bg-background-100"><i class="ri-user-line text-base text-foreground-500" aria-hidden="true"></i>Hồ sơ cá nhân</a>
@@ -465,10 +475,11 @@ function render_site_header(bool $tr): void
           <a href="<?= url($imp ? '/thoat-gia-lap' : '/quan-tri') ?>" class="flex items-center gap-2.5 rounded-md border border-primary-300 bg-primary-50 px-3 py-2.5 text-sm font-semibold text-primary-700"><i class="ri-shield-user-line text-base" aria-hidden="true"></i><?= $imp ? 'Trở về Quản trị' : 'Quản trị hệ thống' ?><i class="ri-arrow-right-s-line ml-auto text-primary-400" aria-hidden="true"></i></a>
         <?php endif; ?>
         <?php if ($u): ?>
-          <div class="flex items-center gap-2.5 rounded-md bg-background-100 px-3 py-2.5">
+          <a href="<?= url('/tai-khoan') ?>" class="flex items-center gap-2.5 rounded-md bg-background-100 px-3 py-2.5 transition-colors hover:bg-background-200" title="Xem thông tin tài khoản">
             <span class="flex h-8 w-8 items-center justify-center rounded-full bg-primary-500 text-xs font-bold text-white"><?= e($initials) ?></span>
             <span class="min-w-0"><span class="block truncate text-sm font-semibold text-foreground-900"><?= e($u['full_name'] ?: $short) ?></span><span class="block truncate text-xs text-foreground-500"><?= e($u['email']) ?></span></span>
-          </div>
+            <i class="ri-arrow-right-s-line ml-auto text-foreground-400" aria-hidden="true"></i>
+          </a>
           <button type="button" data-logout class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-accent-300 bg-accent-50 px-3 py-2.5 text-sm font-semibold text-accent-700 transition-colors hover:bg-accent-100"><i class="ri-logout-box-r-line text-base" aria-hidden="true"></i>Đăng xuất</button>
         <?php else: ?>
           <a href="<?= url('/tai-khoan') ?>" class="flex items-center gap-2.5 rounded-md bg-background-100 px-3 py-2.5 text-sm font-semibold text-foreground-900"><i class="ri-user-line text-base text-primary-600" aria-hidden="true"></i>Tài khoản của tôi</a>
