@@ -155,9 +155,11 @@ const currentServices = () => {
     : extraServices.map((x) => ({ id: x.id, name: x.label, price: x.price, unit: 'lượt', hasVariants: false, variants: [], sport: 'all' }));
   if (!c) return all;
 
-  // Lọc chỉ những dịch vụ thuộc đúng môn thể thao của sân đang chọn (hoặc dùng chung 'all'):
+  // Lọc chỉ những dịch vụ thuộc đúng môn thể thao của sân đang chọn (hoặc dùng chung 'all'), loại bỏ phần bóng thi đấu:
   const sport = c.sport; // 'football' hoặc 'badminton'
-  let list = all.filter((s) => !s.sport || s.sport === 'all' || s.sport === sport);
+  let list = all.filter(
+    (s) => (!s.sport || s.sport === 'all' || s.sport === sport) && s.id !== 'sv-ball' && !s.name?.toLowerCase().includes('bóng thi đấu')
+  );
 
   if (c.ownerId) {
     const ownerList = list.filter((s) => s.ownerId === c.ownerId);
@@ -1200,13 +1202,6 @@ function renderStep2() {
   }).join('')}
       </div>
     </div>
-    <div class="mt-5"><p class="text-sm font-medium text-foreground-800">Dịch vụ thêm</p><p class="mt-0.5 text-xs text-foreground-500">Trả cùng lúc tại sân, không bắt buộc.</p>
-      <div class="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2">${extraServices
-      .map((s) => {
-        const on = S.extras.includes(s.id);
-        return `<label class="flex cursor-pointer items-center justify-between gap-3 rounded-md border px-3.5 py-2.5 transition-colors ${on ? 'border-primary-400 bg-primary-50' : 'border-background-300 bg-white hover:border-primary-300'}"><span class="flex items-center gap-2 text-sm text-foreground-900"><input type="checkbox" data-extra="${s.id}" ${on ? 'checked' : ''} class="h-4 w-4 cursor-pointer accent-primary-500">${esc(s.label)}</span><span class="whitespace-nowrap text-xs font-semibold text-foreground-600">${formatVnd(s.price)}</span></label>`;
-      })
-      .join('')}</div></div>
     <div class="mt-5" id="promo-box"></div>
     <div class="mt-5"><label for="b-note" class="mb-1.5 block text-sm font-medium text-foreground-800">Ghi chú cho chủ sân</label><textarea id="b-note" data-form="note" rows="3" maxlength="500" placeholder="Ví dụ: đội mình 7 người, cần thêm 10 áo bib..." class="w-full rounded-md border border-background-300 bg-white px-3 py-2.5 text-sm text-foreground-950 placeholder:text-foreground-400 focus:border-primary-400 focus:outline-none">${esc(f.note)}</textarea><p class="mt-1 text-right text-xs text-foreground-400" data-note-count>${f.note.length}/500</p></div>
     <label class="mt-2 flex cursor-pointer items-start gap-2.5 rounded-md border border-background-200 bg-background-50 px-3.5 py-3"><input type="checkbox" data-agree ${S.agree ? 'checked' : ''} class="mt-0.5 h-4 w-4 cursor-pointer accent-primary-500"><span class="text-xs leading-relaxed text-foreground-600">Tôi đồng ý với chính sách hủy sân: chỉ hủy và hoàn 100% tiền cọc khi còn cách giờ chơi từ ${CANCEL_CUTOFF_HOURS} giờ trở lên. Trong ${CANCEL_CUTOFF_HOURS} giờ cuối, nút hủy sẽ khóa và tôi liên hệ hotline để chủ sân hỗ trợ. Lỗi từ phía sân hoàn 100%.</span></label>`;

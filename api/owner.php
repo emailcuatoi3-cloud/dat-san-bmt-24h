@@ -74,9 +74,8 @@ run_api([
         $now = date('Y-m-d H:i:s');
         if ($status === 'confirmed') {
             $slots = jd($b['slots']);
-            $occ = occupied_slots($b['booking_date'], $b['id'])[$b['court_id']] ?? [];
-            $blocked = blocked_slots_map($b['booking_date'], [$b['court_id']])[$b['court_id'] . ':' . $b['booking_date']] ?? [];
-            $unavailable = array_intersect($slots, array_merge($occ, $blocked));
+            $bAttrs = extract_booking_attributes($b['court_name'] ?? '', $b['note'] ?? '');
+            $unavailable = array_intersect($slots, taken_slots($b['court_id'], $b['booking_date'], $b['id'], $bAttrs['fieldType'], $bAttrs['spaceType']));
             if (!empty($unavailable)) {
                 fail('Không thể xác nhận đơn vì khung giờ ' . implode(', ', $unavailable) . ' ngày ' . $b['booking_date'] . ' đã bị trùng lịch với đơn khác hoặc đang bị khóa.');
             }
@@ -119,7 +118,8 @@ run_api([
         sort($slots);
         if (!$slots) fail('Vui lòng chọn ít nhất 1 khung giờ.');
 
-        $occ = array_merge(occupied_slots($newDate, $b['id'])[$court['id']] ?? [], blocked_slots_map($newDate, [$court['id']])[$court['id'] . ':' . $newDate] ?? []);
+        $bAttrs = extract_booking_attributes($b['court_name'] ?? '', $b['note'] ?? '');
+        $occ = taken_slots($court['id'], $newDate, $b['id'], $bAttrs['fieldType'], $bAttrs['spaceType']);
         if ($clash = array_values(array_intersect($slots, $occ))) fail('Khung giờ ' . implode(', ', $clash) . ' đã có người đặt hoặc đang khóa.');
 
         $total = 0;
@@ -155,7 +155,9 @@ run_api([
         $name = in_str('customerName');
         $phone = preg_replace('/[^\d+]/', '', in_str('customerPhone'));
         if (mb_strlen($name) < 2) fail('Vui lòng nhập tên khách.');
-        $occ = array_merge(occupied_slots($date)[$court['id']] ?? [], blocked_slots_map($date, [$court['id']])[$court['id'] . ':' . $date] ?? []);
+        $fieldType = in_str('fieldType');
+        $spaceType = in_str('spaceType') === 'indoor' ? 'indoor' : (in_str('spaceType') ?: '');
+        $occ = taken_slots($court['id'], $date, '', $fieldType, $spaceType);
         if ($clash = array_values(array_intersect($slots, $occ))) fail('Khung giờ ' . implode(', ', $clash) . ' đã có người đặt hoặc đang khóa.');
         $total = 0;
         foreach ($slots as $s) {

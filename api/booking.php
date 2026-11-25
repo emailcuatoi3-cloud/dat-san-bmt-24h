@@ -188,26 +188,28 @@ function calc_deposit(int $total): int
     return (int) (round($total * DEPOSIT_RATE / 1000) * 1000);
 }
 
-/** Các khung giờ đang bận của 1 sân trong 1 ngày (đơn + khóa của chủ sân), có hỗ trợ lọc theo thuộc tính phân loại sân. */
-function taken_slots(string $courtId, string $date, string $excludeId = '', string $fieldType = '', string $spaceType = ''): array
-{
-    $details = occupied_slots_details($date, $excludeId)[$courtId] ?? [];
-    $occ = [];
-    if (!empty($details)) {
-        foreach ($details as $item) {
-            $matchField = empty($item['fieldType']) || empty($fieldType) || $item['fieldType'] === $fieldType;
-            $matchSpace = empty($item['spaceType']) || empty($spaceType) || $item['spaceType'] === $spaceType;
-            if ($matchField && $matchSpace) {
-                $occ[] = $item['slot'];
+if (!function_exists('taken_slots')) {
+    /** Các khung giờ đang bận của 1 sân trong 1 ngày (đơn + khóa của chủ sân), có hỗ trợ lọc theo thuộc tính phân loại sân. */
+    function taken_slots(string $courtId, string $date, string $excludeId = '', string $fieldType = '', string $spaceType = ''): array
+    {
+        $details = occupied_slots_details($date, $excludeId)[$courtId] ?? [];
+        $occ = [];
+        if (!empty($details)) {
+            foreach ($details as $item) {
+                $matchField = empty($item['fieldType']) || empty($fieldType) || $item['fieldType'] === $fieldType;
+                $matchSpace = empty($item['spaceType']) || empty($spaceType) || $item['spaceType'] === $spaceType;
+                if ($matchField && $matchSpace) {
+                    $occ[] = $item['slot'];
+                }
             }
+            $occ = array_values(array_unique($occ));
+        } else {
+            $occ = occupied_slots($date, $excludeId)[$courtId] ?? [];
         }
-        $occ = array_values(array_unique($occ));
-    } else {
-        $occ = occupied_slots($date, $excludeId)[$courtId] ?? [];
-    }
 
-    $blk = blocked_slots_map($date, [$courtId])[$courtId . ':' . $date] ?? [];
-    return array_values(array_unique(array_merge($occ, $blk)));
+        $blk = blocked_slots_map($date, [$courtId])[$courtId . ':' . $date] ?? [];
+        return array_values(array_unique(array_merge($occ, $blk)));
+    }
 }
 
 function find_active_promo(string $code): ?array
