@@ -1,15 +1,15 @@
 /**
  * Kênh chủ sân — nhóm VẬN HÀNH: tổng quan, đơn đặt sân, sân của tôi, lịch & khung giờ, đánh giá, hóa đơn.
  */
-import { api, esc, toast, confirmBox, setBusy, formData, on, statusBadge, emptyState, loadingBlock, errorBlock, formatDateTime } from '../core/ui.js';
-import { openInvoiceModal, invoiceBadge, filterByDate, exportInvoices } from '../core/invoice.js';
-import { detectBookingConflicts, collectConflictIds } from '../lib/bookingConflicts.js';
-import { parseTicketPayload } from '../lib/checkin.js';
-import { TIME_OPTIONS, WEEKDAY_KEYS, WEEKDAY_LABELS, normalizeWeeklyHours, weekdaySummary, isWeeklyCustomized, hoursForDate, toMinutes, minutesToTime } from '../lib/openingHours.js';
+import { api, esc, toast, confirmBox, setBusy, formData, on, statusBadge, emptyState, loadingBlock, errorBlock, formatDateTime } from '../core/ui.js?v=20261123_04';
+import { openInvoiceModal, invoiceBadge, filterByDate, exportInvoices, bookingToInvoice, getMockInvoice } from '../core/invoice.js?v=20261123_04';
+import { detectBookingConflicts, collectConflictIds } from '../lib/bookingConflicts.js?v=20261123_04';
+import { parseTicketPayload } from '../lib/checkin.js?v=20261123_04';
+import { TIME_OPTIONS, WEEKDAY_KEYS, WEEKDAY_LABELS, normalizeWeeklyHours, weekdaySummary, isWeeklyCustomized, hoursForDate, toMinutes, minutesToTime } from '../lib/openingHours.js?v=20261123_04';
 import {
   S, PAGE, TODAY, main, actions, loadData, refreshBadges, BTN, BTN_OUT, BTN_SM, BTN_SM_PRI, BTN_SM_DANGER, INPUT, LABEL, CARD,
   chip, statCard, sectionTitle, modal, slotText, dateText, longDate, money, isActive, courtById, addDays, sourceBadge, courtOptions,
-} from './owner-shared.js';
+} from './owner-shared.js?v=20261123_04';
 
 const rerender = () => window.__ownerRender && window.__ownerRender();
 
@@ -120,6 +120,8 @@ export function openBookingDetail(b) {
   if (['pending', 'confirmed'].includes(b.status)) {
     btns.push(`<button type="button" data-act="reschedule" class="${BTN_OUT}"><i class="ri-calendar-event-line"></i>Đổi giờ</button>`);
   }
+  // Nút xem hóa đơn trực tiếp cho thu ngân / quản lý
+  btns.push(`<button type="button" data-act="invoice" class="${BTN_OUT}"><i class="ri-bill-line"></i>Hóa đơn</button>`);
   if ((b.depositAmount > 0 || ['deposit_paid', 'paid', 'refunded'].includes(b.paymentStatus)) && (b.status === 'cancelled' || b.paymentStatus === 'refunded')) {
     if (b.paymentStatus === 'refunded') {
       btns.push(`<span class="inline-flex items-center gap-1 rounded bg-secondary-50 px-2.5 py-1 text-xs font-semibold text-secondary-800"><i class="ri-checkbox-circle-line"></i>Đã hoàn cọc</span>`);
@@ -156,6 +158,7 @@ export function openBookingDetail(b) {
     if (act === 'checkin') checkIn(b);
     if (act === 'reschedule') openRescheduleModal(b);
     if (act === 'refund') openRefundModal(b);
+    if (act === 'invoice') openInvoiceModal(bookingToInvoice(b));
   });
 }
 
@@ -632,10 +635,34 @@ export async function renderInvoices() {
   const ranged = filterByDate(inf.list, inf.from, inf.to);
   const list = ranged.filter((i) => inf.status === 'all' || i.status === inf.status).filter((i) => !q || `${i.code} ${i.customerName} ${i.customerPhone} ${i.courtName}`.toLowerCase().includes(q));
   const sum = (k) => ranged.reduce((s, i) => s + i[k], 0);
-  actions().innerHTML = `<button type="button" id="inv-csv" class="${BTN_OUT}"><i class="ri-file-excel-2-line"></i>Xuất Excel (CSV)</button>`;
+  const curCourtName = S.courts[0]?.name || 'Sân bóng BMT Arena';
+
+  actions().innerHTML = `
+    <button type="button" id="inv-mock" class="${BTN_OUT} border-amber-300 text-amber-900 bg-amber-50 hover:bg-amber-100"><i class="ri-file-text-line text-amber-600"></i>Xem hóa đơn mẫu (Sandbox)</button>
+    <button type="button" id="inv-csv" class="${BTN_OUT}"><i class="ri-file-excel-2-line"></i>Xuất Excel (CSV)</button>
+  `;
   actions().querySelector('#inv-csv').onclick = () => exportInvoices(list, `hoa-don-${TODAY}.csv`);
+  actions().querySelector('#inv-mock').onclick = () => openInvoiceModal(getMockInvoice(curCourtName));
 
   main().innerHTML = `
+  <!-- Thông báo chế độ thử nghiệm Sandbox & Cổng thanh toán -->
+  <div class="mb-4 rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-amber-900 shadow-2xs">
+    <div class="flex items-start gap-3">
+      <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+        <i class="ri-alert-line text-xl" aria-hidden="true"></i>
+      </span>
+      <div class="min-w-0 flex-1 text-xs sm:text-sm">
+        <div class="flex flex-wrap items-center gap-2">
+          <p class="font-bold text-amber-950">Chế độ thu ngân &amp; hóa đơn điện tử thử nghiệm (Sandbox)</p>
+          <span class="rounded bg-amber-200/90 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-amber-950">Thử nghiệm</span>
+        </div>
+        <p class="mt-1 leading-relaxed text-amber-800">
+          Chức năng cổng thanh toán trực tuyến của nền tảng hiện đang chạy thử nghiệm sandbox. Danh sách bên dưới hiển thị hóa đơn từ các đơn đặt sân thuộc cơ sở của bạn và hỗ trợ xem hóa đơn mẫu mô phỏng. Khi chức năng thanh toán hoàn thiện, toàn bộ hóa đơn sẽ được đồng bộ và cập nhật chính xác từ giao dịch thực tế.
+        </p>
+      </div>
+    </div>
+  </div>
+
   <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
     ${statCard('ri-bill-line', 'Số hóa đơn', ranged.length)}
     ${statCard('ri-money-dollar-circle-line', 'Tổng tiền', money(sum('total')), '', 'secondary')}
@@ -653,19 +680,26 @@ export async function renderInvoices() {
     <tbody class="divide-y divide-background-200">${list.map((i) => `<tr data-inv="${esc(i.id)}" class="cursor-pointer hover:bg-background-50">
       <td class="px-4 py-3"><p class="font-mono text-xs font-bold text-primary-700">${esc(i.code)}</p><p class="text-[11px] text-foreground-500">${i.source === 'customer' ? 'Khách đặt online' : 'Chủ sân nhập'}</p></td>
       <td class="px-4 py-3"><p class="font-semibold">${esc(i.customerName)}</p><p class="text-xs text-foreground-500">${esc(i.customerPhone || '')}</p></td>
-      <td class="px-4 py-3"><p>${esc(i.courtName)}</p><p class="text-xs text-foreground-500">${dateText(i.bookingDate)}</p></td>
+      <td class="px-4 py-3"><p class="font-semibold text-foreground-900">${esc(i.courtName)}</p><p class="text-xs text-foreground-500">${dateText(i.bookingDate)}</p></td>
       <td class="px-4 py-3 text-right font-semibold">${money(i.total)}</td>
       <td class="px-4 py-3 text-right font-semibold ${i.debt ? 'text-accent-700' : 'text-primary-700'}">${money(i.debt)}</td>
       <td class="px-4 py-3">${invoiceBadge(i.status)}</td></tr>`).join('')}</tbody></table></div>`
-    : `<div class="p-4">${emptyState('ri-bill-line', 'Chưa có hóa đơn', 'Hóa đơn được tạo tự động khi đơn được xác nhận hoặc hoàn thành.')}</div>`}</div>`;
+    : `<div class="p-8 text-center">
+        ${emptyState('ri-bill-line', 'Chưa có hóa đơn nào', 'Hóa đơn được tạo tự động khi khách đặt sân hoặc tạo đơn tại quầy.')}
+        <button type="button" data-mock-btn class="${BTN} mt-4"><i class="ri-file-text-line mr-1.5"></i>Xem hóa đơn mẫu mô phỏng (Sandbox)</button>
+      </div>`}</div>`;
 
   const root = main();
   on(root, 'click', '[data-st]', (e, el) => { inf.status = el.dataset.st; renderInvoices(); });
   root.querySelector('#inv-q').addEventListener('change', (e) => { inf.q = e.target.value; renderInvoices(); });
   root.querySelector('#inv-from').addEventListener('change', (e) => { inf.from = e.target.value; renderInvoices(); });
   root.querySelector('#inv-to').addEventListener('change', (e) => { inf.to = e.target.value; renderInvoices(); });
+  on(root, 'click', '[data-mock-btn]', () => {
+    openInvoiceModal(getMockInvoice(curCourtName));
+  });
   on(root, 'click', '[data-inv]', (e, el) => {
     const inv = inf.list.find((i) => i.id === el.dataset.inv);
+    if (!inv) return;
     const extra = inv.debt > 0
       ? `<select data-method class="rounded-md border border-background-300 bg-white px-3 py-2 text-sm"><option value="cash">Tiền mặt</option><option value="transfer">Chuyển khoản</option><option value="vietqr">VietQR</option></select><button type="button" data-pay class="${BTN}"><i class="ri-hand-coin-line"></i>Ghi nhận đã thu đủ</button>`
       : '';

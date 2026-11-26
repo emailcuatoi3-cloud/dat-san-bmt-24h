@@ -607,6 +607,7 @@ INSERT INTO `owner_settings` (`owner_id`, `deposit_rate`, `cancel_cutoff_hours`,
 CREATE TABLE `owner_staff` (
   `id` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL,
   `owner_id` int NOT NULL,
+  `court_id` varchar(40) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `full_name` varchar(120) COLLATE utf8mb4_unicode_ci NOT NULL,
   `phone` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
   `email` varchar(190) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
@@ -621,9 +622,9 @@ CREATE TABLE `owner_staff` (
 -- Dumping data for table `owner_staff`
 --
 
-INSERT INTO `owner_staff` (`id`, `owner_id`, `full_name`, `phone`, `email`, `password_hash`, `role_name`, `permissions`, `status`, `created_at`) VALUES
-('st-01', 2, 'Nguyễn Văn Tài', '0935 111 222', 'tai.nv@hungsport.vn', '$2y$10$WDOt.9ErHNHVUJMQHd/pc.h4kRjdDpU7L6vrHCWnOCrZV2A7Iz6SS', 'Quản lý ca tối', '[\"bookings\",\"services\",\"payments\"]', 'active', '2026-11-18 19:53:53'),
-('st-02', 2, 'Lê Thị Ngọc', '0935 333 444', 'ngoc.lt@hungsport.vn', '$2y$10$WDOt.9ErHNHVUJMQHd/pc.h4kRjdDpU7L6vrHCWnOCrZV2A7Iz6SS', 'Lễ tân & thu ngân', '[\"bookings\",\"services\"]', 'active', '2026-11-18 19:53:53');
+INSERT INTO `owner_staff` (`id`, `owner_id`, `court_id`, `full_name`, `phone`, `email`, `password_hash`, `role_name`, `permissions`, `status`, `created_at`) VALUES
+('st-01', 2, 'c01', 'Nguyễn Văn Tài', '0935 111 222', 'tai.nv@hungsport.vn', '$2y$10$WDOt.9ErHNHVUJMQHd/pc.h4kRjdDpU7L6vrHCWnOCrZV2A7Iz6SS', 'Quản lý', '[\"overview\",\"bookings\",\"courts\",\"services\",\"payments\",\"promotions\",\"customers\"]', 'active', '2026-11-18 19:53:53'),
+('st-02', 2, 'c01', 'Lê Thị Ngọc', '0935 333 444', 'ngoc.lt@hungsport.vn', '$2y$10$WDOt.9ErHNHVUJMQHd/pc.h4kRjdDpU7L6vrHCWnOCrZV2A7Iz6SS', 'Lễ tân & thu ngân', '[\"bookings\",\"services\"]', 'active', '2026-11-18 19:53:53');
 
 -- --------------------------------------------------------
 

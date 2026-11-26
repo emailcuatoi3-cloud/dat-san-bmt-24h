@@ -47,22 +47,40 @@ function login_user(int $id): void
 {
     if (!headers_sent()) session_regenerate_id(true);
     $_SESSION['user_id'] = $id;
-    unset($_SESSION['staff_id'], $_SESSION['staff_owner_id'], $_SESSION['staff_name'], $_SESSION['staff_email'], $_SESSION['staff_phone'], $_SESSION['staff_role_name'], $_SESSION['staff_permissions']);
+    unset($_SESSION['staff_id'], $_SESSION['staff_owner_id'], $_SESSION['staff_court_id'], $_SESSION['staff_name'], $_SESSION['staff_email'], $_SESSION['staff_phone'], $_SESSION['staff_role_name'], $_SESSION['staff_permissions']);
 }
 
 /** Lấy thông tin tài khoản nhân viên cơ sở đang đăng nhập (hoặc null nếu là chủ sân / khách / admin). */
 function current_staff(): ?array
 {
     if (empty($_SESSION['staff_id'])) return null;
-    return [
+    static $cached = null;
+    if ($cached !== null) return $cached;
+    // Tự động đồng bộ quyền, sân phụ trách và chức vụ mới nhất từ CSDL
+    $st = q_one('SELECT * FROM owner_staff WHERE id = ?', [$_SESSION['staff_id']]);
+    if ($st) {
+        $_SESSION['staff_name'] = (string) $st['full_name'];
+        $_SESSION['staff_role_name'] = (string) $st['role_name'];
+        $_SESSION['staff_court_id'] = !empty($st['court_id']) ? (string) $st['court_id'] : null;
+        $_SESSION['staff_permissions'] = is_array($st['permissions']) ? $st['permissions'] : jd($st['permissions'] ?? '[]');
+    }
+    $courtId = $_SESSION['staff_court_id'] ?? null;
+    $courtName = '';
+    if ($courtId) {
+        $courtName = (string) (q_val('SELECT name FROM courts WHERE id = ?', [$courtId]) ?: '');
+    }
+    $cached = [
         'id' => (string) $_SESSION['staff_id'],
         'ownerId' => (int) ($_SESSION['staff_owner_id'] ?? 0),
+        'courtId' => $courtId,
+        'courtName' => $courtName,
         'name' => (string) ($_SESSION['staff_name'] ?? 'Nhân viên'),
         'email' => (string) ($_SESSION['staff_email'] ?? ''),
         'phone' => (string) ($_SESSION['staff_phone'] ?? ''),
         'roleName' => (string) ($_SESSION['staff_role_name'] ?? 'Nhân viên'),
         'permissions' => is_array($_SESSION['staff_permissions'] ?? null) ? $_SESSION['staff_permissions'] : jd($_SESSION['staff_permissions'] ?? '[]'),
     ];
+    return $cached;
 }
 
 /** Kiểm tra người đang thao tác có phải là nhân viên được ủy quyền hay không. */
@@ -100,6 +118,7 @@ function login_staff(array $st): void
     $_SESSION['user_id'] = (int) $st['owner_id'];
     $_SESSION['staff_id'] = (string) $st['id'];
     $_SESSION['staff_owner_id'] = (int) $st['owner_id'];
+    $_SESSION['staff_court_id'] = !empty($st['court_id']) ? (string) $st['court_id'] : null;
     $_SESSION['staff_name'] = (string) $st['full_name'];
     $_SESSION['staff_email'] = (string) $st['email'];
     $_SESSION['staff_phone'] = (string) ($st['phone'] ?? '');
