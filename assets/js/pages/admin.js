@@ -326,7 +326,8 @@ async function triggerImpersonate(targetId) {
   const u = d.users.find((x) => x.id === Number(targetId));
   if (!u) return;
   const ok = await confirmBox({
-    title: '<span class="flex items-center gap-2 text-secondary-800 font-heading"><i class="ri-spy-line text-xl"></i> Khởi tạo phiên Ghost Login?</span>',
+    title: 'Khởi tạo phiên Ghost Login?',
+    icon: 'ri-spy-line',
     message: `Bạn sắp đăng nhập danh nghĩa tài khoản: <b>${esc(u.fullName || u.email)}</b> (${ROLE[u.role]}).<br><br><span class="text-xs text-foreground-500 leading-relaxed">Bạn sẽ trải nghiệm đúng góc nhìn và dữ liệu của người dùng này để kiểm tra hoặc hỗ trợ kỹ thuật. Mọi thao tác trong phiên đều được ghi vào nhật ký kiểm toán.</span>`,
     confirmText: 'Bắt đầu Giả lập'
   });
@@ -603,7 +604,8 @@ async function renderAccounts() {
     const u = user(targetId);
     if (!u) return;
     const ok = await confirmBox({
-      title: '<span class="flex items-center gap-2 text-accent-700 font-heading"><i class="ri-delete-bin-line text-xl"></i> Xóa vĩnh viễn tài khoản?</span>',
+      title: 'Xóa vĩnh viễn tài khoản?',
+      icon: 'ri-delete-bin-line',
       message: `Bạn có chắc chắn muốn xóa tài khoản <b>${esc(u.fullName || u.email)}</b> (#${u.id})?<br><br><span class="text-xs text-accent-700 font-semibold">Cảnh báo: Hành động này không thể hoàn tác! Tài khoản sẽ bị xóa hoàn toàn khỏi cơ sở dữ liệu.</span>`,
       confirmText: 'Xóa tài khoản',
       danger: true
@@ -769,7 +771,8 @@ async function renderOwners() {
     const u = user(targetId);
     if (!u) return;
     const ok = await confirmBox({
-      title: '<span class="flex items-center gap-2 text-accent-700 font-heading"><i class="ri-delete-bin-line text-xl"></i> Xóa tài khoản chủ sân?</span>',
+      title: 'Xóa tài khoản chủ sân?',
+      icon: 'ri-delete-bin-line',
       message: `Bạn có chắc chắn muốn xóa tài khoản <b>${esc(u.fullName || u.email)}</b> (${esc(u.businessName || 'Chủ sân')})?<br><br><span class="text-xs text-accent-700 font-semibold">Lưu ý: Nếu chủ sân này đang có sân bóng, hệ thống sẽ yêu cầu gỡ sân trước khi xóa.</span>`,
       confirmText: 'Xóa tài khoản',
       danger: true
@@ -989,7 +992,8 @@ async function renderCourts() {
     const c = court(el.dataset.purge);
     if (!c) return;
     const ok = await confirmBox({
-      title: '<span class="flex items-center gap-2 text-accent-700 font-heading"><i class="ri-delete-bin-line text-xl"></i> Xóa vĩnh viễn sân?</span>',
+      title: 'Xóa vĩnh viễn sân?',
+      icon: 'ri-delete-bin-line',
       message: `Bạn có chắc chắn muốn xóa vĩnh viễn sân <b>${esc(c.name)}</b> khỏi cơ sở dữ liệu?<br><br><span class="text-xs text-accent-700 font-semibold">Lưu ý: Chỉ sân chưa từng có đơn đặt sân mới xóa được vĩnh viễn.</span>`,
       confirmText: 'Xóa vĩnh viễn',
       danger: true
