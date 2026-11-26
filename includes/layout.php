@@ -77,29 +77,51 @@ function render_head(array $opt): void
   <link rel="stylesheet" href="<?= asset('vendor/remixicon/remixicon.css') ?>">
   <link rel="stylesheet" href="<?= asset('css/app.css') ?>">
   <style>
+    .hdr-desktop-nav { display: none; }
+    .hdr-desktop-actions { display: none; }
+    .hdr-mobile-actions { display: flex; }
+    .hdr-mobile-cta { display: none; }
+    .hdr-mobile-notif { display: none; }
+    .hdr-brand-sub { display: none; }
     .hdr-search-form { display: none; }
     .hdr-search-icon { display: flex; }
     .hdr-wide-only { display: none; }
     .hdr-compact-only { display: inline; }
-    .hdr-search-input { width: 84px; }
+    .hdr-search-input { width: 92px; }
+    @media (min-width: 400px) {
+      .hdr-mobile-notif { display: flex; }
+    }
+    @media (min-width: 480px) {
+      .hdr-brand-sub { display: block; }
+      .hdr-mobile-cta { display: inline-flex; }
+    }
     @media (min-width: 1240px) {
+      .hdr-desktop-nav { display: flex; }
+      .hdr-desktop-actions { display: flex; }
+      .hdr-mobile-actions { display: none; }
+      .hdr-brand-sub { display: none; }
+      #mobile-menu { display: none !important; }
+      #site-header nav { justify-content: flex-start; gap: 0.125rem; }
+      #site-header nav > a, #site-header nav > button { padding-left: 0.45rem; padding-right: 0.45rem; font-size: 0.8125rem; }
+    }
+    @media (min-width: 1380px) {
+      #site-header nav { justify-content: center; gap: 0.125rem; }
+      #site-header nav > a, #site-header nav > button { padding-left: 0.5rem; padding-right: 0.5rem; font-size: 0.8125rem; }
+    }
+    @media (min-width: 1420px) {
       .hdr-search-form { display: block; }
       .hdr-search-icon { display: none; }
+      .hdr-search-input { width: 96px; }
     }
-    @media (min-width: 1360px) {
-      .hdr-search-input { width: 112px; }
-      #site-header nav { justify-content: safe center; }
-    }
-    @media (min-width: 1500px) {
+    @media (min-width: 1520px) {
       .hdr-wide-only { display: inline-block; }
       .hdr-compact-only { display: none; }
-      .hdr-search-input { width: 126px; }
-      #site-header nav { justify-content: safe center; gap: 0.125rem; }
-      #site-header nav > a, #site-header nav > button { padding-left: 0.5rem; padding-right: 0.5rem; }
+      .hdr-search-input { width: 108px; }
     }
-    @media (min-width: 1680px) {
-      .hdr-search-input { width: 176px; }
-      #site-header nav { gap: 0.25rem; }
+    @media (min-width: 1660px) {
+      .hdr-brand-sub { display: block; }
+      .hdr-search-input { width: 156px; }
+      #site-header nav { justify-content: center; gap: 0.25rem; }
       #site-header nav > a, #site-header nav > button { padding-left: 0.625rem; padding-right: 0.625rem; font-size: 0.875rem; }
     }
   </style>
@@ -277,14 +299,14 @@ function render_site_header(bool $tr): void
       </div>
       <div class="flex flex-col justify-center leading-tight">
         <div class="flex items-center gap-1.5">
-          <span <?= tcls($tr, 'text-white', 'text-foreground-950', 'font-heading text-base md:text-lg font-black tracking-tight leading-none group-hover:text-primary-400 transition-colors') ?>>ĐẶT SÂN BMT</span>
+          <span <?= tcls($tr, 'text-white', 'text-foreground-950', 'font-heading text-sm sm:text-base md:text-lg font-black tracking-tight leading-none whitespace-nowrap group-hover:text-primary-400 transition-colors') ?>>ĐẶT SÂN BMT</span>
           <span class="inline-flex items-center justify-center rounded-md bg-gradient-to-r from-primary-500 to-emerald-500 px-1.5 py-0.5 text-[10px] md:text-xs font-black tracking-wider text-white shadow-sm ring-1 ring-white/20">24H</span>
         </div>
-        <span class="mt-0.5 text-[10px] md:text-[11px] font-semibold text-primary-400 tracking-wider hidden sm:block">ĐẶT SÂN THỂ THAO BUÔN MA THUỘT</span>
+        <span class="hdr-brand-sub mt-0.5 text-[10px] md:text-[11px] font-semibold text-primary-400 tracking-wider whitespace-nowrap">ĐẶT SÂN THỂ THAO BUÔN MA THUỘT</span>
       </div>
     </a>
 
-    <nav class="hidden min-w-0 flex-1 items-center justify-start gap-0.5 overflow-x-auto lg:flex" style="scrollbar-width:none" aria-label="Điều hướng chính">
+    <nav class="hdr-desktop-nav min-w-0 flex-1 items-center justify-start gap-0.5" aria-label="Điều hướng chính">
       <?php foreach ($navMain as $item): ?>
         <a href="<?= url($item[0] . ($item[2] && $item[2] !== 'all' ? '?sport=' . $item[2] : '')) ?>" <?= $navLink($isActive($item)) ?>><?= e($item[1]) ?></a>
       <?php endforeach; ?>
@@ -318,8 +340,8 @@ function render_site_header(bool $tr): void
     </div>
     <?php endforeach; ?>
 
-    <div class="hidden lg:flex items-center gap-1 shrink-0">
-      <?php $chip = 'flex shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-full border px-2 py-1.5 text-xs font-semibold transition-colors'; ?>
+    <div class="hdr-desktop-actions items-center gap-1 shrink-0">
+      <?php $chip = 'flex shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-1.5 text-xs font-semibold transition-colors'; ?>
       <?php if ($isAdmin): ?>
         <a href="<?= url($imp ? '/thoat-gia-lap' : '/quan-tri') ?>" title="Quản trị hệ thống" <?= tcls($tr, 'border-white/40 text-white hover:border-white hover:bg-white/15', 'border-accent-300 bg-accent-50 text-accent-800 hover:border-accent-400 hover:bg-accent-100', $chip) ?>>
           <i class="ri-shield-user-line text-sm" aria-hidden="true"></i>
@@ -331,7 +353,7 @@ function render_site_header(bool $tr): void
           <i class="ri-store-2-line text-sm" aria-hidden="true"></i>
           <span class="hdr-wide-only">Kênh chủ sân</span><span class="hdr-compact-only">Chủ sân</span>
         </a>
-      <?php else: ?>
+      <?php elseif (!$isAdmin): ?>
         <a href="<?= url('/dang-ky-chu-san') ?>" title="Đăng ký sân" <?= tcls($tr, 'border-white/40 text-white hover:border-white hover:bg-white/15', 'border-accent-300 bg-accent-50 text-accent-800 hover:border-accent-400 hover:bg-accent-100', $chip) ?>>
           <i class="ri-store-2-line text-sm" aria-hidden="true"></i>
           <span class="hdr-wide-only">Đăng ký sân</span><span class="hdr-compact-only">Đăng ký sân</span>
@@ -419,12 +441,21 @@ function render_site_header(bool $tr): void
       <a href="<?= url('/dat-san') ?>" class="whitespace-nowrap rounded-md bg-primary-500 px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-600">Đặt sân</a>
     </div>
 
-    <button type="button" data-mobile-toggle aria-label="Mở menu" aria-expanded="false" <?= tcls($tr, 'text-white hover:bg-white/15', 'text-foreground-800 hover:bg-background-100', 'lg:hidden w-10 h-10 flex items-center justify-center rounded-md transition-colors') ?>>
-      <i class="ri-menu-line text-2xl" aria-hidden="true"></i>
-    </button>
+    <div class="hdr-mobile-actions items-center gap-1.5 shrink-0">
+      <?php if ($u): ?>
+      <a href="<?= url('/tai-khoan?tab=notifications') ?>" title="Thông báo" aria-label="Thông báo" <?= tcls($tr, 'text-white hover:bg-white/15', 'text-foreground-600 hover:bg-background-100 hover:text-primary-600', 'hdr-mobile-notif relative h-9 w-9 cursor-pointer items-center justify-center rounded-md transition-colors') ?>>
+        <i class="ri-notification-3-line text-lg" aria-hidden="true"></i>
+        <?php if ($unreadNotif): ?><span class="absolute right-0.5 top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary-500 px-1 text-[10px] font-bold text-white"><?= $unreadNotif > 9 ? '9+' : $unreadNotif ?></span><?php endif; ?>
+      </a>
+      <?php endif; ?>
+      <a href="<?= url('/dat-san') ?>" class="hdr-mobile-cta whitespace-nowrap rounded-md bg-primary-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-primary-600">Đặt sân</a>
+      <button type="button" data-mobile-toggle aria-label="Mở menu" aria-expanded="false" <?= tcls($tr, 'text-white hover:bg-white/15', 'text-foreground-800 hover:bg-background-100', 'w-10 h-10 flex items-center justify-center rounded-md transition-colors') ?>>
+        <i class="ri-menu-line text-2xl" aria-hidden="true"></i>
+      </button>
+    </div>
   </div>
 
-  <div id="mobile-menu" class="lg:hidden hidden max-h-[calc(100dvh-72px)] overflow-y-auto overscroll-contain bg-background-50 border-t border-background-200 animate-fade-in">
+  <div id="mobile-menu" class="hidden max-h-[calc(100dvh-72px)] overflow-y-auto overscroll-contain bg-background-50 border-t border-background-200 animate-fade-in">
     <nav class="flex flex-col px-4 pt-3 pb-28" aria-label="Điều hướng di động">
       <form action="<?= url('/tim-san') ?>" method="get" role="search" class="mb-2">
         <div class="flex items-center gap-2 rounded-full border border-background-300 bg-background-100 px-3.5 py-2.5 transition-colors focus-within:border-primary-400">
